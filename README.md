@@ -1,3 +1,8 @@
+# Usage
+
+The code and processing in this branch are now protected. The 'matching spine' output from this work was for a particular purpose.
+The code used to generate the database of all organisations is in the main branch of https://github.com/uk-third-sector-database/tso-database-builder/
+
 # Getting Started
 
 Use python 3.11
