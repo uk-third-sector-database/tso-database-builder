@@ -332,7 +332,13 @@ def permutate(csv_in,csv_out,final):
     writer = csv.DictWriter(csv_out, fieldnames=NEW_SPINE_CSV_FORMAT, extrasaction='ignore')
     writer.writeheader()
     for uid in uid_dict.keys():
-        if len(uid_dict[uid]) > 1: # more than one record with this uid - create combinations
+        if not uid.split('-')[-1]:
+            # uid doesn't have id attached, don't permutate across addresses
+            for line in uid_dict[uid]:
+                print(f'in wrangling.permutate. Line has truncated uid: {line}')
+                writer.writerow(line)
+
+        elif len(uid_dict[uid]) > 1: # more than one record with this uid - create combinations
             writer.writerows(combine_org_details(uid_dict[uid],final))
 
         else: # only one record with this uid - write directly
