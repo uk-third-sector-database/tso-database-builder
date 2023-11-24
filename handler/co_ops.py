@@ -51,10 +51,10 @@ class CoOpsDataHandler(DataHandler):
         for field in row:
             row[field] = row[field].strip()
 
-        new_row["uid"] =  'GB-COOP-'+ row['Registered Number']   
+        new_row["uid"] =  'GB-COOP-'+ row['CUK Organisation ID']   
         new_row["organisationname"] = row[namefield]
         new_row["normalisedname"] = ''
-        new_row["companyid"] = row['Registered Number']   
+        new_row["companyid"] = row['CUK Organisation ID']   
         new_row["charitynumber"] = ''
         new_row["housenumber"] = ''
         
