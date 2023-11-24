@@ -2,7 +2,7 @@ import click
 import csv
 
 from handler.base import do_csv_processing
-from handler.base import NEW_SPINE_CSV_FORMAT
+from handler.base_definitions import NEW_SPINE_CSV_FORMAT
 
 from handler.companies_house import CompaniesHouseDataHandler
 from handler.companies_house_2014 import CompaniesHouse2014DataHandler
@@ -52,11 +52,15 @@ def cli():
 @click.argument("source", type=click.Choice(handler_map.keys()))
 @click.argument("infile")
 @click.argument("outfile")
-def sub_spine(source, infile, outfile):
+def process_source(source, infile, outfile):
     """
     Generate a SPINE format file using data pulled from a source
     """
-    do_csv_processing(infile, outfile, handler_map[source]())
+    intermediate_ofile = outfile.split('.csv')[0] + '.tmp.csv'
+    do_csv_processing(infile, intermediate_ofile, handler_map[source]())
+
+    #consolidate all details for each org, and add geography lookup fields
+    write_permutations(open(intermediate_ofile,'r'),open(outfile,'w+'),False)
 
 
 @cli.command()

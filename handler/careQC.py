@@ -1,6 +1,6 @@
 
 
-from .base import SPINE_CSV_FORMAT, DataHandler
+from .base import DataHandler
 
 exclude_filters = {
     "": []
@@ -55,19 +55,11 @@ class CQCDataHandler(DataHandler):
         new_row["source"] = 'CareQualityCommission'
         new_row["dissolutiondate"] = '' 
         new_row["registrationdate"] = ''
-        
+        super().sort_address_fields(new_row)
+        #print(f' *** In format_row. new_row = {new_row}')
         return new_row
         
-    def transform_row(self, row: dict) -> list[dict]:
-        '''returns list of rows in SPINE format'''
-        #  check for multiple names
-        name_keys = self.find_names(row)
-        
-        spine_rows = []
-        for name in name_keys:
-            spine_rows.append(self.format_row(name,row))
 
-        return spine_rows
 
 
 '''

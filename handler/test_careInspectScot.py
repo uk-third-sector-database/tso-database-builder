@@ -1,7 +1,7 @@
 import pytest
 
 from .careInspectScot import CareInspScotDataHandler  
-from .test_companies_house import spine_entry_creator
+from .base_definitions import spine_entry_creator
 
 
 
@@ -49,9 +49,35 @@ def test_row_formatting():
     new_row = spine_entry_creator({
     "uid" : 'GB-CIS-1234',
     "organisationname" : 'Something Name',
-    "normalisedname": '',
+    "normalisedname": 'SOMETHING NAME',
     "companyid":'1234',
     "source":'CareInspectorateScot'
+    })
+    assert CareInspScotDataHandler().format_row(namefield,row) == new_row
+
+
+def test_row_formatting_addr():
+    row = CIS_entry_creator({
+        "CSNumber" :'1234',
+        "ServiceName" :'Something Name',
+        "Address_line_1" :'House',
+        "Address_line_2" :'Street',
+        "Address_line_3" :'Town',
+        "Address_line_4" :'',
+        "Service_town" :'Town',
+        "Service_Postcode" :'PC1 1PC',
+
+})
+    namefield = 'ServiceName'
+    new_row = spine_entry_creator({
+    "uid" : 'GB-CIS-1234',
+    "organisationname" : 'Something Name',
+    "normalisedname": 'SOMETHING NAME',
+    "companyid":'1234',
+    "source":'CareInspectorateScot',
+    "fulladdress" : "HOUSE, STREET",
+    "city" : 'TOWN',
+    "postcode" : "PC1 1PC"
     })
     assert CareInspScotDataHandler().format_row(namefield,row) == new_row
 
