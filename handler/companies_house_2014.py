@@ -42,12 +42,6 @@ class CompaniesHouse2014DataHandler(DataHandler):
             if row.get(fieldname) in exclude_values:
                 return False
             
-        # exclude row if org dissolved prior to 1997
-        if row.get("chremy"):
-            d_date = time.strptime(row.get("chremy"),'%Y')
-            bsd_date = time.strptime('1997','%Y')
-            if d_date < bsd_date:
-                return False
         return True
     
     def map_date(self, datestr):
@@ -106,18 +100,9 @@ class CompaniesHouse2014DataHandler(DataHandler):
         new_row["dissolutiondate"] = self.map_date(row['chremy'])
         new_row["registrationdate"] = self.map_date(row['chregy'])
 
+        super().sort_address_fields(new_row)
         return new_row
-        
-    def transform_row(self, row: dict) -> list[dict]:
-        '''returns list of rows in SPINE format'''
-        #  check for multiple names
-        name_keys = self.find_names(row)
-        
-        spine_rows = []
-        for name in name_keys:
-            spine_rows.append(self.format_row(name,row))
 
-        return spine_rows
 
 #          "uid"
 #         "organisationname",

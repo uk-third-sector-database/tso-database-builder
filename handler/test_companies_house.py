@@ -2,29 +2,6 @@ import pytest
 
 from .companies_house import CompaniesHouseDataHandler
 
-def spine_entry_creator(overrides):
-    entry = {
-        "uid" : '',
-        "organisationname" :  '',
-        "normalisedname" : '',
-        "companyid" : '' ,
-        "charitynumber" : '',
-        "housenumber" : '' ,
-        "addressline1" : '',
-        "addressline2" : '',
-        "addressline3" : '',
-        "addressline4" : '',
-        "addressline5" : '',
-        "city" : '' ,
-        "localauthority" : '',
-        "postcode" :  '',
-        "source" : '',
-        "registrationdate" : '',
-        "dissolutiondate" : '',
-    }
-    entry.update(**overrides)
-    return entry
-
 def companies_house_entry_creator(overrides):
     entry = {
         " CompanyName": "",

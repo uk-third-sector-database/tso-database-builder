@@ -1,7 +1,7 @@
 import pytest
 
 from .companies_house_gap_decade import CompaniesHouseGapDataHandler
-from .test_companies_house import spine_entry_creator
+from .base_definitions import spine_entry_creator
 
 
 def companies_house_entry_creator(overrides):

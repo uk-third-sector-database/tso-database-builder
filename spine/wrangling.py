@@ -1,43 +1,13 @@
 
-from handler.base import SPINE_CSV_FORMAT, NEW_SPINE_CSV_FORMAT, FINAL_SPINE_CSV_FORMAT
+from handler.base_definitions import NEW_SPINE_CSV_FORMAT, FINAL_SPINE_CSV_FORMAT
 import csv
-import string
 import sys
 import pandas
 import re
 from datetime import datetime
 
-ORG_ID_MAPPING = {
-'CCEW':'CHC',
-'OSCR':'SC',
-'CCNI':'NIC',
-'PRI/LTD BY GUAR/NSC (Private, limited by guarantee, no share capital)':'COH',
-"PRI/LBG/NSC (Private, limited by guarantee, no share capital, use of 'Limited' exemption)":'COH',
-'Charitable Incorporated Organisation':'COH',
-'Community Interest Company':'COH',
-'Registered Society':'COH',
-'Scottish Charitable Incorporated Organisation':'COH',
-'Industrial and Provident Society':'COH',
-'CareQualityCommission':'CQC', # not in org_id - might need to update mapping
-'ScottishHousingRegulator':'SHR',
-'SocialHousingEngland':'SHPE',
-'CoOps':'COOP', # not in org_id - might need to update mapping
-'Mutuals Public Register': 'MPR'
-}
 
-def normalizer(name, norm_dict=None):
-    ''' normalise entity names with manually curated dict'''
-    norm_dict={}
-    if isinstance(name, str):
-        name = name.upper()
-        for key, value in norm_dict.items():
-            name = name.replace(key, value)
-        name = name.replace(r"\(.*\)", "")  # remove brackets
-        name = "".join(l for l in name if l not in string.punctuation) # keep text other than punctuation
-        name = ' '.join(name.split()) # remove additional spaces
-        name = name.strip() # remove trailing spaces
-        return name
-    return None
+
     
 def check_spine_format(csv_fields):
     """
@@ -48,14 +18,12 @@ def check_spine_format(csv_fields):
         return False
     for field in NEW_SPINE_CSV_FORMAT:
         if field not in csv_fields:
-            if field in ['fulladdress','charitynumber','normalisedname','city']: # these fields can be added by processing
-                continue
-            else:
-                print(f'field {field} not in input file fields')
-                return False
+
+            print(f'field {field} not in input file fields')
+            return False
     for field in csv_fields:
         try:
-            if field not in SPINE_CSV_FORMAT: 
+            if field not in NEW_SPINE_CSV_FORMAT: 
                 print('unexpected field %s in input file\n'%field)
                 continue
         except UnicodeDecodeError as e:
@@ -63,37 +31,8 @@ def check_spine_format(csv_fields):
             continue
 
     else:
-      return csv_fields
+      return True
 
-
-def consolidate_address(row):
-
-    address_fields = [
-    "housenumber",
-    "addressline1",
-    "addressline2",
-    "addressline3",
-    "addressline4",
-    "addressline5"]
-    
-    fulladdress = ''
-
-    row['postcode'] = row['postcode'].strip()
-       
-    
-    for line in address_fields:
-        try:
-            if row[line]:
-                fulladdress += '%s, '%row[line].strip().strip(',').strip('"')
-        except KeyError:
-            pass
-
-    try:
-        fulladdress = fulladdress.split(row['postcode'])[0]
-    except ValueError:
-        pass
-
-    return fulladdress.strip(', ')
 
 
 def concat(csv_ins, csv_out):
@@ -101,7 +40,7 @@ def concat(csv_ins, csv_out):
     Given a list of csv file handlers, in SPINE format, and an output file handler
 
     * Concatenate csvs, adding normalized name to each row, consolidating address fields -> 'fulladdress', 
-        adding uid in ord_id format (where possible)
+        adding uid in org_id format (where possible)
     * Write out to output location
     """
     writer = csv.DictWriter(csv_out, fieldnames=NEW_SPINE_CSV_FORMAT, extrasaction='ignore')
@@ -114,18 +53,7 @@ def concat(csv_ins, csv_out):
         raise ValueError('file %s is not in SPINE format'%csv_in)
       
       for row in csv_data:
-        row['normalisedname'] = normalizer(row['organisationname'])
-        if not 'fulladdress' in row.keys():
-            row['fulladdress'] = consolidate_address(row)
-        if not row['uid']:
-            row['uid'] = 'GB-%s-%s'%(ORG_ID_MAPPING[row['source']],row['charitynumber'])
-        row['fulladdress'] = row['fulladdress'].upper()
-        row['city']=row['city'].upper()
-        try:
-            row['fulladdress'] = row['fulladdress'].split(row['city'])[0].strip(',')
-        except ValueError:
-            pass
-        row['fulladdress'] = row['fulladdress'].replace(' ,',',')
+        
         try:
             writer.writerow(row)
             processed_rows += 1
@@ -325,6 +253,7 @@ def permutate(csv_in,csv_out,final):
 
 
     # create dictionary key'd by uid
+    print(f'Running spine.wrangling.permutate with file {csv_in}')
     uid_dict = dict_indexed_by_field(csv_in,'uid')
 
     # for each uid, if more than one record, find unique names and addresses
@@ -341,6 +270,7 @@ def permutate(csv_in,csv_out,final):
                 uid_dict[uid][0]['source'] = replace_CH_source_field(uid_dict[uid][0]['source'])
                 
             writer.writerow(uid_dict[uid][0])
+    print(f'Completed spine.wrangling.permutate - output in {csv_out}')
 
 
 def wrangle_findthatcharity_data(infile:str,field:str,ofile):
@@ -372,13 +302,11 @@ def final_processing(fulldatafile):
 
     with open(fulldatafile.name,'r') as openfile:
         for row in csv.DictReader(openfile):
-                
                 new_row = {}
                 for field in FINAL_SPINE_CSV_FORMAT:
                     if field == 'rowid':
                         new_row['rowid']=rowid
                         rowid += 1
-
                     else:
                         new_row[field] = row[field]
 

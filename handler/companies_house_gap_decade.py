@@ -110,6 +110,7 @@ class CompaniesHouseGapDataHandler(DataHandler):
         new_row["dissolutiondate"] = self.map_date(row['date_of_cessation'])
         new_row["registrationdate"] = self.map_date(row['date_of_creation'])
 
+        super().sort_address_fields(new_row)
         return new_row
         
     def transform_row(self, row: dict) -> list[dict]:
