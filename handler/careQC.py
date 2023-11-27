@@ -20,16 +20,12 @@ class CQCDataHandler(DataHandler):
     def map_date(self, datestr):
         return super().map_date(datestr)
 
-    def find_names(self, row:dict) -> list:
+    def find_names(self, fieldnames) -> list:
         ''' returns name keys which have non-null values'''
         # 
-        name_keys=[]
         v = ['Name','Also known as']
-
-        for i in v:
-            if row[i]: name_keys.append(i)
-        return name_keys
-
+        return [i for i in v if i in fieldnames]
+        
 
     def format_row(self,namefield,row) -> dict:
         '''format a row into Spine format, for given namefield'''

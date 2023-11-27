@@ -32,18 +32,11 @@ class SocialHousingEngDataHandler(DataHandler):
             return ''
         return d.strftime('%d/%m/%Y')
     
-    def find_names(self, row:dict) -> list:
-        ''' returns name keys which have non-null values'''
-        # 
-        name_keys=[]
+    def find_names(self, fieldnames) -> list:
+
         v = ['Organisation name','ï»¿Organisation name','\ufeffOrganisation name']
-
-        for i in v:
-            if i in row.keys():
-                if row[i]: name_keys.append(i)
                 
-        return name_keys
-
+        return [item for item in v if item in fieldnames]
 
     def format_row(self,namefield,row) -> dict:
         '''format a row into Spine format, for given namefield'''
@@ -71,19 +64,9 @@ class SocialHousingEngDataHandler(DataHandler):
         #new_row["registrationdate"] = self.map_date(row['Registration date'])   #this errors, not obvious why, as field has normal looking dates in it.
         new_row["registrationdate"] = row['Registration date']
         
-        print(row)
+        super().sort_address_fields(new_row)
         return new_row
         
-    def transform_row(self, row: dict) -> list[dict]:
-        '''returns list of rows in SPINE format'''
-        #  check for multiple names
-        name_keys = self.find_names(row)
-        
-        spine_rows = []
-        for name in name_keys:
-            spine_rows.append(self.format_row(name,row))
-
-        return spine_rows
 
 
 '''

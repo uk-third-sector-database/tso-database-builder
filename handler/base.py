@@ -9,15 +9,16 @@ GEO_LOOKUP_FILES = {
 
 class DataHandler:
     fileencoding = None
+    names = None
         
     def all_filters(self, row: dict) -> bool:
         raise NotImplementedError()
 
     def transform_row(self, row: dict) -> list[dict]:
-        name_keys = self.find_names(row)
+        #name_keys = self.find_names(row)
         
         spine_rows = []
-        for name in name_keys:
+        for name in self.names:
             spine_rows.append(self.format_row(name,row))
         #print(f'----- in transform_row. spine rows = {spine_rows}')
         return spine_rows
@@ -57,7 +58,10 @@ def iter_csv_rows(filename,DataHandler):
     encoding=DataHandler.fileencoding
     with open(filename, newline="", encoding=encoding) as csvfile:
         reader = csv.DictReader(csvfile)
+        DataHandler.names = DataHandler.find_names(reader.fieldnames)
+        print('names: ',DataHandler.names)
         for row in reader:
+            #print(row)
             yield row
 
 
@@ -88,7 +92,7 @@ def do_csv_processing(
         for new_row in filter(
             data_handler.all_filters, iter_csv_rows(input_csv_filename,data_handler)
         ):
-           # print(new_row)
+            #print(new_row)
             processed_rows += 1
             writer.writerows(data_handler.transform_row(new_row))
 

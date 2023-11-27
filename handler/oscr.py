@@ -28,11 +28,10 @@ class OSCRDataHandler(DataHandler):
         return d.strftime('%d/%m/%Y')
     
 
-    def find_names(self, row:dict) -> list:
+    def find_names(self, row) -> list:
         ''' returns name keys which have non-null values'''
         # 
-        name_keys=['organisationname']
-        return name_keys
+        return ['organisationname']
 
 
     def format_row(self,namefield,row) -> dict:
