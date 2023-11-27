@@ -83,7 +83,10 @@ class CompaniesHouseGapDataHandler(DataHandler):
             print('error with date',datestr)
         return d.strftime('%d/%m/%Y')
     
-
+    def find_names(self, row) -> list:
+        ''' returns name keys which have non-null values'''
+        # 
+        return ['company name']
 
 
     def format_row(self,namefield,row) -> dict:
@@ -113,11 +116,7 @@ class CompaniesHouseGapDataHandler(DataHandler):
         super().sort_address_fields(new_row)
         return new_row
         
-    def transform_row(self, row: dict) -> list[dict]:
-        '''returns list of rows in SPINE format'''
-        
-        name = 'company_name'
-        return [self.format_row(name,row)]
+
 
 
 #         "organisationname",

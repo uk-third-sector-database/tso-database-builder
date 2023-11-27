@@ -57,15 +57,10 @@ class CompaniesHouse2014DataHandler(DataHandler):
         return d.strftime('%d/%m/%Y')
     
 
-    def find_names(self, row:dict) -> list:
+    def find_names(self, fieldnames) -> list:
         ''' returns name keys which have non-null values'''
-        name_keys=[]
-        for k in row.keys():
-            v = re.findall(('.*ompanyname'),k)
-            for i in v:
-                if i:
-                    if row[i]: name_keys.append(i)
-        return name_keys
+        return [n for n in fieldnames if re.search('.*ompanyname',n)]
+        
 
     def find_addresses(self, row:dict) -> list:
         ''' returns list of address keys which have non-null values

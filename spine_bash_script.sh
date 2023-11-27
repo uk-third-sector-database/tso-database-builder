@@ -35,6 +35,7 @@ for i in ../TSO_project/raw_data/ScotHousingReg/afs-data-all-social-landlords-co
 do
   python3 cli.py process-source ScotHousingReg $i $i.spine.csv
 done
+rm ../TSO_project/raw_data/ScotHousingReg/*tmp.csv
 mv ../TSO_project/raw_data/ScotHousingReg/*spine.csv spine_data/
 #
 ## Charity regulators:

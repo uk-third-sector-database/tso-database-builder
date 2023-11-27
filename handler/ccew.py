@@ -26,11 +26,10 @@ class CCEWDataHandler(DataHandler):
             print('error with date',datestr)
         return d.strftime('%d/%m/%Y')
 
-    def find_names(self, row:dict) -> list:
+    def find_names(self, row) -> list:
         ''' returns name keys which have non-null values'''
         # 
-        name_keys=['organisationname']
-        return name_keys
+        return ['organisationname']
 
 
 

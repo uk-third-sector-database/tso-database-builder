@@ -12,6 +12,7 @@ include_filters = {
 class CareInspScotDataHandler(DataHandler):
     fileencoding='Latin-1'
     
+    
     def all_filters(self, row: dict) -> bool:
 
         for fieldname, include_values in include_filters.items():
@@ -32,17 +33,13 @@ class CareInspScotDataHandler(DataHandler):
                 print('error with date',datestr)
         return d.strftime('%d/%m/%Y')
 
-    def find_names(self, row:dict) -> list:
+    def find_names(self, fieldnames) -> list:
         ''' returns name keys which have non-null values'''
-        # 
-        name_keys=[]
+        
         v = ['Service_Provider','ServiceProvider','ServiceName']
+        return [i for i in v if i in fieldnames]
 
-        for i in v:
-            if i in row.keys():
-                if row[i]: name_keys.append(i)
-        return name_keys
-    
+
     def find_id_name(self,row:dict) -> str:
         v = ['CSNumber', 'CaseNumber','ï»¿CSNumber']
         for i in v:
