@@ -1,6 +1,5 @@
 
 import re
-import time
 import datetime
 
 from .base import DataHandler
@@ -41,14 +40,8 @@ class CompaniesHouseDataHandler(DataHandler):
         for fieldname, exclude_values in exclude_filters.items():
             if row.get(fieldname) in exclude_values:
                 return False
-            
-        # exclude row if org dissolved prior to 1997
-        if row.get("DissolutionDate"):
-            d_date = time.strptime(row.get("DissolutionDate"),'%d/%m/%Y')
-            bsd_date = time.strptime('1/1/1997','%d/%m/%Y')
-            if d_date < bsd_date:
-                return False
         return True
+            
 
     def map_date(self, datestr):
         if not datestr:
@@ -61,15 +54,9 @@ class CompaniesHouseDataHandler(DataHandler):
     
 
 
-    def find_names(self, row:dict) -> list:
-        ''' returns name keys which have non-null values'''
-        name_keys=[]
-        for k in row.keys():
-            v = re.findall(('.*CompanyName'),k)
-            for i in v:
-                if i:
-                    if row[i]: name_keys.append(i)
-        return name_keys
+    def find_names(self, fieldnames) -> list:
+        print(fieldnames)
+        return [n for n in fieldnames if re.search('.*ompanyname',n, flags=re.IGNORECASE)]
 
     def find_addresses(self, row:dict) -> list:
         ''' returns list of address keys which have non-null values
@@ -109,18 +96,11 @@ class CompaniesHouseDataHandler(DataHandler):
         new_row["dissolutiondate"] = row['DissolutionDate']
         new_row["registrationdate"] = row['IncorporationDate']
 
+        super().sort_address_fields(new_row)
+        print(new_row)
         return new_row
         
-    def transform_row(self, row: dict) -> list[dict]:
-        '''returns list of rows in SPINE format'''
-        #  check for multiple names
-        name_keys = self.find_names(row)
-        
-        spine_rows = []
-        for name in name_keys:
-            spine_rows.append(self.format_row(name,row))
 
-        return spine_rows
 
 
 #         "organisationname",

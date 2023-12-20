@@ -5,7 +5,7 @@ from datetime import datetime
 '''
 
 
-from .base import SPINE_CSV_FORMAT, DataHandler
+from .base import DataHandler
 
 exclude_filters = {
     "organisationname": ['N/A']
@@ -32,11 +32,9 @@ class CCNIDataHandler(DataHandler):
         return d.strftime('%d/%m/%Y')
     
 
-    def find_names(self, row:dict) -> list:
-        ''' returns name keys which have non-null values'''
-        # 
-        name_keys=['organisationname']
-        return name_keys
+    def find_names(self, row) -> list:
+       
+        return ['organisationname']
 
 
     def format_row(self,namefield,row) -> dict:
@@ -64,20 +62,9 @@ class CCNIDataHandler(DataHandler):
         new_row["registrationdate"] = self.map_date(row['registerdate'])
         new_row["dissolutiondate"] = ''
         
+        super().sort_address_fields(new_row)
         return new_row
-        
-    def transform_row(self, row: dict) -> list[dict]:
-        '''returns list of rows in SPINE format'''
-        #  check for multiple names
-        name_keys = self.find_names(row)
-        
-        spine_rows = []
-        for name in name_keys:
-            spine_rows.append(self.format_row(name,row))
-
-        return spine_rows
-
-
+    
 '''
 ccni data fields
 

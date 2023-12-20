@@ -13,6 +13,8 @@ class MutualsDataHandler(DataHandler):
       
         return True
 
+    def find_names(self,row):
+        return ['organisationname']
 
     def map_date(self, datestr):
         return super().map_date(datestr)
@@ -49,18 +51,10 @@ class MutualsDataHandler(DataHandler):
         new_row["dissolutiondate"] = '' 
         new_row["registrationdate"] = ''
 
+        super().sort_address_fields(new_row)
         return new_row
         
-    def transform_row(self, row: dict) -> list[dict]:
-        '''returns list of rows in SPINE format'''
-        
-        name_keys = ['organisationname']
-        
-        spine_rows = []
-        for name in name_keys:
-            spine_rows.append(self.format_row(name,row))
 
-        return spine_rows
 
 
 '''

@@ -1,7 +1,7 @@
 import pytest
 
 from .mutuals import MutualsDataHandler
-from .test_companies_house import spine_entry_creator
+from .base_definitions import spine_entry_creator
 
 
 
