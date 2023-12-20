@@ -1,5 +1,5 @@
 
-from .base import SPINE_CSV_FORMAT, DataHandler
+from .base import DataHandler
 
 exclude_filters = {
     "": []
@@ -8,25 +8,20 @@ exclude_filters = {
 
 class ScotHousingRegDataHandler(DataHandler):
     fileencoding='Latin-1'
-    def all_filters(self, row: dict) -> bool:
 
-        # other filters?
+    def all_filters(self, row: dict) -> bool:
         for fieldname, exclude_values in exclude_filters.items():
             if row.get(fieldname) in exclude_values:
                 return False
         return True
+    
+
     def map_date(self, datestr):
         return super().map_date(datestr)
 
-    def find_names(self, row:dict) -> list:
-        ''' returns name keys which have non-null values'''
-        # 
-        name_keys=[]
-        v = ['Social Landlord']
+    def find_names(self, row) -> list:
+        return ['Social Landlord']
 
-        for i in v:
-            if row[i]: name_keys.append(i)
-        return name_keys
 
 
     def format_row(self,namefield,row) -> dict:
@@ -35,7 +30,7 @@ class ScotHousingRegDataHandler(DataHandler):
         for field in row:
             row[field] = row[field].strip()
 
-        new_row["uid"] =  'GB-SHR-'+ row['Reg No']    # SHPE from FindThatCharity: social housing providers England
+        new_row["uid"] =  'GB-SHR-'+ row['Reg No']    
         new_row["organisationname"] = row[namefield]
         new_row["normalisedname"] = ''
         new_row["companyid"] = row['Reg No']     
@@ -54,19 +49,9 @@ class ScotHousingRegDataHandler(DataHandler):
         new_row["dissolutiondate"] = '' 
         new_row["registrationdate"] = ''
         
+        super().sort_address_fields(new_row)
         return new_row
         
-    def transform_row(self, row: dict) -> list[dict]:
-        '''returns list of rows in SPINE format'''
-        #  check for multiple names
-        name_keys = self.find_names(row)
-        
-        spine_rows = []
-        for name in name_keys:
-            spine_rows.append(self.format_row(name,row))
-
-        return spine_rows
-
 
 '''
 Scottish Housing Register data fields

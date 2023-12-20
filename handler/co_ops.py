@@ -1,8 +1,7 @@
 
-import time
 from datetime import datetime
 
-from .base import SPINE_CSV_FORMAT, DataHandler
+from .base import DataHandler
 
 exclude_filters = {
     "": []
@@ -12,13 +11,7 @@ exclude_filters = {
 class CoOpsDataHandler(DataHandler):
     fileencoding='UTF8'
     def all_filters(self, row: dict) -> bool:
-        # filter out orgs dissolved prior to 1997 
-        if row.get("Dissolved Date"):
-            d_date = time.strptime(row.get("Dissolved Date"),'%d/%m/%Y')
-            bsd_date = time.strptime('1/1/1997','%d/%m/%Y')
-            if d_date < bsd_date:
-                return False  
-        # other filters?
+
         for fieldname, exclude_values in exclude_filters.items():
             if row.get(fieldname) in exclude_values:
                 return False
@@ -34,33 +27,38 @@ class CoOpsDataHandler(DataHandler):
         return d.strftime('%d/%m/%Y')
     
 
-    def find_names(self, row:dict) -> list:
+    def find_names(self, fieldnames) -> list:
         ''' returns name keys which have non-null values'''
         # 
         name_keys=[]
         v = ['Registered Name','Trading Name']
-
-        for i in v:
-            if row[i]: name_keys.append(i)
-        return name_keys
-
+        return [i for i in v if i in fieldnames]
+    
 
     def format_row(self,namefield,row) -> dict:
         '''format a row into Spine format, for given namefield'''
+        #orgid = 'Registered Number'
+        orgid = 'CUK Organisation ID'
+
+        if not row['Registered Number']:
+            print(f'{row[orgid]},{row[namefield]},{row["Registered Postcode"]}')
+
         new_row={}
         for field in row:
             row[field] = row[field].strip()
+        if not row[orgid]: print(f'In co_ops.format_row. Issue: no id for row {row}')
 
-        new_row["uid"] =  'GB-COOP-'+ row['Registered Number']   
+        new_row["uid"] =  'GB-COOP-'+ row[orgid]   
         new_row["organisationname"] = row[namefield]
         new_row["normalisedname"] = ''
-        new_row["companyid"] = row['Registered Number']   
+        new_row["companyid"] = row[orgid]   
         new_row["charitynumber"] = ''
         new_row["housenumber"] = ''
         
         new_row["addressline1"] = row['Registered Street']
         new_row["addressline2"] = ''
         new_row["addressline3"] = ''
+
         new_row["addressline4"] = ''
         new_row["addressline5"] = ''
         new_row["city"] = row['Registered City']
@@ -71,18 +69,9 @@ class CoOpsDataHandler(DataHandler):
         new_row["registrationdate"] = self.map_date(row['Incorporation Date'])
         new_row["dissolutiondate"] = self.map_date(row['Dissolved Date'])
         
+        super().sort_address_fields(new_row)
         return new_row
         
-    def transform_row(self, row: dict) -> list[dict]:
-        '''returns list of rows in SPINE format'''
-        #  check for multiple names
-        name_keys = self.find_names(row)
-        
-        spine_rows = []
-        for name in name_keys:
-            spine_rows.append(self.format_row(name,row))
-
-        return spine_rows
 
 
 '''

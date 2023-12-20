@@ -1,7 +1,7 @@
 import pytest
 
 from .companies_house_2014 import CompaniesHouse2014DataHandler
-from .test_companies_house import spine_entry_creator
+from .base_definitions import spine_entry_creator
 
 
 

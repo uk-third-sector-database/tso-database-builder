@@ -42,12 +42,6 @@ class CompaniesHouse2014DataHandler(DataHandler):
             if row.get(fieldname) in exclude_values:
                 return False
             
-        # exclude row if org dissolved prior to 1997
-        if row.get("chremy"):
-            d_date = time.strptime(row.get("chremy"),'%Y')
-            bsd_date = time.strptime('1997','%Y')
-            if d_date < bsd_date:
-                return False
         return True
     
     def map_date(self, datestr):
@@ -63,15 +57,10 @@ class CompaniesHouse2014DataHandler(DataHandler):
         return d.strftime('%d/%m/%Y')
     
 
-    def find_names(self, row:dict) -> list:
+    def find_names(self, fieldnames) -> list:
         ''' returns name keys which have non-null values'''
-        name_keys=[]
-        for k in row.keys():
-            v = re.findall(('.*ompanyname'),k)
-            for i in v:
-                if i:
-                    if row[i]: name_keys.append(i)
-        return name_keys
+        return [n for n in fieldnames if re.search('.*ompanyname',n)]
+        
 
     def find_addresses(self, row:dict) -> list:
         ''' returns list of address keys which have non-null values
@@ -106,18 +95,9 @@ class CompaniesHouse2014DataHandler(DataHandler):
         new_row["dissolutiondate"] = self.map_date(row['chremy'])
         new_row["registrationdate"] = self.map_date(row['chregy'])
 
+        super().sort_address_fields(new_row)
         return new_row
-        
-    def transform_row(self, row: dict) -> list[dict]:
-        '''returns list of rows in SPINE format'''
-        #  check for multiple names
-        name_keys = self.find_names(row)
-        
-        spine_rows = []
-        for name in name_keys:
-            spine_rows.append(self.format_row(name,row))
 
-        return spine_rows
 
 #          "uid"
 #         "organisationname",

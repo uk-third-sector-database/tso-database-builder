@@ -1,7 +1,7 @@
 
 from datetime import datetime
 
-from .base import SPINE_CSV_FORMAT, DataHandler
+from .base import DataHandler
 
 include_filters = {
     "ServiceType": ['Voluntary or Not for Profit'],
@@ -11,6 +11,7 @@ include_filters = {
 
 class CareInspScotDataHandler(DataHandler):
     fileencoding='Latin-1'
+    
     
     def all_filters(self, row: dict) -> bool:
 
@@ -32,17 +33,13 @@ class CareInspScotDataHandler(DataHandler):
                 print('error with date',datestr)
         return d.strftime('%d/%m/%Y')
 
-    def find_names(self, row:dict) -> list:
+    def find_names(self, fieldnames) -> list:
         ''' returns name keys which have non-null values'''
-        # 
-        name_keys=[]
+        
         v = ['Service_Provider','ServiceProvider','ServiceName']
+        return [i for i in v if i in fieldnames]
 
-        for i in v:
-            if i in row.keys():
-                if row[i]: name_keys.append(i)
-        return name_keys
-    
+
     def find_id_name(self,row:dict) -> str:
         v = ['CSNumber', 'CaseNumber','ï»¿CSNumber']
         for i in v:
@@ -60,37 +57,25 @@ class CareInspScotDataHandler(DataHandler):
         id = self.find_id_name(row)
         if not id:
             print(row.keys())
-
         new_row["uid"] =  'GB-CIS-'+ row[id]     
         new_row["organisationname"] = row[namefield]
         new_row["normalisedname"] = ''
         new_row["companyid"] = row[id] 
         new_row["charitynumber"] = ''  
-        new_row["housenumber"] = ''
-        
+        new_row["city"] = row['Service_town']
         new_row["addressline1"] = row['Address_line_1']
         new_row["addressline2"] = row['Address_line_2']
         new_row["addressline3"] = row['Address_line_3']
         new_row["addressline4"] = row['Address_line_4']
-        new_row["addressline5"] = ''
-        new_row["city"] = row['Service_town']
-        new_row["localauthority"] = row['Council_Area_Name']
         new_row["postcode"] = row['Service_Postcode']
         new_row["source"] = 'CareInspectorateScot'
         new_row["registrationdate"] = self.map_date(row['DateReg'])
         new_row["dissolutiondate"] = ''
+        super().sort_address_fields(new_row)
+        #print(f' *** In format_row. new_row = {new_row}')
         return new_row
-        
-    def transform_row(self, row: dict) -> list[dict]:
-        '''returns list of rows in SPINE format'''
-        #  check for multiple names
-        name_keys = self.find_names(row)
-        
-        spine_rows = []
-        for name in name_keys:
-            spine_rows.append(self.format_row(name,row))
 
-        return spine_rows
+
 
 
 '''

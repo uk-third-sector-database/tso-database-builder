@@ -22,13 +22,13 @@ To only install runtime requirements use:
 
 ## Running
 
-    python cli.py sub-spine <data-source> <input-csv> <output-csv> 
+    python cli.py process-source <data-source> <input-csv> <output-csv> 
     python cli.py concat <input-csv-1> <input-csv-2> ... <input-csv-n> -o <output-csv>
     python cli.py match <input-csv> <output-csv> 
 
 example:
 
-    python cli.py sub-spine txt.csv out.csv CompaniesHouse
+    python cli.py process-source txt.csv out.csv CompaniesHouse
 
     use spine_bash_script.sh to see all commands and algorithm
 
