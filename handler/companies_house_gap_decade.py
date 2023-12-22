@@ -86,7 +86,7 @@ class CompaniesHouseGapDataHandler(DataHandler):
     def find_names(self, row) -> list:
         ''' returns name keys which have non-null values'''
         # 
-        return ['company name']
+        return ['company_name']
 
 
     def format_row(self,namefield,row) -> dict:

@@ -40,8 +40,8 @@ class CoOpsDataHandler(DataHandler):
         #orgid = 'Registered Number'
         orgid = 'CUK Organisation ID'
 
-        if not row['Registered Number']:
-            print(f'{row[orgid]},{row[namefield]},{row["Registered Postcode"]}')
+        #if not row['Registered Number']:
+        #    print(f'{row[orgid]},{row[namefield]},{row["Registered Postcode"]}')
 
         new_row={}
         for field in row:

@@ -186,8 +186,16 @@ def combine_org_details(rows, final):
         if r['charitynumber']: charityid = r['charitynumber']
         if r['companyid']: companyid = r['companyid']
         source.append(r['source'])
-        reg_dates.append(r['registrationdate'])
-        dis_dates.append(r['dissolutiondate'])
+
+        if ' - ' in r['registrationdate']:
+            reg_dates.extend(r['registrationdate'].split(' - '))
+        else:
+            reg_dates.append(r['registrationdate'])
+
+        if ' - ' in r['dissolutiondate']:
+            dis_dates.extend(r['dissolutiondate'].split(' - '))
+        else:
+            dis_dates.append(r['dissolutiondate'])
 
     try:
         names.remove(('',''))
@@ -205,18 +213,13 @@ def combine_org_details(rows, final):
     # (occurs as a result of the slimmer data source from 2014, at least)
     addresses = dedupe_addr(addresses)
 
-## ** EDIT TO KEEP ALL DATES PER FIELD ***
-    # if there are multiple options for the registration and dissolution date we want the widest range:
     sorted_registration_dates = sort_dates(reg_dates)
-    if len(sorted_registration_dates)>1:
-        print('possible competing registration dates for ',r['uid'],' : ',sorted_registration_dates)
-    
+   
     sorted_dissolution_dates = sort_dates(dis_dates)
-    if len(sorted_dissolution_dates)>1:
-        print('possible competing dissolution dates for ',r['uid'],' : ',sorted_dissolution_dates)
 
-    reg = sorted_registration_dates[0]
-    dis = sorted_dissolution_dates[-1]
+
+    reg = ' - '.join(sorted_registration_dates)
+    dis = ' - '.join(sorted_dissolution_dates)
 
 
     # we want all CH sources to be consolidated for final spine output

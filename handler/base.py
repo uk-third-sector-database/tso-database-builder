@@ -15,8 +15,6 @@ class DataHandler:
         raise NotImplementedError()
 
     def transform_row(self, row: dict) -> list[dict]:
-        #name_keys = self.find_names(row)
-        
         spine_rows = []
         for name in self.names:
             spine_rows.append(self.format_row(name,row))
