@@ -1,5 +1,5 @@
 import click
-import csv
+import os
 
 from handler.base import do_csv_processing
 from handler.base_definitions import NEW_SPINE_CSV_FORMAT
@@ -61,6 +61,10 @@ def process_source(source, infile, outfile):
 
     #consolidate all details for each org, and add geography lookup fields
     write_permutations(open(intermediate_ofile,'r'),open(outfile,'w+'),False)
+    try:
+        os.remove(intermediate_ofile)
+    except OSError as e:
+        print(f'error attempting to remove {intermediate_ofile}')
 
 
 @cli.command()

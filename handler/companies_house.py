@@ -55,7 +55,6 @@ class CompaniesHouseDataHandler(DataHandler):
 
 
     def find_names(self, fieldnames) -> list:
-        print(fieldnames)
         return [n for n in fieldnames if re.search('.*ompanyname',n, flags=re.IGNORECASE)]
 
     def find_addresses(self, row:dict) -> list:
@@ -97,7 +96,6 @@ class CompaniesHouseDataHandler(DataHandler):
         new_row["registrationdate"] = row['IncorporationDate']
 
         super().sort_address_fields(new_row)
-        print(new_row)
         return new_row
         
 
