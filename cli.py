@@ -101,12 +101,13 @@ def permutate(src, output,final):
     permutations of names and addresses associated
     Use option -f if final permutation - consolidates all companies house source info to 'CH' only
     """
+    print('final? ',final)
     write_permutations(src,output,final)
     print('Permutations complete. Output written to %s'%output)
 
     if final:
         # add rowid field, and remove charitynumber field
-
+        print('doing final processing...')
         final_filename = final_processing(output)
         print('Final processing complete. Output written to %s'%final_filename)
 
