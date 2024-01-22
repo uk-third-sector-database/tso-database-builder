@@ -199,6 +199,7 @@ def replace_CH_source_field(s):
     # s is string or list of sources
     # return same type, with mapped_sources = ["2014_prior","2023_download","adv_api"] replaced by 'CH'
     mapped_sources = ["2014_prior","2023_download","adv_api"]
+    print('replacing CH source fields...')
     def ch(x):
         for i in mapped_sources:
             if i in x: return 'CH'
@@ -280,12 +281,12 @@ def combine_org_details(rows, final):
 
     # if there are multiple options for the registration and dissolution date we want the widest range:
     sorted_registration_dates = sort_dates(reg_dates)
-    if len(sorted_registration_dates)>1:
-        print('possible competing registration dates for ',r['uid'],' : ',sorted_registration_dates)
+    #if len(sorted_registration_dates)>1:
+    #    print('possible competing registration dates for ',r['uid'],' : ',sorted_registration_dates)
     
     sorted_dissolution_dates = sort_dates(dis_dates)
-    if len(sorted_dissolution_dates)>1:
-        print('possible competing dissolution dates for ',r['uid'],' : ',sorted_dissolution_dates)
+    #if len(sorted_dissolution_dates)>1:
+    #    print('possible competing dissolution dates for ',r['uid'],' : ',sorted_dissolution_dates)
 
     reg = sorted_registration_dates[0]
     dis = sorted_dissolution_dates[-1]
