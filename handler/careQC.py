@@ -1,6 +1,6 @@
 
 
-from .base import SPINE_CSV_FORMAT, DataHandler
+from .base import DataHandler
 
 exclude_filters = {
     "": []
