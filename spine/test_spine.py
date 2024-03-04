@@ -1,11 +1,10 @@
 import io
-import os
 
 import pytest
 
-from spine.wrangling import concat, check_spine_format, consolidate_address, final_processing
+from spine.wrangling import concat, check_spine_format
 from spine.wrangling import dict_indexed_by_field, dedupe_addr, combine_org_details
-from handler.test_companies_house import spine_entry_creator
+from handler.base_definitions import spine_entry_creator
 
 def new_spine_entry_creator(overrides):
     entry = {
@@ -164,19 +163,6 @@ GB-CIS-CS2003000153,Aviv Club,AVIV CLUB,CS2003000153,,"Walton Community Care Cen
     assert dict_indexed_by_field(f1,'uid').keys() == expected_dict.keys()
     
 
-def test_consolidate_address():
-    orig = spine_entry_creator({
-        'housenumber':'5',
-        'addressline1':'York Street',
-        'addressline2':'TownArea',
-        'city': 'ThisCity',
-        'postcode': 'AS1 2DF',
-    })
-   
-    fulladdress= '5, York Street, TownArea'#, ThisCity'
-        
-    assert consolidate_address(orig) == fulladdress
-
 def test_dedupe_addr():
     a = [('1 King St','city','RR4 4RR'),
          ('','','RR4 4RR'),
@@ -224,37 +210,3 @@ def test_combine_org_details_null_addr():
 
     assert combine_org_details(rows,False)==expected
 
-
-def test_final_processing():
-    r1 = new_spine_entry_creator({'uid':12, 'charitynumber' : 1234, 'organisationname':'name','fulladdress':'street','postcode':'abc'})
-    expected = final_spine_entry_creator({'rowid':1,'uid':12,'organisationname':'name','fulladdress':'street','postcode':'abc'})
-
-    for_f1 = '''uid,organisationname,normalisedname,companyid,charitynumber,fulladdress,city,postcode,source,registrationdate,dissolutiondate
-GB-CIS-CS2003000137,East Park School,EAST PARK SCHOOL,CS2003000137,,"1092 Maryhill Road, Glasgow", Glasgow City,G20 9TD,CareInspectorateScot,,
-GB-CIS-CS2003000137,East Park,EAST PARK,CS2003000137,,"1092 Maryhill Road, Glasgow", Glasgow City,G20 9TD,CareInspectorateScot,,
-GB-CIS-CS2003000150,Church of Scotland Trading as Crossreach,CHURCH OF SCOTLAND TRADING AS CROSSREACH,CS2003000150,,"Templeton Business Centre, Building 5, Unit 5, The Doges", Glasgow,G40 1DA,CareInspectorateScot,,
-GB-CIS-CS2003000150,Threshold Glasgow Day Opportunities,THRESHOLD GLASGOW DAY OPPORTUNITIES,CS2003000150,,"Templeton Business Centre, Building 5, Unit 5, The Doges, Glasgow", Glasgow City,G40 1DA,CareInspectorateScot,,
-GB-CIS-CS2003000153,Jewish Care Scotland,JEWISH CARE SCOTLAND,CS2003000153,,"Walton Community Care Centre, May Terrace, Giffnock, East Renfrewshire",,G46 6LD,CareInspectorateScot,,
-GB-CIS-CS2003000153,Aviv Club,AVIV CLUB,CS2003000153,,"Walton Community Care Centre, May Terrace, Giffnock, East Renfrewshire",,G46 6LD,CareInspectorateScot,,'''
-    
-    f1 = open('test_csvs/test_final_processing.csv','w+')
-    f1.write(for_f1)
-    f1.close()
-
-    final_processing(open('test_csvs/test_final_processing.csv','r'))
-
-    outputfile = 'test_csvs/test_final_processing.final.csv'
-    assert os.path.exists(outputfile)
-    
-    outputdata = open(outputfile).read()
-    
-    expected =  '''rowid,uid,organisationname,normalisedname,companyid,fulladdress,city,postcode,source,registrationdate,dissolutiondate
-1,GB-CIS-CS2003000137,East Park School,EAST PARK SCHOOL,CS2003000137,"1092 Maryhill Road, Glasgow", Glasgow City,G20 9TD,CareInspectorateScot,,
-2,GB-CIS-CS2003000137,East Park,EAST PARK,CS2003000137,"1092 Maryhill Road, Glasgow", Glasgow City,G20 9TD,CareInspectorateScot,,
-3,GB-CIS-CS2003000150,Church of Scotland Trading as Crossreach,CHURCH OF SCOTLAND TRADING AS CROSSREACH,CS2003000150,"Templeton Business Centre, Building 5, Unit 5, The Doges", Glasgow,G40 1DA,CareInspectorateScot,,
-4,GB-CIS-CS2003000150,Threshold Glasgow Day Opportunities,THRESHOLD GLASGOW DAY OPPORTUNITIES,CS2003000150,"Templeton Business Centre, Building 5, Unit 5, The Doges, Glasgow", Glasgow City,G40 1DA,CareInspectorateScot,,
-5,GB-CIS-CS2003000153,Jewish Care Scotland,JEWISH CARE SCOTLAND,CS2003000153,"Walton Community Care Centre, May Terrace, Giffnock, East Renfrewshire",,G46 6LD,CareInspectorateScot,,
-6,GB-CIS-CS2003000153,Aviv Club,AVIV CLUB,CS2003000153,"Walton Community Care Centre, May Terrace, Giffnock, East Renfrewshire",,G46 6LD,CareInspectorateScot,,'''
-    
-    assert_files_basically_same(outputdata.strip(), expected)
-    
