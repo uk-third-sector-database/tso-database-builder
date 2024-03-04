@@ -21,42 +21,63 @@ ORG_ID_MAPPING = {
 
 def spine_entry_creator(overrides):
     entry = {
-        "uid" : '',
-        "organisationname" :  '',
-        "normalisedname" : '',
-        "companyid" : '' ,
-        "charitynumber" : '',
-        "fulladdress" : '',
-        "city" : '' ,
-        "postcode" :  '',
-        "source" : '',
-        "registrationdate" : '',
-        "dissolutiondate" : '',
-    }
+        "uid" : "",
+        "organisationname" : "",
+        "normalisedname" : "",
+        "fulladdress" : "",
+        "city" : "",
+        "postcode" : "",
+        "primarysource" : "",
+        "primaryid" : "",
+        "primaryregdate" : "",
+        "dissolutiondate" : "",
+        "secondarysource" : "",
+        "secondaryid" : "",
+        "secondaryregdate" : "",
+           }
     entry.update(**overrides)
     return entry
 
 
+def extra_csv_entry_creator(overrides):
+    entry = {
+        "uid" : "",
+        "organisationname" : "",
+        "normalisedname" : "",
+        "fulladdress" : "",
+        "city" : "",
+        "postcode" : "",
+        "source" : "",
+        }
+    entry.update(**overrides)
+    return entry
 
-NEW_SPINE_CSV_FORMAT = [
+
+SPINE_CSV_FIELDS = [
     "uid",
     "organisationname",
     "normalisedname",
-    "companyid",
-    "charitynumber",
+    "fulladdress",
+    "city",
+    "postcode",
+    "primarysource",
+    "primaryid"
+    "primaryregdate",
+    "dissolutiondate",
+    "secondarysource",
+    "secondaryid",
+    "secondaryregdate"]
+
+EXTRA_DETAILS_CSV_FIELDS = [
+    "uid",
+    "organisationname",
+    "normalisedname",
     "fulladdress",
     "city",
     "postcode",
     "source",
-    "registrationdate",
-    "dissolutiondate",
-    "lat",
-    "long",
-    "imd",
-    "country",
-    "x",
-    "y",
 ]
 
-FINAL_SPINE_CSV_FORMAT = ['rowid'] + NEW_SPINE_CSV_FORMAT
 
+FINAL_SPINE_CSV_FORMAT = ['rowid'] + SPINE_CSV_FIELDS
+FINAL_EXTRA_DETAILS_CSV_FIELDS = ['rowid'] + EXTRA_DETAILS_CSV_FIELDS

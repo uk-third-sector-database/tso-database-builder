@@ -7,7 +7,7 @@ import re
 from spine.wrangling import dict_indexed_by_field
 
 
-from handler.base_definitions import NEW_SPINE_CSV_FORMAT
+from handler.base_definitions import SPINE_CSV_FIELDS
 
 
 
