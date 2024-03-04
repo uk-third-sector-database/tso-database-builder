@@ -53,9 +53,9 @@ def plot_upset_by_code(infile,ofile,source_list=source_codes):
     upsetplot.plot(df_up, orientation='horizontal', sort_by="cardinality")
 
     #pyplot.yscale('log')
-    pyplot.title(os.path.basename(infile.name))
+    pyplot.title('Matches found between data sources')#os.path.basename(infile.name))
     pyplot.savefig(ofile)
-    pyplot.show()
+    #pyplot.show()
 
 
 def match_type_counts(infile):
