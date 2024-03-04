@@ -163,12 +163,12 @@ def plot_upset(src, sets_list, output):
     """
     if sets_list[0] =='all':
         sets_list = sources
-    print(sets_list)
+    #print(sets_list)
     ofile = '%s.by_source.png'%output.split('.png')[0]
     print(ofile)
 
     sets_list = source_codes
-    print(sets_list)
+    #print(sets_list)
     ofile = '%s.by_uid_code.png'%output.strip('.png')
     plot_upset_by_code(src,ofile,sets_list)
     print('Plotting of %s, sources %s, complete. Output written to %s'%(src,', '.join(sets_list),ofile))
