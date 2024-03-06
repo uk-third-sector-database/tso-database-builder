@@ -1,7 +1,7 @@
 import csv
 import string
 
-from .base_definitions import NEW_SPINE_CSV_FORMAT,ORG_ID_MAPPING
+from .base_definitions import FINAL_SPINE_CSV_FORMAT,ORG_ID_MAPPING
 
 GEO_LOOKUP_FILES = {
     'geo_data/NSPL21_AUG_2023_UK/Data/NSPL21_AUG_2023_UK.csv' : ['pcd','lat','long','imd','country']
@@ -36,7 +36,10 @@ class DataHandler:
         fulladdress_str = ', '.join(fulladdress)
         try: fulladdress_str = fulladdress_str.split(row['postcode'].strip())[0]
         except ValueError: pass
-        row['fulladdress'] = fulladdress_str.upper()
+        if "fulladdress" in row:
+            row["fulladdress"] = row["fulladdress"].upper()
+        else:
+            row['fulladdress'] = fulladdress_str.upper()
         row['city']=row['city'].upper()
         
         [row.pop(f, None) for f in address_fields] #remove old address fields
@@ -57,9 +60,7 @@ def iter_csv_rows(filename,DataHandler):
     with open(filename, newline="", encoding=encoding) as csvfile:
         reader = csv.DictReader(csvfile)
         DataHandler.names = DataHandler.find_names(reader.fieldnames)
-        print('names: ',DataHandler.names)
         for row in reader:
-            #print(row)
             yield row
 
 
@@ -84,7 +85,7 @@ def do_csv_processing(
     print('Processing file %s .......\n'%input_csv_filename)
     with open(output_csv_filename, "w+", encoding='UTF8', newline="") as csvfile:
         writer = csv.DictWriter(
-            csvfile, fieldnames=NEW_SPINE_CSV_FORMAT, extrasaction="ignore"
+            csvfile, fieldnames=FINAL_SPINE_CSV_FORMAT, extrasaction="ignore"
         )
         writer.writeheader()
         for new_row in filter(

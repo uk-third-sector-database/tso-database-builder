@@ -41,18 +41,16 @@ def test_row_formatting():
     row = SHR_entry_creator({
         "Reg No" : "1234",
         "Social Landlord" : "Something Name",
-        "Constitution" : "",
-        "Clients" : "",
-        "Landlord type" : "",
-        "Settlement" : "",
+
 })
     namefield = 'Social Landlord'
+    
     new_row = spine_entry_creator({
     "uid" : 'GB-SHR-1234',
     "organisationname" : 'Something Name',
-    "normalisedname": '',
-    "companyid":'1234',
-    "source":'ScottishHousingRegulator'
+    "normalisedname": 'SOMETHING NAME',
+    "primaryid":'1234',
+    "primarysource":'ScottishHousingRegulator'
     })
     assert ScotHousingRegDataHandler().format_row(namefield,row) == new_row
 

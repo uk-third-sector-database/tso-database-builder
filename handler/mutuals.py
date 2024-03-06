@@ -32,24 +32,21 @@ class MutualsDataHandler(DataHandler):
             fulladdress = row['address']
 
         fulladdress = ','.join(fulladdress.split(', ')) # deal with formatting "1 King Street, Area,City
-        new_row["uid"] =  'GB-MPR-'+ row['societynumber']   
+        
+
+        new_row["uid"] = 'GB-MPR-'+ row['societynumber']   
         new_row["organisationname"] = row[namefield]
         new_row["normalisedname"] = ''
-        new_row["companyid"] = row['societynumber']   
-        new_row["charitynumber"] = ''
-        new_row["housenumber"] = ''
-        
-        new_row["addressline1"] = fulladdress
-        new_row["addressline2"] = ''
-        new_row["addressline3"] = ''
-        new_row["addressline4"] = ''
-        new_row["addressline5"] = ''
+        new_row["fulladdress"] = fulladdress
         new_row["city"] = row['city']
-        new_row["localauthority"] = ''
         new_row["postcode"] = row['postcode']
-        new_row["source"] = row['source']
-        new_row["dissolutiondate"] = '' 
-        new_row["registrationdate"] = ''
+        new_row["primarysource"] = row['source']
+        new_row["primaryid"] = row['societynumber'] 
+        new_row["primaryregdate"] = ''
+        new_row["dissolutiondate"] = ''
+        new_row["secondarysource"] = ''
+        new_row["secondaryid"] = ''
+        new_row["secondaryregdate"] = ''
 
         super().sort_address_fields(new_row)
         return new_row

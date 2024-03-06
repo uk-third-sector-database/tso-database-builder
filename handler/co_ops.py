@@ -48,27 +48,22 @@ class CoOpsDataHandler(DataHandler):
             row[field] = row[field].strip()
         if not row[orgid]: print(f'In co_ops.format_row. Issue: no id for row {row}')
 
-        new_row["uid"] =  'GB-COOP-'+ row[orgid]   
+        new_row["uid"] = 'GB-COOP-'+ row[orgid]   
         new_row["organisationname"] = row[namefield]
         new_row["normalisedname"] = ''
-        new_row["companyid"] = row[orgid]   
-        new_row["charitynumber"] = ''
-        new_row["housenumber"] = ''
-        
-        new_row["addressline1"] = row['Registered Street']
-        new_row["addressline2"] = ''
-        new_row["addressline3"] = ''
-
-        new_row["addressline4"] = ''
-        new_row["addressline5"] = ''
+        new_row["fulladdress"] = row['Registered Street']
         new_row["city"] = row['Registered City']
-        new_row["localauthority"] = row['Registered State/Province']
         new_row["postcode"] = row['Registered Postcode']
-        new_row["source"] = 'CoOps'
-
-        new_row["registrationdate"] = self.map_date(row['Incorporation Date'])
+        new_row["primarysource"] = 'CoOps'
+        new_row["primaryid"] = row[orgid]   
+        new_row["primaryregdate"] = self.map_date(row['Incorporation Date'])
         new_row["dissolutiondate"] = self.map_date(row['Dissolved Date'])
-        
+        new_row["secondarysource"] = ''
+        new_row["secondaryid"] = ''
+        new_row["secondaryregdate"] = ''
+
+        print(new_row['fulladdress'])
+
         super().sort_address_fields(new_row)
         return new_row
         

@@ -1,5 +1,5 @@
 
-import datetime
+from datetime import datetime
 
 
 from .base import DataHandler
@@ -22,13 +22,14 @@ class SocialHousingEngDataHandler(DataHandler):
         return False
 
     def map_date(self, datestr):
+        print(f'input date str = {datestr}, type = {type(datestr)}')
         datestr = datestr.strip()
         if not datestr:
             return ''
         try:
             d = datetime.strptime(datestr,'%d/%m/%Y')
-        except:
-            print('error with date *%s*'%datestr)
+        except Exception as e:
+            print(f"error with date *{datestr} ({e})")
             return ''
         return d.strftime('%d/%m/%Y')
     
@@ -47,23 +48,17 @@ class SocialHousingEngDataHandler(DataHandler):
         new_row["uid"] =  'GB-SHPE-'+ row['Registration number']   
         new_row["organisationname"] = row[namefield]
         new_row["normalisedname"] = ''
-        new_row["companyid"] = row['Registration number']
-        new_row["charitynumber"] = ''
-        new_row["housenumber"] = ''
-        
-        new_row["addressline1"] = ''
-        new_row["addressline2"] = ''
-        new_row["addressline3"] = ''
-        new_row["addressline4"] = ''
-        new_row["addressline5"] = ''
+        new_row["primaryid"] = row['Registration number']
+        new_row["fulladdress"] = ''
         new_row["city"] = ''
-        new_row["localauthority"] = ''
         new_row["postcode"] = ''
-        new_row["source"] = 'SocialHousingEngland'
+        new_row["primarysource"] = 'SocialHousingEngland'
         new_row["dissolutiondate"] = ''
-        #new_row["registrationdate"] = self.map_date(row['Registration date'])   #this errors, not obvious why, as field has normal looking dates in it.
-        new_row["registrationdate"] = row['Registration date']
-        
+        new_row["primaryregdate"] = self.map_date(row['Registration date'])   
+        new_row["secondarysource"] = ''
+        new_row["secondaryid"] = ''
+        new_row["secondaryregdate"] = ''
+
         super().sort_address_fields(new_row)
         return new_row
         

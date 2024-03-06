@@ -4,8 +4,9 @@
 ##--------------- process sources --------------------------
 
 ## companies house files:
-#python3 cli.py process-source CompaniesHouse ../raw_data/BasicCompanyDataAsOneFile-2023-06-01.csv ../public_spine_data/CH_June_2023.spine.csv
+python3 cli.py process-source CompaniesHouse ../raw_data/BasicCompanyDataAsOneFile-2023-06-01.csv ../public_spine_data/CH_June_2023.spine.csv
 python3 cli.py process-source CompaniesHouse ../raw_data/BasicCompanyDataAsOneFile-2023-10-04.csv ../public_spine_data/CH_Oct_2023.spine.csv
+python3 cli.py process-source CompaniesHouse ../raw_data/BasicCompanyDataAsOneFile-2024-03-04.csv ../public_spine_data/CH_Jan_2024.spine.csv
 python3 cli.py process-source CompaniesHouse2014 ../raw_data/soton14reduced.csv ../public_spine_data/CH_2014.spine.csv
 python3 cli.py process-source CompaniesHouseGapDecade ../raw_data/ch_adv_scrape.csv ../public_spine_data/CH_gap_decade.spine.csv
 #
