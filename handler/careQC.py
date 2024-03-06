@@ -33,26 +33,24 @@ class CQCDataHandler(DataHandler):
         for field in row:
             row[field] = row[field].strip()
 
-        new_row["uid"] =  'GB-CQC-'+ row['CQC Provider ID (for office use only)']      
+    
+
+        new_row["uid"] = 'GB-CQC-'+ row['CQC Provider ID (for office use only)']      
         new_row["organisationname"] = row[namefield]
         new_row["normalisedname"] = ''
-        new_row["companyid"] = row['CQC Provider ID (for office use only)']   
-        new_row["charitynumber"] = ''
-        new_row["housenumber"] = ''
-        
-        new_row["addressline1"] = row['Address']
-        new_row["addressline2"] = ''
-        new_row["addressline3"] = ''
-        new_row["addressline4"] = ''
-        new_row["addressline5"] = ''
+        new_row["fulladdress"] = row['Address']
         new_row["city"] = ''
-        new_row["localauthority"] = row['Local authority']
         new_row["postcode"] = row['Postcode']
-        new_row["source"] = 'CareQualityCommission'
-        new_row["dissolutiondate"] = '' 
-        new_row["registrationdate"] = ''
+        new_row["primarysource"] = 'CareQualityCommission'
+        new_row["primaryid"] = row['CQC Provider ID (for office use only)'] 
+        new_row["primaryregdate"] = ''
+        new_row["dissolutiondate"] = ''
+        new_row["secondarysource"] = ''
+        new_row["secondaryid"] = ''
+        new_row["secondaryregdate"] = ''
+
+
         super().sort_address_fields(new_row)
-        #print(f' *** In format_row. new_row = {new_row}')
         return new_row
         
 

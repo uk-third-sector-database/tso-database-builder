@@ -39,9 +39,29 @@ def test_row_formatting():
     new_row = spine_entry_creator({
     "uid" : 'GB-SHPE-1234',
     "organisationname" : 'Something Name',
-    "normalisedname": '',
-    "companyid":'1234',
-    "source":'SocialHousingEngland'
+    "normalisedname": 'SOMETHING NAME',
+    "primaryid":'1234',
+    "primarysource":'SocialHousingEngland'
+    })
+    assert SocialHousingEngDataHandler().format_row(namefield,row) == new_row
+
+
+def test_row_formatting_regdate():
+    row = SHE_entry_creator({
+"Organisation name" : 'Something Name',
+"Registration number" : '1234',
+"Registration date" : '12/12/1980',
+"Designation" : 'Non-profit',
+"Corporate form" : ''
+})
+    namefield = 'Organisation name'
+    new_row = spine_entry_creator({
+    "uid" : 'GB-SHPE-1234',
+    "organisationname" : 'Something Name',
+    "normalisedname": 'SOMETHING NAME',
+    "primaryid":'1234',
+    "primarysource":'SocialHousingEngland',
+    "primaryregdate":'12/12/1980'
     })
     assert SocialHousingEngDataHandler().format_row(namefield,row) == new_row
 

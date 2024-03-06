@@ -1,5 +1,5 @@
 
-from handler.base_definitions import NEW_SPINE_CSV_FORMAT, FINAL_SPINE_CSV_FORMAT
+from handler.base_definitions import FINAL_SPINE_CSV_FORMAT, FINAL_EXTRA_DETAILS_CSV_FIELDS
 import csv
 import sys
 import pandas
@@ -16,14 +16,14 @@ def check_spine_format(csv_fields):
     # check mapping - 
     if not csv_fields:
         return False
-    for field in NEW_SPINE_CSV_FORMAT:
+    for field in FINAL_SPINE_CSV_FORMAT:
         if field not in csv_fields:
 
             print(f'field {field} not in input file fields')
             return False
     for field in csv_fields:
         try:
-            if field not in NEW_SPINE_CSV_FORMAT: 
+            if field not in FINAL_SPINE_CSV_FORMAT: 
                 print('unexpected field %s in input file\n'%field)
                 continue
         except UnicodeDecodeError as e:
@@ -43,7 +43,7 @@ def concat(csv_ins, csv_out):
         adding uid in org_id format (where possible)
     * Write out to output location
     """
-    writer = csv.DictWriter(csv_out, fieldnames=NEW_SPINE_CSV_FORMAT, extrasaction='ignore')
+    writer = csv.DictWriter(csv_out, fieldnames=FINAL_SPINE_CSV_FORMAT, extrasaction='ignore')
     writer.writeheader()
     for csv_in in csv_ins:
       processed_rows = 0
@@ -163,16 +163,16 @@ def sort_dates(date_list):
     return as_str
 
 
-def combine_org_details(rows, final):
+def combine_org_details(rows, final=True):
     '''
     For input rows of data, find unique names and addresses, and create rows for each combination of name & address
-    (called by permutate)
+    (called by compress_per_org and permutate)
     '''
     names=[]
     addresses=[]
-    charityid = ''
-    companyid = ''
-    source = []
+    
+    primaryid = ''
+    primarysource = []
     reg_dates = []
     dis_dates = []
     for r in rows:
@@ -183,14 +183,15 @@ def combine_org_details(rows, final):
             return []
         if n not in names: names.append(n)
         if not a in addresses: addresses.append(a)
-        if r['charitynumber']: charityid = r['charitynumber']
-        if r['companyid']: companyid = r['companyid']
-        source.append(r['source'])
+        
+        if r['primaryid']: 
+            primaryid = r['primaryid']
+        primarysource.append(r['primarysource'])
 
-        if ' - ' in r['registrationdate']:
-            reg_dates.extend(r['registrationdate'].split(' - '))
+        if ' - ' in r['primaryregdate']:
+            reg_dates.extend(r['primaryregdate'].split(' - '))
         else:
-            reg_dates.append(r['registrationdate'])
+            reg_dates.append(r['primaryregdate'])
 
         if ' - ' in r['dissolutiondate']:
             dis_dates.extend(r['dissolutiondate'].split(' - '))
@@ -245,8 +246,41 @@ def combine_org_details(rows, final):
                              'registrationdate':reg,
                              'dissolutiondate':dis
                              })
-    return new_rows
+    return new_spine_rows,new_extras_rows
         
+
+def compress_per_org(csv_in,spine_csv_out,details_csv_out):
+    '''run as part of initial processing of an input 
+    required as some sources have details across multiple lines, while do_csv_processing reads line by line
+    '''
+
+
+    # create dictionary key'd by uid
+    print(f'Running spine.wrangling.compress with file {csv_in}')
+    uid_dict = dict_indexed_by_field(csv_in,'uid')
+
+    # for each uid, if more than one record, find unique names and addresses
+    # and write line to csv_out, with additional data to details_csv_out
+    spine_writer = csv.DictWriter(spine_csv_out, fieldnames=FINAL_SPINE_CSV_FORMAT, extrasaction='ignore')
+    extras_writer = csv.DictWriter(details_csv_out, fieldnames=FINAL_EXTRA_DETAILS_CSV_FIELDS, extrasaction='ignore')
+    spine_writer.writeheader()
+    extras_writer.writeheader()
+    for uid in uid_dict.keys():
+        if not uid.split('-')[-1]:
+            # uid doesn't have id attached, don't permutate across addresses
+            for line in uid_dict[uid]:
+                print(f'in wrangling.compress. Line has truncated uid: {line}')
+                spine_writer.writerow(line)
+        elif len(uid_dict[uid]) > 1: # more than one record with this uid - create combinations
+            spine_data,extra_data = combine_org_details(uid_dict[uid])
+            spine_writer.writerows(spine_data)
+            extras_writer.writerows(extra_data)
+        else: # only one record with this uid - write directly
+            uid_dict[uid][0]['source'] = replace_CH_source_field(uid_dict[uid][0]['source'])
+            spine_writer.writerow(uid_dict[uid][0])
+
+    print(f'Completed spine.wrangling.compress - output in {spine_csv_out} and {details_csv_out}')
+
 
 def permutate(csv_in,csv_out,final):
     """
@@ -261,7 +295,7 @@ def permutate(csv_in,csv_out,final):
 
     # for each uid, if more than one record, find unique names and addresses
     # and write lines to csv_out
-    writer = csv.DictWriter(csv_out, fieldnames=NEW_SPINE_CSV_FORMAT, extrasaction='ignore')
+    writer = csv.DictWriter(csv_out, fieldnames=FINAL_SPINE_CSV_FORMAT, extrasaction='ignore')
     writer.writeheader()
     for uid in uid_dict.keys():
         if not uid.split('-')[-1]:

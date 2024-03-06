@@ -98,20 +98,20 @@ class CompaniesHouseGapDataHandler(DataHandler):
         new_row["uid"] =  'GB-COH-'+ row['company_number']       
         new_row["organisationname"] = row[namefield]
         new_row["normalisedname"] = ''
-        new_row["companyid"] = row['company_number']
-        new_row["charitynumber"] = ''
-        new_row["housenumber"] = ''
+        new_row["primaryid"] = row['company_number']
         new_row["addressline1"] = row['address_line_1']
         new_row["addressline2"] = row['address_line_2']
         new_row["addressline3"] = ''
         new_row["addressline4"] = ''
         new_row["addressline5"] = ''
         new_row["city"] = row['locality']
-        new_row["localauthority"] = ''
         new_row["postcode"] = row['postal_code']
-        new_row["source"] = 'adv_api %s'%' '.join([row['company_type'],row['company_subtype']])
+        new_row["primarysource"] = 'adv_api %s'%' '.join([row['company_type'],row['company_subtype']])
         new_row["dissolutiondate"] = self.map_date(row['date_of_cessation'])
-        new_row["registrationdate"] = self.map_date(row['date_of_creation'])
+        new_row["primaryregdate"] = self.map_date(row['date_of_creation'])
+        new_row["secondarysource"] = ''
+        new_row["secondaryid"] = ''
+        new_row["secondaryregdate"] = ''
 
         super().sort_address_fields(new_row)
         return new_row

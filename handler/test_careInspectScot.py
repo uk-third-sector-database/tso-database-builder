@@ -50,8 +50,8 @@ def test_row_formatting():
     "uid" : 'GB-CIS-1234',
     "organisationname" : 'Something Name',
     "normalisedname": 'SOMETHING NAME',
-    "companyid":'1234',
-    "source":'CareInspectorateScot'
+    "primaryid":'1234',
+    "primarysource":'CareInspectorateScot'
     })
     assert CareInspScotDataHandler().format_row(namefield,row) == new_row
 
@@ -73,8 +73,8 @@ def test_row_formatting_addr():
     "uid" : 'GB-CIS-1234',
     "organisationname" : 'Something Name',
     "normalisedname": 'SOMETHING NAME',
-    "companyid":'1234',
-    "source":'CareInspectorateScot',
+    "primaryid":'1234',
+    "primarysource":'CareInspectorateScot',
     "fulladdress" : "HOUSE, STREET",
     "city" : 'TOWN',
     "postcode" : "PC1 1PC"

@@ -12,7 +12,7 @@ from handler.base_definitions import SPINE_CSV_FIELDS
 
 
 def deduplicate(csv_in,csv_out,matchfield,threshold):
-    writer = csv.DictWriter(csv_out, fieldnames=NEW_SPINE_CSV_FORMAT, extrasaction='ignore')
+    writer = csv.DictWriter(csv_out, fieldnames=FINAL_SPINE_CSV_FORMAT, extrasaction='ignore')
     writer.writeheader()
     writer.writerows(find_direct_matches(csv_in,matchfield,threshold))
 

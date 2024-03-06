@@ -41,9 +41,9 @@ def test_row_formatting():
     new_row = spine_entry_creator({
     "uid" : 'GB-CQC-1234',
     "organisationname" : 'Something Name',
-    "normalisedname": '',
-    "companyid":'1234',
-    "source":'CareQualityCommission'
+    "normalisedname": 'SOMETHING NAME',
+    "primaryid":'1234',
+    "primarysource":'CareQualityCommission'
     })
     assert CQCDataHandler().format_row(namefield,row) == new_row
 
@@ -58,8 +58,8 @@ def test_row_formatting_alt_name():
     new_row = spine_entry_creator({
     "uid" : 'GB-CQC-1234',
     "organisationname" : 'Something something',
-    "normalisedname": '',
-    "companyid":'1234',
-    "source":'CareQualityCommission'
+    "normalisedname": 'SOMETHING SOMETHING',
+    "primaryid":'1234',
+    "primarysource":'CareQualityCommission'
     })
     assert CQCDataHandler().format_row(namefield,row) == new_row

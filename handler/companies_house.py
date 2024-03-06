@@ -75,9 +75,8 @@ class CompaniesHouseDataHandler(DataHandler):
         new_row["uid"] =  'GB-COH-'+ row[' CompanyNumber']       
         new_row["organisationname"] = row[namefield]
         new_row["normalisedname"] = ''
-        new_row["companyid"] = row[' CompanyNumber']
-        new_row["charitynumber"] = ''
-        new_row["housenumber"] = ''
+        new_row["primaryid"] = row[' CompanyNumber']
+
         if row['RegAddress.POBox']:
             new_row["addressline1"] = row['RegAddress.POBox']
             new_row["addressline2"] = row['RegAddress.AddressLine1']
@@ -86,14 +85,14 @@ class CompaniesHouseDataHandler(DataHandler):
             new_row["addressline1"] = row['RegAddress.AddressLine1']
             new_row["addressline2"] = row[' RegAddress.AddressLine2']
             new_row["addressline3"] = ''
-        new_row["addressline4"] = ''
-        new_row["addressline5"] = ''
         new_row["city"] = row['RegAddress.PostTown']
-        new_row["localauthority"] = row['RegAddress.County']
         new_row["postcode"] = row['RegAddress.PostCode']
-        new_row["source"] = '2023_download %s'%row['CompanyCategory']#'CompaniesHouse'
+        new_row["primarysource"] = 'CH %s'%row['CompanyCategory']#'CompaniesHouse'
         new_row["dissolutiondate"] = row['DissolutionDate']
-        new_row["registrationdate"] = row['IncorporationDate']
+        new_row["primaryregdate"] = row['IncorporationDate']
+        new_row["secondarysource"] = ''
+        new_row["secondaryid"] = ''
+        new_row["secondaryregdate"] = ''
 
         super().sort_address_fields(new_row)
         return new_row

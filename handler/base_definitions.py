@@ -61,7 +61,7 @@ SPINE_CSV_FIELDS = [
     "city",
     "postcode",
     "primarysource",
-    "primaryid"
+    "primaryid",
     "primaryregdate",
     "dissolutiondate",
     "secondarysource",
@@ -80,4 +80,5 @@ EXTRA_DETAILS_CSV_FIELDS = [
 
 
 FINAL_SPINE_CSV_FORMAT = ['rowid'] + SPINE_CSV_FIELDS
+
 FINAL_EXTRA_DETAILS_CSV_FIELDS = ['rowid'] + EXTRA_DETAILS_CSV_FIELDS

@@ -57,22 +57,25 @@ class CareInspScotDataHandler(DataHandler):
         id = self.find_id_name(row)
         if not id:
             print(row.keys())
-        new_row["uid"] =  'GB-CIS-'+ row[id]     
+
+        new_row["uid"] = 'GB-CIS-'+ row[id]     
         new_row["organisationname"] = row[namefield]
         new_row["normalisedname"] = ''
-        new_row["companyid"] = row[id] 
-        new_row["charitynumber"] = ''  
         new_row["city"] = row['Service_town']
         new_row["addressline1"] = row['Address_line_1']
         new_row["addressline2"] = row['Address_line_2']
         new_row["addressline3"] = row['Address_line_3']
         new_row["addressline4"] = row['Address_line_4']
         new_row["postcode"] = row['Service_Postcode']
-        new_row["source"] = 'CareInspectorateScot'
-        new_row["registrationdate"] = self.map_date(row['DateReg'])
+        new_row["primarysource"] = 'CareInspectorateScot'
+        new_row["primaryid"] = row[id]
+        new_row["primaryregdate"] = self.map_date(row['DateReg'])
         new_row["dissolutiondate"] = ''
+        new_row["secondarysource"] = ''
+        new_row["secondaryid"] = ''
+        new_row["secondaryregdate"] = ''
+
         super().sort_address_fields(new_row)
-        #print(f' *** In format_row. new_row = {new_row}')
         return new_row
 
 

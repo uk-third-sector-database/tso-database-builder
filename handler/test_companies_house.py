@@ -1,6 +1,7 @@
 import pytest
 
 from .companies_house import CompaniesHouseDataHandler
+from .base_definitions import spine_entry_creator
 
 def companies_house_entry_creator(overrides):
     entry = {
@@ -73,22 +74,6 @@ def test_filters(company_category, expected):
     assert CompaniesHouseDataHandler().all_filters(value) == expected
 
 
-
-@pytest.mark.parametrize(
-    'row,keys',
-    [(companies_house_entry_creator({"CompanyName": 'Something'}),["CompanyName"])]
-)
-def test_find_name_keys_noextranames(row,keys):
-    assert CompaniesHouseDataHandler().find_names(row) == keys
-
-
-def test_find_name_keys_2previousnames():#row,keys):
-    row = companies_house_entry_creator({" CompanyName": 'Something',
-    "PreviousName_1.CompanyName": 'Something1',
-    "PreviousName_2.CompanyName": 'Something2'})
-    keys = [" CompanyName","PreviousName_1.CompanyName","PreviousName_2.CompanyName"]
-    assert CompaniesHouseDataHandler().find_names(row) == keys
-
 def test_find_address_keys_ignore_CO():
     row = companies_house_entry_creator({
         "RegAddress.CareOf": "text here",
@@ -114,7 +99,7 @@ def test_find_address_keys():
         "RegAddress.PostTown",
         "RegAddress.County",
         "RegAddress.Country",
-        "RegAddress.PostCode"]
+        "RegAddress.PostCode"] 
     print(row)
     assert CompaniesHouseDataHandler().find_addresses(row) == keys
 
@@ -134,18 +119,12 @@ def test_row_formatting_POBox():
     new_row = spine_entry_creator({
     "uid" : 'GB-COH-1234',
     "organisationname" : 'Something Name',
-    "normalisedname": '',
-    "companyid":'1234',
-    "housenumber":'',
-    "addressline1":'POBox text',
-    "addressline2":'a1',
-    "addressline3":'a2',
-    "addressline4":'',
-    "addressline5":'',
-    "city":'town',
-    "localauthority":'',
+    "normalisedname": 'SOMETHING NAME',
+    "primaryid":'1234',
+    "fulladdress":'POBOX TEXT, A1, A2',
+    "city":'TOWN',
     "postcode":'code',
-    "source":'2023_download category'
+    "primarysource":'CH category'
     })
     assert CompaniesHouseDataHandler().format_row(namefield,row) == new_row
 
@@ -163,18 +142,12 @@ def test_row_formatting_prev_name_no_POBox():
     new_row = spine_entry_creator({
     "uid" : 'GB-COH-1234',
     "organisationname" : 'Something1 Name',
-    "normalisedname": '',
-    "companyid":'1234',
-    "housenumber":'',
-    "addressline1":'a1',
-    "addressline2":'a2',
-    "addressline3":'',
-    "addressline4":'',
-    "addressline5":'',
-    "city":'town',
-    "localauthority":'',
+    "normalisedname": 'SOMETHING1 NAME',
+    "primaryid":'1234',
+    "fulladdress":'A1, A2',
+    "city":'TOWN',
     "postcode":'code',
-    "source":'2023_download category'
+    "primarysource":'CH category'
     })
     assert CompaniesHouseDataHandler().format_row(namefield,row) == new_row
 

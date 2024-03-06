@@ -62,36 +62,27 @@ def test_filters(company_category, expected):
 
 
 
-def test_find_name_keys_noextranames():
-    row = co_op_entry_creator({"Registered Name": 'Something'})
-    keys = ["Registered Name"]
-    assert CoOpsDataHandler().find_names(row) == keys
-
 
 
 def test_row_formatting():
     row = co_op_entry_creator({
     "Registered Name": 'Something Name',
-    "Registered Number" : '1234',
-    "Registered Street": "a1",
+    "CUK Organisation ID" : '1234',
+    "Registered Street": "a1 this street",
     "Registered City": "town",
     "Registered Postcode": "code"})
+
     namefield = 'Registered Name'
+
     new_row = spine_entry_creator({
     "uid" : 'GB-COOP-1234',
     "organisationname" : 'Something Name',
-    "normalisedname": '',
-    "companyid":'1234',
-    "housenumber":'',
-    "addressline1":'a1',
-    "addressline2":'',
-    "addressline3":'',
-    "addressline4":'',
-    "addressline5":'',
-    "city":'town',
-    "localauthority":'',
+    "normalisedname": 'SOMETHING NAME',
+    "primaryid":'1234',
+    "fulladdress":'A1 THIS STREET',
+    "city":'TOWN',
     "postcode":'code',
-    "source":'CoOps'
+    "primarysource":'CoOps'
     })
     assert CoOpsDataHandler().format_row(namefield,row) == new_row
 

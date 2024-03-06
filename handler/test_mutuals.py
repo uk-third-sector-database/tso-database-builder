@@ -39,18 +39,35 @@ def test_row_formatting():
     new_row = spine_entry_creator({
     "uid" : 'GB-MPR-12',
     "organisationname" : 'something',
-    "normalisedname": '',
-    "companyid":'12',
-    "housenumber":'',
-    "addressline1":'33 street,city,LA',
-    "addressline2":'',
-    "addressline3":'',
-    "addressline4":'',
-    "addressline5":'',
+    "normalisedname": 'SOMETHING',
+    "primaryid":'12',
+    "fulladdress":'33 STREET,CITY,LA',
     "city":'',
-    "localauthority":'',
     "postcode":'postcode',
-    "source":'mutuals'
+    "primarysource":'mutuals'
     })
     assert MutualsDataHandler().format_row(namefield,row) == new_row
 
+
+def test_row_formatting():
+    row = mutuals_entry_creator({
+"societynumber":'12',
+"organisationname":'something',
+"address":'33 street, city, postcode',
+"city":'city',
+"source":'mutuals',
+"postcode":'postcode',
+
+    })
+    namefield = 'organisationname'
+    new_row = spine_entry_creator({
+    "uid" : 'GB-MPR-12',
+    "organisationname" : 'something',
+    "normalisedname": 'SOMETHING',
+    "primaryid":'12',
+    "fulladdress":'33 STREET',
+    "city":'CITY',
+    "postcode":'postcode',
+    "primarysource":'mutuals'
+    })
+    assert MutualsDataHandler().format_row(namefield,row) == new_row

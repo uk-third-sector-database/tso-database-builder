@@ -2,7 +2,7 @@ import click
 import os
 
 from handler.base import do_csv_processing
-from handler.base_definitions import NEW_SPINE_CSV_FORMAT
+from handler.base_definitions import FINAL_SPINE_CSV_FORMAT
 
 from handler.companies_house import CompaniesHouseDataHandler
 from handler.companies_house_2014 import CompaniesHouse2014DataHandler
@@ -60,11 +60,11 @@ def process_source(source, infile, outfile):
     do_csv_processing(infile, intermediate_ofile, handler_map[source]())
 
     #consolidate all details for each org, and add geography lookup fields
-    write_permutations(open(intermediate_ofile,'r'),open(outfile,'w+'),False)
-    try:
-        os.remove(intermediate_ofile)
-    except OSError as e:
-        print(f'error attempting to remove {intermediate_ofile}')
+    #leswrite_permutations(open(intermediate_ofile,'r'),open(outfile,'w+'),False)
+    #try:
+    #    os.remove(intermediate_ofile)
+    #except OSError as e:
+    #    print(f'error attempting to remove {intermediate_ofile}')
 
 
 @cli.command()
@@ -85,7 +85,7 @@ def concat(src, output):
 
 @cli.command()
 @click.argument("src", type=click.File("r"), nargs=1)
-@click.argument("field", type=click.Choice(NEW_SPINE_CSV_FORMAT), nargs=1)
+@click.argument("field", type=click.Choice(FINAL_SPINE_CSV_FORMAT), nargs=1)
 @click.option("-t", "--threshold", default=4, show_default=True, type=click.INT)
 @click.option("-o", "--output", default="direct_matches.out.csv", show_default=True, type=click.File("w"))
 def match(src, output, field, threshold):
