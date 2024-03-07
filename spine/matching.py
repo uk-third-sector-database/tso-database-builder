@@ -60,7 +60,7 @@ def find_direct_matches(csv_in,field,threshold):
         #print(match_sources)
         for source in match_sources.keys():
             if match_sources[source] >1 and source not in ['CHC','SC','NIC']:
-                allow = False
+                allow = True#False
         if num_matches < threshold and unique_field not in ['','.','0'] and allow:
             if not uid: continue
             for line in d[unique_field]:

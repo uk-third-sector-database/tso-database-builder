@@ -61,20 +61,27 @@ def plot_upset_by_code(infile,ofile,source_list=source_codes):
 def match_type_counts(infile):
     df = pandas.read_csv(infile,usecols=['uid']).drop_duplicates()
 
-    match_dict={}
-
+    match_dict = {}
+    unique_uids = set()
     for m in list(df.uid):
         try:
             s = re.findall('GB-(.+?)-',m)
         except TypeError:
             print('type error in re, uid = ',m)
             continue
+        for uid in m.split('_'):
+            if not uid in unique_uids:
+                unique_uids.add(uid)
+            else:
+                print(f'why is this uid already counted? uid = {uid}, match = {m}')
         s1='-'.join(s)
         if not s1 in match_dict.keys(): match_dict[s1]=1
         else: match_dict[s1]+=1
 
     k = list(match_dict.keys())
     k.sort()
+
+    print(f'Total number of unique uids in data = {len(unique_uids)}\n\n')
 
     for id in k:
         print(f'{id} : {match_dict[id]}')

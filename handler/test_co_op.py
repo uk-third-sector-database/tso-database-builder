@@ -72,7 +72,7 @@ def test_find_name_keys_noextranames():
 def test_row_formatting():
     row = co_op_entry_creator({
     "Registered Name": 'Something Name',
-    "Registered Number" : '1234',
+    "CUK Organisation ID" : '1234',
     "Registered Street": "a1",
     "Registered City": "town",
     "Registered Postcode": "code"})
