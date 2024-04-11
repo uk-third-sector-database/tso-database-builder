@@ -1,5 +1,4 @@
 import click
-import os
 
 from handler.base import do_csv_processing
 from handler.base_definitions import FINAL_SPINE_CSV_FORMAT
@@ -18,7 +17,6 @@ from handler.ccni import CCNIDataHandler
 from handler.oscr import OSCRDataHandler
 
 from spine.wrangling import concat as concatenate
-from spine.wrangling import permutate as write_permutations
 from spine.wrangling import final_processing
 from spine.matching import deduplicate
 
@@ -56,15 +54,9 @@ def process_source(source, infile, outfile):
     """
     Generate a SPINE format file using data pulled from a source
     """
-    intermediate_ofile = outfile.split('.csv')[0] + '.tmp.csv'
-    do_csv_processing(infile, intermediate_ofile, handler_map[source]())
+    
+    do_csv_processing(infile, outfile, handler_map[source]())
 
-    #consolidate all details for each org, and add geography lookup fields
-    #leswrite_permutations(open(intermediate_ofile,'r'),open(outfile,'w+'),False)
-    #try:
-    #    os.remove(intermediate_ofile)
-    #except OSError as e:
-    #    print(f'error attempting to remove {intermediate_ofile}')
 
 
 @cli.command()

@@ -41,19 +41,21 @@ class CQCDataHandler(DataHandler):
         new_row["fulladdress"] = row['Address']
         new_row["city"] = ''
         new_row["postcode"] = row['Postcode']
-        new_row["primarysource"] = 'CareQualityCommission'
-        new_row["primaryid"] = row['CQC Provider ID (for office use only)'] 
-        new_row["primaryregdate"] = ''
-        new_row["dissolutiondate"] = ''
-        new_row["secondarysource"] = ''
-        new_row["secondaryid"] = ''
-        new_row["secondaryregdate"] = ''
+        new_row["source"] = 'CareQualityCommission'
+        new_row["id_in_source"] = row['CQC Provider ID (for office use only)'] 
+        new_row["registerdate"] = ''
+        new_row["removeddate"] = ''
+        new_row['companyid'] = ''
 
 
         super().sort_address_fields(new_row)
         return new_row
         
 
+    def combine_org_details_per_source(self, rows: list):
+        '''Need to '''
+        print(f" Combine_org_details_per_source currrently not implemented for careQC: {rows}")
+        return '',''
 
 
 '''

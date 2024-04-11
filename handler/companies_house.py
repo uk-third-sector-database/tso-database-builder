@@ -174,3 +174,21 @@ class CompaniesHouseDataHandler(DataHandler):
 #         r["transformed"] = "yes"
 
 #         return [r]
+
+
+
+'''
+Included company types: 
+
+ "PRI/LTD BY GUAR/NSC (Private, limited by guarantee, no share capital) "
+ "Charitable Incorporated Organisation "
+ "Community Interest Company "
+ "Registered Society "
+ "PRI/LBG/NSC (Private, Limited by guarantee, no share capital, use of 'Limited' exemption) "
+ "Scottish Charitable Incorporated Organisation "
+ "Industrial and Provident Society "
+
+'''
+
+
+

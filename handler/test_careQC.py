@@ -1,7 +1,7 @@
 import pytest
 
 from .careQC import CQCDataHandler  
-from .base_definitions import spine_entry_creator
+from .base_definitions import sub_spine_entry_creator
 
 
 
@@ -38,12 +38,12 @@ def test_row_formatting():
 
 })
     namefield = 'Name'
-    new_row = spine_entry_creator({
+    new_row = sub_spine_entry_creator({
     "uid" : 'GB-CQC-1234',
     "organisationname" : 'Something Name',
     "normalisedname": 'SOMETHING NAME',
-    "primaryid":'1234',
-    "primarysource":'CareQualityCommission'
+    "id_in_source":'1234',
+    "source":'CareQualityCommission'
     })
     assert CQCDataHandler().format_row(namefield,row) == new_row
 
@@ -55,11 +55,11 @@ def test_row_formatting_alt_name():
 
 })
     namefield = 'Also known as'
-    new_row = spine_entry_creator({
+    new_row = sub_spine_entry_creator({
     "uid" : 'GB-CQC-1234',
     "organisationname" : 'Something something',
     "normalisedname": 'SOMETHING SOMETHING',
-    "primaryid":'1234',
-    "primarysource":'CareQualityCommission'
+    "id_in_source":'1234',
+    "source":'CareQualityCommission'
     })
     assert CQCDataHandler().format_row(namefield,row) == new_row

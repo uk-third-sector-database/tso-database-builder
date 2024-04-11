@@ -84,8 +84,6 @@ class CompaniesHouseGapDataHandler(DataHandler):
         return d.strftime('%d/%m/%Y')
     
     def find_names(self, row) -> list:
-        ''' returns name keys which have non-null values'''
-        # 
         return ['company_name']
 
 
@@ -152,3 +150,6 @@ class CompaniesHouseGapDataHandler(DataHandler):
 #locality,
 #postal_code,
 #region
+    
+
+

@@ -14,6 +14,8 @@ exclude_filters = {
 
 class CCNIDataHandler(DataHandler):
     fileencoding='Latin-1'
+    tmp_fields = []
+
     def all_filters(self, row: dict) -> bool:
         # other filters?
         for fieldname, exclude_values in exclude_filters.items():
@@ -51,22 +53,33 @@ class CCNIDataHandler(DataHandler):
         new_row["housenumber"] = row['housenumber']
         
         new_row["addressline1"] = row["address"]
-        new_row["addressline2"] = ''
-        new_row["addressline3"] = ''
-        new_row["addressline4"] = ''
-        new_row["addressline5"] = ''
+        #new_row["addressline2"] = ''
+        #new_row["addressline3"] = ''
+        #new_row["addressline4"] = ''
+        #new_row["addressline5"] = ''
         new_row["city"] = row['city']
         new_row["localauthority"] = row['localauthority']
         new_row["postcode"] = row['postcode']
         new_row["source"] = row['source']
-        new_row["registrationdate"] = self.map_date(row['registerdate'])
-        new_row["dissolutiondate"] = ''
+        new_row["id_in_source"] = row['charitynumber']
+        new_row["registerdate"] = self.map_date(row['registerdate'])
+        new_row["removeddate"] = ''
         
         super().sort_address_fields(new_row)
         return new_row
     
+    def combine_org_details_per_source(self, rows: list):
+        '''This will need to be amended (refer to oscr function) if/when ccni gets more
+        data to differentiate between primary and supplementary
+        data - currently one row per org in raw data.
+        Currently shouldn't be called as uid_dict (in handler.base) will have one
+        item per uid'''
+        print(f"unexpectedly in ccni.combine_org_details_per_source : {rows}")
+        return '',''
+        
 '''
 ccni data fields
+
 
 uid
 charitynumber
@@ -78,6 +91,7 @@ address
 city
 localauthority
 postcode
+registerdate
 source
 
 '''
