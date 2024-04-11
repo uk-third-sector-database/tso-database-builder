@@ -18,8 +18,8 @@ ORG_ID_MAPPING = {
 'Mutuals Public Register': 'MPR'
 }
 
-
-def spine_entry_creator(overrides):
+# sub_spine data - for initial ingest per data source
+def sub_spine_entry_creator(overrides):
     entry = {
         "uid" : "",
         "organisationname" : "",
@@ -27,16 +27,40 @@ def spine_entry_creator(overrides):
         "fulladdress" : "",
         "city" : "",
         "postcode" : "",
-        "primarysource" : "",
-        "primaryid" : "",
-        "primaryregdate" : "",
-        "dissolutiondate" : "",
-        "secondarysource" : "",
-        "secondaryid" : "",
-        "secondaryregdate" : "",
-           }
+        "companyid" : "",
+        "registerdate" : "",
+        "removeddate" : "",
+        "source" : "",
+        "id_in_source" : ""
+    }
     entry.update(**overrides)
     return entry
+
+
+def public_spine_entry_creator(overrides):
+    entry = {
+        "uid" : "",
+        "organisationname" : "",
+        "normalisedname" : "",
+        "fulladdress" : "",
+        "city" : "",
+        "postcode" : "",
+        "registerdate" : "",
+        "removeddate" : "",
+        "CHC_id" : "",
+        "SC_id" : "",
+        "NIC_id" : "",
+        "COH_id" : "",
+        "CIS_id" : "",
+        "COOP_id" : "",
+        "MPR_id" : "",
+        "CQC_id" : "",
+        "SHR_id" : "",
+        "SHPE_id" : "",
+    }
+    entry.update(**overrides)
+    return entry
+
 
 
 def extra_csv_entry_creator(overrides):
@@ -47,10 +71,25 @@ def extra_csv_entry_creator(overrides):
         "fulladdress" : "",
         "city" : "",
         "postcode" : "",
-        "source" : "",
+        "registerdate" : "",
+        "removeddate" : "",
         }
     entry.update(**overrides)
     return entry
+
+
+SUB_SPINE_CSV_FIELDS = [
+    "uid",
+    "organisationname",
+    "normalisedname",
+    "fulladdress",
+    "city",
+    "postcode",
+    "companyid",
+    "registerdate",
+    "removeddate",
+    "source",
+    "id_in_source"]
 
 
 SPINE_CSV_FIELDS = [
@@ -59,14 +98,20 @@ SPINE_CSV_FIELDS = [
     "normalisedname",
     "fulladdress",
     "city",
-    "postcode",
-    "primarysource",
-    "primaryid",
-    "primaryregdate",
-    "dissolutiondate",
-    "secondarysource",
-    "secondaryid",
-    "secondaryregdate"]
+    "postcode", 
+    "registerdate",
+    "removeddate",       
+    "CHC_id",
+    "SC_id",
+    "NIC_id",
+    "COH_id",
+    "CIS_id",
+    "COOP_id",
+    "MPR_id",
+    "CQC_id",
+    "SHR_id",
+    "SHPE_id"]
+
 
 EXTRA_DETAILS_CSV_FIELDS = [
     "uid",
@@ -75,8 +120,8 @@ EXTRA_DETAILS_CSV_FIELDS = [
     "fulladdress",
     "city",
     "postcode",
-    "source",
-]
+    "registerdate",
+    "removeddate",]
 
 
 FINAL_SPINE_CSV_FORMAT = ['rowid'] + SPINE_CSV_FIELDS

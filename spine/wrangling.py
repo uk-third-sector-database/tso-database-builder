@@ -68,10 +68,26 @@ def concat(csv_ins, csv_out):
     
 def dict_indexed_by_field(csv_in,fieldname):
     field_dict={}
-    for row in csv.DictReader(csv_in):
-        
-        if not row[fieldname] in field_dict.keys():
-            field_dict[row[fieldname]]=[row]
+    with open(csv_in,'r') as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            if not fieldname in row.keys():
+                print(f'Error: no field "{fieldname}" in row keys ({row.keys()})')
+            
+            if not row[fieldname] in field_dict.keys():
+                field_dict[row[fieldname]]=[row]
+            else:
+                field_dict[row[fieldname]].append(row)
+    return field_dict
+
+
+
+def dict_indexed_by_field__(csv_in, fieldname):
+    field_dict = {}
+    reader = csv.DictReader(csv_in)
+    for row in reader:
+        if row[fieldname] not in field_dict:
+            field_dict[row[fieldname]] = [row]
         else:
             field_dict[row[fieldname]].append(row)
     return field_dict
@@ -249,39 +265,8 @@ def combine_org_details(rows, final=True):
     return new_spine_rows,new_extras_rows
         
 
-def compress_per_org(csv_in,spine_csv_out,details_csv_out):
-    '''run as part of initial processing of an input 
-    required as some sources have details across multiple lines, while do_csv_processing reads line by line
-    '''
 
-
-    # create dictionary key'd by uid
-    print(f'Running spine.wrangling.compress with file {csv_in}')
-    uid_dict = dict_indexed_by_field(csv_in,'uid')
-
-    # for each uid, if more than one record, find unique names and addresses
-    # and write line to csv_out, with additional data to details_csv_out
-    spine_writer = csv.DictWriter(spine_csv_out, fieldnames=FINAL_SPINE_CSV_FORMAT, extrasaction='ignore')
-    extras_writer = csv.DictWriter(details_csv_out, fieldnames=FINAL_EXTRA_DETAILS_CSV_FIELDS, extrasaction='ignore')
-    spine_writer.writeheader()
-    extras_writer.writeheader()
-    for uid in uid_dict.keys():
-        if not uid.split('-')[-1]:
-            # uid doesn't have id attached, don't permutate across addresses
-            for line in uid_dict[uid]:
-                print(f'in wrangling.compress. Line has truncated uid: {line}')
-                spine_writer.writerow(line)
-        elif len(uid_dict[uid]) > 1: # more than one record with this uid - create combinations
-            spine_data,extra_data = combine_org_details(uid_dict[uid])
-            spine_writer.writerows(spine_data)
-            extras_writer.writerows(extra_data)
-        else: # only one record with this uid - write directly
-            uid_dict[uid][0]['source'] = replace_CH_source_field(uid_dict[uid][0]['source'])
-            spine_writer.writerow(uid_dict[uid][0])
-
-    print(f'Completed spine.wrangling.compress - output in {spine_csv_out} and {details_csv_out}')
-
-
+'''
 def permutate(csv_in,csv_out,final):
     """
     For all records with the same uid, find unique names and addresses and create all permutations of these
@@ -315,6 +300,8 @@ def permutate(csv_in,csv_out,final):
             writer.writerow(uid_dict[uid][0])
     print(f'Completed spine.wrangling.permutate - output in {csv_out}')
 
+'''
+
 
 def wrangle_findthatcharity_data(infile:str,field:str,ofile):
     df = pandas.read_csv(infile,usecols=[field])
@@ -322,7 +309,7 @@ def wrangle_findthatcharity_data(infile:str,field:str,ofile):
 
     for index, row in df.iterrows():
         res = []
-        s= re.findall('GB-[^\s,]+',row[field])
+        s= re.findall('GB-[^\\s,]+',row[field])
         for part in s:
             res.append(part.strip('[]"').strip("'"))
 
