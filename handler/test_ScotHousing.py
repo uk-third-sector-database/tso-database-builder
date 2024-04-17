@@ -1,7 +1,7 @@
 import pytest
 
 from .ScotHousingReg import ScotHousingRegDataHandler 
-from .base_definitions import spine_entry_creator
+from .base_definitions import sub_spine_entry_creator,extra_csv_entry_creator
 
 
 
@@ -14,7 +14,8 @@ def SHR_entry_creator(overrides):
         "Clients" : "",
         "Landlord type" : "",
         "Settlement" : "",
-        "National Operator" : ""
+        "National Operator" : "",
+        'Iteration' : ''
     }
     entry.update(**overrides)
     return entry
@@ -41,16 +42,18 @@ def test_row_formatting():
     row = SHR_entry_creator({
         "Reg No" : "1234",
         "Social Landlord" : "Something Name",
+        'Iteration' : '2011'
 
 })
     namefield = 'Social Landlord'
     
-    new_row = spine_entry_creator({
+    new_row = sub_spine_entry_creator({
     "uid" : 'GB-SHR-1234',
     "organisationname" : 'Something Name',
     "normalisedname": 'SOMETHING NAME',
-    "primaryid":'1234',
-    "primarysource":'ScottishHousingRegulator'
+    "id_in_source":'1234',
+    "source":'ScottishHousingRegulator',
+    'iteration' : '2011'
     })
     assert ScotHousingRegDataHandler().format_row(namefield,row) == new_row
 

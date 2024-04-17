@@ -11,6 +11,7 @@ include_filters = {
 
 class SocialHousingEngDataHandler(DataHandler):
     fileencoding='Latin-1'
+    tmp_fields = ['iteration']
     def all_filters(self, row: dict) -> bool:
 
         # other filters?
@@ -22,7 +23,7 @@ class SocialHousingEngDataHandler(DataHandler):
         return False
 
     def map_date(self, datestr):
-        print(f'input date str = {datestr}, type = {type(datestr)}')
+        #print(f'input date str = {datestr}, type = {type(datestr)}')
         datestr = datestr.strip()
         if not datestr:
             return ''
@@ -52,17 +53,20 @@ class SocialHousingEngDataHandler(DataHandler):
         new_row["fulladdress"] = ''
         new_row["city"] = ''
         new_row["postcode"] = ''
-        new_row["primarysource"] = 'SocialHousingEngland'
-        new_row["dissolutiondate"] = ''
-        new_row["primaryregdate"] = self.map_date(row['Registration date'])   
-        new_row["secondarysource"] = ''
-        new_row["secondaryid"] = ''
-        new_row["secondaryregdate"] = ''
+        new_row["source"] = 'SocialHousingEngland'
+        new_row["removeddate"] = ''
+        new_row["registerdate"] = self.map_date(row['Registration date'])   
+        new_row['companyid'] = ''
+        new_row["iteration"] = ''
 
         super().sort_address_fields(new_row)
         return new_row
         
-
+    def find_primary_info(self, details_list):
+        return super().find_primary_info(details_list)
+    
+    def combine_org_details_per_source(self, rows: list):
+        return super().combine_org_details_per_source(rows)
 
 '''
 Social Housing England data fields

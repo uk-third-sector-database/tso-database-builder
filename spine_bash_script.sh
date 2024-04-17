@@ -1,42 +1,32 @@
 #!/bin/bash
 
-
+## --------------- preprocess sources to include iteration -----------
+python3 handler/preprocess()
+python3 cli.py preprocess-ch ../raw_data/CH.all.preprocess.csv
 ##--------------- process sources --------------------------
 
 ## companies house files:
-python3 cli.py process-source CompaniesHouse ../raw_data/BasicCompanyDataAsOneFile-2023-06-01.csv ../public_spine_data/CH_June_2023.spine.csv
-python3 cli.py process-source CompaniesHouse ../raw_data/BasicCompanyDataAsOneFile-2023-10-04.csv ../public_spine_data/CH_Oct_2023.spine.csv
-python3 cli.py process-source CompaniesHouse ../raw_data/BasicCompanyDataAsOneFile-2024-03-04.csv ../public_spine_data/CH_Jan_2024.spine.csv
-python3 cli.py process-source CompaniesHouse2014 ../raw_data/soton14reduced.csv ../public_spine_data/CH_2014.spine.csv
-python3 cli.py process-source CompaniesHouseGapDecade ../raw_data/ch_adv_scrape.csv ../public_spine_data/CH_gap_decade.spine.csv
+python3 cli.py process-source CompaniesHouse ../raw_data/CH.all.preprocess.csv ../public_spine_data/CH_all.spine.csv
 #
 #
 ## Care Inspectorate Scotland files: 
-for i in ../raw_data/CareInspectScot/MDSF_data_*
-do
-  python3 cli.py process-source CareInspScot "$i" $i.spine.csv
-done
-mv ../raw_data/CareInspectScot/*spine.csv ../public_spine_data/
+python3 cli.py process-source CareInspScot ../raw_data/CareInspectScot.all.csv ../public_spine_data/CareInspectScot.spine.csv
 #
 #
 ## Care Quality Commission:
-python3 cli.py process-source CQC ../raw_data/CareQualityCommission/25_January_2023_CQC_directory__.csv ../public_spine_data/CQC_Jan_2023.spine.csv
+python3 cli.py process-source CQC ../raw_data/CareQualityCommission.all.csv ../public_spine_data/CQC.spine.csv
 #
 #
 ## Co Ops & Mutuals:
-python3 cli.py process-source CoOps ../raw_data/co_ops.open_data_orgs_2022_q2.csv ../public_spine_data/CoOps_2022.spine.csv
-python3 cli.py process-source Mutuals ../raw_data/mutuals-spine-2023-06-07.csv ../public_spine_data/mutuals.spine.csv
+python3 cli.py process-source CoOps ../raw_data/co_ops.all.csv ../public_spine_data/CoOps.spine.csv
+python3 cli.py process-source Mutuals ../raw_data/mutuals.all.csv ../public_spine_data/mutuals.spine.csv
 #
 ## Social Housing England:
 python3 cli.py process-source SocialHousingEng ../raw_data/SocialHousingEngland_202301016.csv ../public_spine_data/SocialHousingEngland_2023.spine.csv
 #
 #
 ## Scottish Housing Regulator:
-for i in ../raw_data/ScotHousingReg/afs-data-all-social-landlords-complete-dataset-20*
-do
-  python3 cli.py process-source ScotHousingReg $i $i.spine.csv
-done
-mv ../raw_data/ScotHousingReg/*spine.csv ../public_spine_data/
+python3 cli.py process-source ScotHousingReg ../raw_data/ScotHousingReg.all.csv ../public_spine_data/ScotHousingReg.spine.csv
 #
 ## Charity regulators:
 python3 cli.py process-source CCEW ../raw_data/ccew_spine_public.csv ../public_spine_data/ccew.spine.csv

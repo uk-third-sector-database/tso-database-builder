@@ -8,6 +8,7 @@ exclude_filters = {
 
 class ScotHousingRegDataHandler(DataHandler):
     fileencoding='Latin-1'
+    tmp_fields = ['iteration']
 
     def all_filters(self, row: dict) -> bool:
         for fieldname, exclude_values in exclude_filters.items():
@@ -37,17 +38,21 @@ class ScotHousingRegDataHandler(DataHandler):
         new_row["fulladdress"] = ''
         new_row["city"] = ''
         new_row["postcode"] = ''
-        new_row["primarysource"] = 'ScottishHousingRegulator'
-        new_row["primaryid"] = row['Reg No']
-        new_row["primaryregdate"] = ''
-        new_row["dissolutiondate"] = ''
-        new_row["secondarysource"] = ''
-        new_row["secondaryid"] = ''
-        new_row["secondaryregdate"] = ''
+        new_row["source"] = 'ScottishHousingRegulator'
+        new_row["id_in_source"] = row['Reg No']
+        new_row["registerdate"] = ''
+        new_row["removeddate"] = ''
+        new_row['companyid'] = ''
+        new_row['iteration'] = row['Iteration']
 
         super().sort_address_fields(new_row)
         return new_row
         
+    def find_primary_info(self, details_list):
+        return super().find_primary_info(details_list)
+    
+    def combine_org_details_per_source(self, rows: list):
+        return super().combine_org_details_per_source(rows)
 
 '''
 Scottish Housing Register data fields

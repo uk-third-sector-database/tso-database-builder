@@ -33,6 +33,7 @@ exclude_filters = {
 
 class CompaniesHouseDataHandler(DataHandler):
     fileencoding='UTF8'
+    tmp_fields = ['iteration']
     
     def all_filters(self, row: dict) -> bool:
         
@@ -71,11 +72,12 @@ class CompaniesHouseDataHandler(DataHandler):
         new_row={}
         for field in row:
             row[field] = row[field].strip()
+        
 
         new_row["uid"] =  'GB-COH-'+ row[' CompanyNumber']       
         new_row["organisationname"] = row[namefield]
         new_row["normalisedname"] = ''
-        new_row["primaryid"] = row[' CompanyNumber']
+        new_row["id_in_source"] = row[' CompanyNumber']
 
         if row['RegAddress.POBox']:
             new_row["addressline1"] = row['RegAddress.POBox']
@@ -87,32 +89,26 @@ class CompaniesHouseDataHandler(DataHandler):
             new_row["addressline3"] = ''
         new_row["city"] = row['RegAddress.PostTown']
         new_row["postcode"] = row['RegAddress.PostCode']
-        new_row["primarysource"] = 'CH %s'%row['CompanyCategory']#'CompaniesHouse'
-        new_row["dissolutiondate"] = row['DissolutionDate']
-        new_row["primaryregdate"] = row['IncorporationDate']
-        new_row["secondarysource"] = ''
-        new_row["secondaryid"] = ''
-        new_row["secondaryregdate"] = ''
+        new_row["source"] = 'CH'# %s'%row['CompanyCategory']#'CompaniesHouse'
+        new_row["removeddate"] = row['DissolutionDate']
+        new_row["registerdate"] = row['IncorporationDate']
+        if 'PreviousName' in namefield:
+            new_row['extraname'] = 1
+        else:
+            new_row['extraname'] = 0
+        
+        
+        
 
         super().sort_address_fields(new_row)
         return new_row
         
+    def find_primary_info(self, details_list):
+        return super().find_primary_info(details_list)
+    
+    def combine_org_details_per_source(self, rows: list):
+        return super().combine_org_details_per_source(rows)
 
-
-
-#         "organisationname",
-#         "normalisedname",
-#         "companyid",
-#         "housenumber",
-#         "addressline1",
-#         "addressline2",
-#         "addressline3",
-#         "addressline4",
-#         "addressline5",
-#         "city",
-#         "localauthority",
-#         "postcode",
-#         "source",
 
 
 # "CompanyName": "",

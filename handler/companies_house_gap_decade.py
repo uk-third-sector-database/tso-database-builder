@@ -96,7 +96,7 @@ class CompaniesHouseGapDataHandler(DataHandler):
         new_row["uid"] =  'GB-COH-'+ row['company_number']       
         new_row["organisationname"] = row[namefield]
         new_row["normalisedname"] = ''
-        new_row["primaryid"] = row['company_number']
+        new_row["id_in_source"] = row['company_number']
         new_row["addressline1"] = row['address_line_1']
         new_row["addressline2"] = row['address_line_2']
         new_row["addressline3"] = ''
@@ -104,12 +104,12 @@ class CompaniesHouseGapDataHandler(DataHandler):
         new_row["addressline5"] = ''
         new_row["city"] = row['locality']
         new_row["postcode"] = row['postal_code']
-        new_row["primarysource"] = 'adv_api %s'%' '.join([row['company_type'],row['company_subtype']])
-        new_row["dissolutiondate"] = self.map_date(row['date_of_cessation'])
-        new_row["primaryregdate"] = self.map_date(row['date_of_creation'])
-        new_row["secondarysource"] = ''
-        new_row["secondaryid"] = ''
-        new_row["secondaryregdate"] = ''
+        new_row["source"] = 'CH'#'adv_api %s'%' '.join([row['company_type'],row['company_subtype']])
+        new_row["removeddate"] = self.map_date(row['date_of_cessation'])
+        new_row["registerdate"] = self.map_date(row['date_of_creation'])
+        new_row["iteration"] = '2022'
+        
+        
 
         super().sort_address_fields(new_row)
         return new_row
