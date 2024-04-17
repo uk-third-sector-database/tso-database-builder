@@ -79,193 +79,107 @@ class CareInspScotDataHandler(DataHandler):
         return new_row
 
 
-
-    def find_primary_info(self,details_list):
-        '''details_list is list of tuples (fulladdress,city,postcode,iteration) | (name,normname,iteration)
-        and primary details are that found in most recent iteration'''
-        details_list = list(details_list) 
-        primary = tuple('' for _ in range(len(details_list[0])-1))
-        date = 2000
-        extra_details = set()
-        #print(details_list)
-        for item in details_list:
-            data_tuple = item[:-1]
-            if len([i for i in data_tuple if i]) == 0:
-                continue
-            iteration = item[-1]
-            if iteration:
-                iteration = int(iteration)
-                if iteration > date:
-                    date = iteration
-                    primary = data_tuple
-            extra_details.add(data_tuple)
-
-
-        extra_details = [i for i in extra_details if i != primary and i != ('','','')]
-        #print(f'primary address = {primary}')
-        #print(f'extra addresses = {extra_details}')
-        return primary, extra_details
-
-
-
+    def find_primary_info(self, details_list):
+        return super().find_primary_info(details_list)
+    
+    
 
     def combine_org_details_per_source(self, rows: list):
-        ''' use data iteration to find primary address, and name_origin field to find 
-         primary name. As per ccew, using earliest date for registration and 
-          latest for dissolution (though could change this to use the dates in 
-          the most recent iteration instead) '''
-        
-        def fix_dates_set(datesset, order):
-            ret = list(datesset)
-            ret = [i for i in ret if i !='']
-            ret.sort()
-            if ret:
-                primary = ret[order]
-                extra_dates = [i for i in ret if i != primary]
-            else:
-                return '',''
-
-            return primary,extra_dates
-        
-        names = set()
-        addresses = set()
-        regdates = set()
-        remdates = set()
-
-        for r in rows:
-            for field in self.tmp_fields:
-                if not field in r.keys(): r[field] = ''
-            try:
-                n = (r['organisationname'],r['normalisedname'],r['iteration'])
-                a = (r['fulladdress'],r['city'],r['postcode'],r['iteration'])
-                reg = r['registerdate']
-                dis = r['removeddate']
-            except KeyError as e:
-                print(f'KeyError searching for names, addresses and/or dates in row {r} : {e}\n')
-                return []
-            
-             
-            for var in [(n,names),(a,addresses),(reg,regdates),(dis,remdates)]:
-                var[1].add(var[0])
-                
-        primary_name, extra_names = self.find_primary_info(names)
-        primary_address, extra_addresses = self.find_primary_info(addresses)
-        primary_regdate, extra_regdates = fix_dates_set(regdates,0) # use earliest registration date
-        primary_remdate, extra_remdates = fix_dates_set(remdates,-1) # use latest removal date
-        
-        new_sub_spine_row = sub_spine_entry_creator(
-            {'uid' : r['uid'],
-            "id_in_source" : r['id_in_source'],
-            "companyid" : r['companyid'],
-            "source" : r['source'],})
-        
-        if primary_name:
-            new_sub_spine_row["organisationname"] =  primary_name[0]
-            new_sub_spine_row["normalisedname"] =  primary_name[1]
-        if primary_address:
-            new_sub_spine_row["fulladdress"] =  primary_address[0]
-            new_sub_spine_row["city"] =  primary_address[1]
-            new_sub_spine_row["postcode"] =  primary_address[2]
-        if primary_regdate:
-            new_sub_spine_row["registerdate"] =  primary_regdate 
-        if primary_remdate:
-            new_sub_spine_row["removeddate"] =  primary_remdate 
-
-        new_extras_rows = []
-        for name in extra_names:
-            new_extras_rows.append(
-                extra_csv_entry_creator({
-                "uid" : r['uid'],
-                "organisationname" : name[0],
-                "normalisedname" : name[1],
-                }))
-        for address in extra_addresses:
-            new_extras_rows.append(
-                extra_csv_entry_creator({
-                "uid" : r['uid'],
-                "fulladdress" : address[0],
-                "city" : address[1],
-                "postcode" : address[2]
-                }))
-        for date in extra_regdates:
-            new_extras_rows.append(
-                extra_csv_entry_creator({
-                "uid" : r['uid'],
-                "registerdate" : date,
-            }))
-        for date in extra_remdates:
-            new_extras_rows.append(
-                extra_csv_entry_creator({
-                "uid" : r['uid'],
-                "removeddate" : date
-            }))
-        
-        return new_sub_spine_row, new_extras_rows
+        return super().combine_org_details_per_source(rows)
 
 
-#---- used to add the year to the careinspectorate data, from file name, and create one datafile. ----#
-import csv
-import glob
-import os
-fields = ["CSNumber",
-        "ServiceName",
-        "ServiceType",
-        "Combined_Service_",
-        "CaseNumber_Combined",
-        "CareService",
-        "Subtype",
-        "Service",
-        "Address_line_1",
-        "Address_line_2",
-        "Address_line_3",
-        "Address_line_4",
-        "Service_town",
-        "Service_Postcode",
-        "ManagerName",
-        "Council_Area_Name",
-        "Health_Board_Name",
-        "DateReg",
-        "Iteration"]
-
-def fix_care_inspectorate_files_A():
-    # Pre-process the raw files to include the source date (found in filename) as a field
-    raw_files = glob.glob('../raw_data/CareInspectScot/MDSF_data*.csv')
-    print(raw_files)
-    output_file = '../raw_data/CareInspectScot.all.csv'
     
-    with open(output_file, 'w', newline='', encoding='Latin-1') as outfile:
-        
-        csv_writer = csv.DictWriter(outfile, fieldnames=fields)  # Create DictWriter object
-        csv_writer.writeheader()  # Write header to output file
-        
-        # Iterate over each raw file
-        for file in raw_files:
-            date = os.path.basename(file).split('MDSF_data_')[-1].strip('.csv')
-            with open(file, 'r', newline='', encoding='Latin-1') as infile:
-                csv_reader = csv.DictReader(infile)
-                v = ['CSNumber', 'CaseNumber','ï»¿CSNumber']
-                for i in v:
-                    if i in csv_reader.fieldnames:
-                        id_field = i
-                
-                v = ['ServiceType','Service Type']
-                for i in v:
-                    if i in csv_reader.fieldnames:
-                        servicetype = i
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
-                for row in csv_reader:
-                    
-                    row['CSNumber'] = row[id_field]
-                    row['ServiceType'] = row[servicetype]
-                    row['Iteration'] = date
-                    for key in fields:
-                        row.setdefault(key, '') 
-                    row = {key: row[key] for key in fields}
-                    
-                    csv_writer.writerow(row)
-                        
-            print(f"iteration {date} added to file {output_file}")
+    
+    
+    
+    
+    
+    
 
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
 
 '''

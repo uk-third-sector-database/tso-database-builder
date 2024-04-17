@@ -1,7 +1,7 @@
 import pytest
 
 from .co_ops import CoOpsDataHandler
-from .base_definitions import spine_entry_creator
+from .base_definitions import sub_spine_entry_creator,extra_csv_entry_creator
 
 
 
@@ -70,19 +70,84 @@ def test_row_formatting():
     "CUK Organisation ID" : '1234',
     "Registered Street": "a1 this street",
     "Registered City": "town",
-    "Registered Postcode": "code"})
+    "Registered Postcode": "code",
+    'Iteration':'2021'})
 
     namefield = 'Registered Name'
 
-    new_row = spine_entry_creator({
+    new_row = sub_spine_entry_creator({
     "uid" : 'GB-COOP-1234',
     "organisationname" : 'Something Name',
     "normalisedname": 'SOMETHING NAME',
-    "primaryid":'1234',
+    "id_in_source":'1234',
     "fulladdress":'A1 THIS STREET',
     "city":'TOWN',
     "postcode":'code',
-    "primarysource":'CoOps'
+    "source":'CoOps',
+    'iteration':'2021'
     })
     assert CoOpsDataHandler().format_row(namefield,row) == new_row
 
+def test_name_sorting():
+    row = co_op_entry_creator({
+    "Registered Name": 'Something Name',
+    "Trading Name" : 'Trading something name',
+    "CUK Organisation ID" : '1234',
+    "Registered Street": "a1 this street",
+    "Registered City": "town",
+    "Registered Postcode": "code",
+    'Iteration':'2021'})
+    
+    namefield = 'Trading Name'
+
+    new_row = sub_spine_entry_creator({
+    "uid" : 'GB-COOP-1234',
+    "organisationname" : 'Trading something name',
+    "normalisedname": 'TRADING SOMETHING NAME',
+    "id_in_source":'1234',
+    "fulladdress":'A1 THIS STREET',
+    "city":'TOWN',
+    "postcode":'code',
+    "source":'CoOps',
+    'iteration' : '2000'
+    })
+    assert CoOpsDataHandler().format_row(namefield,row) == new_row
+
+def test_row_sorting():
+    row1 = sub_spine_entry_creator({
+    "uid" : 'GB-COOP-1234',
+    "organisationname" : 'Trading something name',
+    "normalisedname": 'TRADING SOMETHING NAME',
+    "id_in_source":'1234',
+    "fulladdress":'A1 THIS STREET',
+    "city":'TOWN',
+    "postcode":'code',
+    "source":'CoOps',
+    'iteration' : '2000'
+    })
+    row2 = sub_spine_entry_creator({
+    "uid" : 'GB-COOP-1234',
+    "organisationname" : 'Something Name',
+    "normalisedname": 'SOMETHING NAME',
+    "id_in_source":'1234',
+    "fulladdress":'A1 THIS STREET',
+    "city":'TOWN',
+    "postcode":'code',
+    "source":'CoOps',
+    'iteration':'2021'
+    })
+
+
+    s,e = CoOpsDataHandler().combine_org_details_per_source([row1,row2])
+    
+    expected_spine = row2
+    expected_spine.pop('iteration')
+    print(expected_spine)
+    expected_extra = [extra_csv_entry_creator({"uid" : 'GB-COOP-1234',
+    "organisationname" : 'Trading something name',
+    "normalisedname": 'TRADING SOMETHING NAME'})]
+
+    print(s)
+
+    assert s == expected_spine
+    #assert e == expected_extra

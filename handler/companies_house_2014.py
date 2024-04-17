@@ -80,16 +80,16 @@ class CompaniesHouse2014DataHandler(DataHandler):
         new_row["uid"] =  'GB-COH-'+ row['companynumber']       
         new_row["organisationname"] = row[namefield]
         new_row["normalisedname"] = ''
-        new_row["primaryid"] = row['companynumber']
+        new_row["id_in_source"] = row['companynumber']
         new_row["fulladdress"] = ''
         new_row["city"] = ''
         new_row["postcode"] = row['regaddresspostcode']
-        new_row["primarysource"] = '2014_prior %s'%row['companycategory']#'CompaniesHouse2014'
-        new_row["dissolutiondate"] = self.map_date(row['chremy'])
-        new_row["primaryregdate"] = self.map_date(row['chregy'])
-        new_row["secondarysource"] = ''
-        new_row["secondaryid"] = ''
-        new_row["secondaryregdate"] = ''
+        new_row["source"] = 'CH'#'2014_prior %s'%row['companycategory']#'CompaniesHouse2014'
+        new_row["removeddate"] = self.map_date(row['chremy'])
+        new_row["registerdate"] = self.map_date(row['chregy'])
+        new_row["iteration"] = '2014'
+        
+        
 
         super().sort_address_fields(new_row)
         return new_row

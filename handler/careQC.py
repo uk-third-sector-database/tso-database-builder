@@ -9,6 +9,7 @@ exclude_filters = {
 
 class CQCDataHandler(DataHandler):
     fileencoding='UTF8'
+    tmp_fields =['iteration']
     def all_filters(self, row: dict) -> bool:
 
         # other filters?
@@ -46,16 +47,22 @@ class CQCDataHandler(DataHandler):
         new_row["registerdate"] = ''
         new_row["removeddate"] = ''
         new_row['companyid'] = ''
+        if namefield == 'Also known as': 
+            new_row['iteration'] = '2000' # force AKA names into extra details by giving an early iteration year.
+        else: 
+            new_row['iteration'] = row['Iteration']
 
 
         super().sort_address_fields(new_row)
         return new_row
         
 
+    def find_primary_info(self, details_list):
+        return super().find_primary_info(details_list)
+    
     def combine_org_details_per_source(self, rows: list):
-        '''Need to '''
-        print(f" Combine_org_details_per_source currrently not implemented for careQC: {rows}")
-        return '',''
+        return super().combine_org_details_per_source(rows)
+    
 
 
 '''

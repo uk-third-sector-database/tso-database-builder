@@ -143,6 +143,7 @@ def test_combine_extra_details(setup_intermediate_file):
     }))
     assert sorted(extrarows, key=lambda x: sorted(x.items())) == sorted(expected_extra_rows, key=lambda x: sorted(x.items()))
 
+
 def test_sort_by_iteration_date(setup_intermediate_file):
     datarows = setup_intermediate_file
     datarows[0]['iteration'] = '2010'

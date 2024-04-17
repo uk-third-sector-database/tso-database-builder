@@ -1,7 +1,8 @@
 import csv
 import string
+from datetime import datetime
 
-from .base_definitions import SUB_SPINE_CSV_FIELDS,EXTRA_DETAILS_CSV_FIELDS,ORG_ID_MAPPING
+from .base_definitions import SUB_SPINE_CSV_FIELDS,EXTRA_DETAILS_CSV_FIELDS,ORG_ID_MAPPING,sub_spine_entry_creator,extra_csv_entry_creator
 from spine.wrangling import dict_indexed_by_field
 
 
@@ -17,7 +18,8 @@ class DataHandler:
     def transform_row(self, row: dict) -> list[dict]:
         spine_rows = []
         for name in self.names:
-            spine_rows.append(self.format_row(name,row))
+            if row[name]:
+                spine_rows.append(self.format_row(name,row))
         return spine_rows
 
     
@@ -43,13 +45,16 @@ class DataHandler:
         #    pass
 
         fulladdress_str = ', '.join(fulladdress)
-        try: fulladdress_str = fulladdress_str.split(row['postcode'].strip())[0]
-        except ValueError: pass
+        
         if "fulladdress" in row:
             row["fulladdress"] = row["fulladdress"].upper()
             
         else:
             row['fulladdress'] = fulladdress_str.upper()
+
+        try: row['fulladdress'] = row['fulladdress'].split(row['postcode'].strip())[0]
+        except ValueError: pass
+        
         row['city']=row['city'].upper()
         
         [row.pop(f, None) for f in address_fields] #remove old address fields
@@ -63,14 +68,131 @@ class DataHandler:
 
         row['fulladdress'] = row['fulladdress'].replace(' ,',',').strip(', ').strip('.')
 
-    def combine_org_details_per_source(self,rows:list):
-        '''
-        Called by compress_org_details. Takes rows of data with
-        the same uid and returns a row for the primary data table in sub-spine format, 
-        and rows for supplementary table.
-        '''
-        raise NotImplementedError()
 
+
+    def find_primary_info(self,details_list):
+        '''details_list is list of tuples (fulladdress,city,postcode,iteration) | (name,normname,iteration)
+        and primary details are that found in most recent iteration'''
+        details_list = list(details_list) 
+        primary = tuple('' for _ in range(len(details_list[0])-1))
+        date = datetime.strptime('01/01/1900','%d/%m/%Y')
+        extra_details = set()
+        #print(f'\n\n in find_primary_info. input = {details_list}')
+        for item in details_list:
+            data_tuple = item[:-1]
+            if len([i for i in data_tuple if i]) == 0:
+                continue
+            iteration = item[-1]
+            
+            if iteration:
+                #print(f'iteration = {iteration}, date = {date}')
+                if len(iteration) == 4:
+                    iteration = datetime.strptime(iteration,'%Y')
+                else:
+                    iteration = datetime.strptime(iteration,'%m/%Y')
+                #print(f'iteration > date = {iteration > date}')
+                if iteration > date:
+                    
+                    date = iteration
+                    primary = data_tuple
+            extra_details.add(data_tuple)
+        extra_details = [i for i in extra_details if i != primary and i != ('','','')]
+        #print(f'primary = {primary}')
+        #print(f'extra = {extra_details}')
+        return primary, extra_details
+
+
+
+    def combine_org_details_per_source(self, rows: list):
+        ''' use data iteration to find primary address and primary name. 
+        Uses earliest date for registration and 
+        latest for dissolution (though could change this to use the dates in 
+        the most recent iteration instead) '''
+
+    
+        def fix_dates_set(datesset, order):
+            ret = list(datesset)
+            ret = [i for i in ret if i !='']
+            ret.sort()
+            if ret:
+                primary = ret[order]
+                extra_dates = [i for i in ret if i != primary]
+            else:
+                return '',''
+            return primary,extra_dates
+
+        names = set()
+        addresses = set()
+        regdates = set()
+        remdates = set()
+        for r in rows:
+            for field in self.tmp_fields:
+                if not field in r.keys(): r[field] = ''
+            try:
+                n = (r['organisationname'],r['normalisedname'],r['iteration'])
+                a = (r['fulladdress'],r['city'],r['postcode'],r['iteration'])
+                reg = r['registerdate']
+                dis = r['removeddate']
+            except KeyError as e:
+                print(f'KeyError searching for names, addresses and/or dates in row {r} : {e}\n')
+                return []
+
+
+            for var in [(n,names),(a,addresses),(reg,regdates),(dis,remdates)]:
+                var[1].add(var[0])
+
+        primary_name, extra_names = self.find_primary_info(names)
+        primary_address, extra_addresses = self.find_primary_info(addresses)
+        primary_regdate, extra_regdates = fix_dates_set(regdates,0) # use earliest registration date
+        primary_remdate, extra_remdates = fix_dates_set(remdates,-1) # use latest removal date
+
+        new_sub_spine_row = sub_spine_entry_creator(
+            {'uid' : r['uid'],
+            "id_in_source" : r['id_in_source'],
+            "companyid" : r['companyid'],
+            "source" : r['source'],})
+
+        if primary_name:
+            new_sub_spine_row["organisationname"] =  primary_name[0]
+            new_sub_spine_row["normalisedname"] =  primary_name[1]
+        if primary_address:
+            new_sub_spine_row["fulladdress"] =  primary_address[0]
+            new_sub_spine_row["city"] =  primary_address[1]
+            new_sub_spine_row["postcode"] =  primary_address[2]
+        if primary_regdate:
+            new_sub_spine_row["registerdate"] =  primary_regdate 
+        if primary_remdate:
+            new_sub_spine_row["removeddate"] =  primary_remdate 
+        new_extras_rows = []
+        for name in extra_names:
+            new_extras_rows.append(
+                extra_csv_entry_creator({
+                "uid" : r['uid'],
+                "organisationname" : name[0],
+                "normalisedname" : name[1],
+                }))
+        for address in extra_addresses:
+            new_extras_rows.append(
+                extra_csv_entry_creator({
+                "uid" : r['uid'],
+                "fulladdress" : address[0],
+                "city" : address[1],
+                "postcode" : address[2]
+                }))
+        for date in extra_regdates:
+            new_extras_rows.append(
+                extra_csv_entry_creator({
+                "uid" : r['uid'],
+                "registerdate" : date,
+            }))
+        for date in extra_remdates:
+            new_extras_rows.append(
+                extra_csv_entry_creator({
+                "uid" : r['uid'],
+                "removeddate" : date
+            }))
+
+        return new_sub_spine_row, new_extras_rows
 
 
 def iter_csv_rows(filename,DataHandler):
@@ -105,6 +227,8 @@ def do_csv_processing(input_csv_filename,
      row by row, and compress_org_details which performs the sorting algorithm on the input data
       and sends the output to two final files '''
     
+
+
     intermediate_ofile = output_csv_filename.split('.csv')[0] + '.tmp.csv'
     
     processed_rows = 0
@@ -149,7 +273,9 @@ def compress_org_details(csv_in,
     # for each uid, if more than one record, find unique names and addresses
     # and write line to csv_out, with additional data to details_csv_out
     with open(spine_csv_out,'w+',newline='') as spine_csvfile,  open(details_csv_out, 'w+', newline='') as details_csvfile:
-        spine_writer = csv.DictWriter(spine_csvfile, fieldnames=SUB_SPINE_CSV_FIELDS+data_handler.tmp_fields, extrasaction='ignore')
+        tmp_fields = data_handler.tmp_fields
+        if 'iteration' in tmp_fields: tmp_fields.remove('iteration')
+        spine_writer = csv.DictWriter(spine_csvfile, fieldnames=SUB_SPINE_CSV_FIELDS+tmp_fields, extrasaction='ignore')
         extras_writer = csv.DictWriter(details_csvfile, fieldnames=EXTRA_DETAILS_CSV_FIELDS, extrasaction='ignore')
         
         spine_writer.writeheader()

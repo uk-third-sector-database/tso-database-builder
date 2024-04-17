@@ -1,6 +1,6 @@
 import click
 
-from handler.base import do_csv_processing
+from handler.base import do_csv_processing,compress_org_details
 from handler.base_definitions import FINAL_SPINE_CSV_FORMAT
 
 from handler.companies_house import CompaniesHouseDataHandler
@@ -23,6 +23,8 @@ from spine.matching import deduplicate
 from visualise.venn_diagrams import venn_diagram_info_using_pandas,venn3_by_source_list
 from visualise.source_plots import sources, source_codes
 from visualise.source_plots import plot_upset_by_code, match_type_counts
+
+from handler.all_companies_house import main_process
 
 
 
@@ -54,8 +56,12 @@ def process_source(source, infile, outfile):
     """
     Generate a SPINE format file using data pulled from a source
     """
-    
-    do_csv_processing(infile, outfile, handler_map[source]())
+    if 'CompaniesHouse' in source:
+        
+        # companies house data preprocessed to concatenate prior to creating spine and supplementary tables (in all_companies_house.py)
+        compress_org_details(infile,outfile,CompaniesHouseDataHandler())
+    else:
+        do_csv_processing(infile, outfile, handler_map[source]())
 
 
 
@@ -73,6 +79,11 @@ def concat(src, output):
     concatenate(src, output)
 
 
+@cli.command()
+@click.argument('ofile',default = 'CH.all.preprocess.csv')
+def preprocess_CH(ofile):
+    main_process(ofile)
+    print(f'file {ofile} written')
 
 
 @cli.command()
@@ -84,6 +95,7 @@ def match(src, output, field, threshold):
     """
     For a given input csv file (in SPINE format), find direct matches between records
     Charities with company ids: direct lookup
+    *** Try this with CoOps companyid == mutualsid ***
     100% match between name and postcode
     (later: this will also call deduplicate to find close matches for human checking)
     """
