@@ -1,5 +1,6 @@
 
 from .base import DataHandler
+from datetime import datetime
 
 exclude_filters = {
     "": []
@@ -18,7 +19,16 @@ class MutualsDataHandler(DataHandler):
         return ['Society Name']
 
     def map_date(self, datestr):
-        return super().map_date(datestr)
+        if not datestr:
+            return ''
+        try:
+            d = datetime.strptime(datestr,'%Y-%m-%d')
+        except:
+            try:
+                d = datetime.strptime(datestr,'%y-%b-%d')
+            except:
+                print('error with date',datestr)
+        return d.strftime('%d/%m/%Y')
     
     def format_row(self,namefield,row) -> dict:
         '''format a row into Spine format, for given namefield'''
@@ -41,8 +51,8 @@ class MutualsDataHandler(DataHandler):
         new_row["postcode"] = postcode
         new_row["source"] = 'mutuals'
         new_row["id_in_source"] = row['Full Registration Number'] 
-        new_row["registerdate"] = row['Registration Date']
-        new_row["removeddate"] = row['Deregistration Date'] 
+        new_row["registerdate"] = self.map_date(row['Registration Date'])
+        new_row["removeddate"] = self.map_date(row['Deregistration Date'])
         new_row['companyid'] = ''
         new_row['city'] = ''
         new_row['iteration'] = row['Iteration']

@@ -262,10 +262,8 @@ def compress_org_details(csv_in,
     '''
     details_csv_out = spine_csv_out.split('.csv')[0] + '.supplementary.csv'
 
-    print('datahandler: ',data_handler)
-
-    # create dictionary key'd by uid
-    print(f'Running handler.base.compress_org_details with file {csv_in}')
+       # create dictionary key'd by uid
+    print(f'Running handler.base.compress_org_details with file {csv_in}\n')
     uid_dict = dict_indexed_by_field(csv_in,'uid')
     
     

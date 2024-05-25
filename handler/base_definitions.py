@@ -18,6 +18,7 @@ ORG_ID_MAPPING = {
 'Mutuals Public Register': 'MPR'
 }
 
+
 # sub_spine data - for initial ingest per data source
 def sub_spine_entry_creator(overrides):
     entry = {
@@ -47,16 +48,6 @@ def public_spine_entry_creator(overrides):
         "postcode" : "",
         "registerdate" : "",
         "removeddate" : "",
-        "CHC_id" : "",
-        "SC_id" : "",
-        "NIC_id" : "",
-        "COH_id" : "",
-        "CIS_id" : "",
-        "COOP_id" : "",
-        "MPR_id" : "",
-        "CQC_id" : "",
-        "SHR_id" : "",
-        "SHPE_id" : "",
     }
     entry.update(**overrides)
     return entry
@@ -74,6 +65,22 @@ def extra_csv_entry_creator(overrides):
         "registerdate" : "",
         "removeddate" : "",
         }
+    entry.update(**overrides)
+    return entry
+
+
+
+def match_csv_entry_creator(overrides):
+    entry = {           
+        "uid" : "",
+        "orgA_id_in_source" : "",
+        "orgA_source" : "",
+        "orgA_uid" : "",
+        "orgB_id_in_source" : "",
+        "orgB_source" : "",
+        "orgB_uid" : "",
+        'match_type' : "",
+    }
     entry.update(**overrides)
     return entry
 
@@ -100,17 +107,7 @@ SPINE_CSV_FIELDS = [
     "city",
     "postcode", 
     "registerdate",
-    "removeddate",       
-    "CHC_id",
-    "SC_id",
-    "NIC_id",
-    "COH_id",
-    "CIS_id",
-    "COOP_id",
-    "MPR_id",
-    "CQC_id",
-    "SHR_id",
-    "SHPE_id"]
+    "removeddate",   ]    
 
 
 EXTRA_DETAILS_CSV_FIELDS = [
@@ -121,9 +118,23 @@ EXTRA_DETAILS_CSV_FIELDS = [
     "city",
     "postcode",
     "registerdate",
-    "removeddate",]
+    "removeddate",
+    "source",
+    ]
 
+MATCHES_CSV_FIELDS = [
+    "uid",
+    "orgA_id_in_source",
+    "orgA_source",
+    "orgA_uid",
+    'orgB_id_in_source',
+    'orgB_source',
+    "orgB_uid",
+    'match_type',
+]
+
+FINAL_MATCHES_CSV_FIELDS = ['rowid'] + MATCHES_CSV_FIELDS
 
 FINAL_SPINE_CSV_FORMAT = ['rowid'] + SPINE_CSV_FIELDS
 
-FINAL_EXTRA_DETAILS_CSV_FIELDS = ['rowid'] + EXTRA_DETAILS_CSV_FIELDS
+FINAL_EXTRA_DETAILS_CSV_FIELDS = ['rowid', 'source'] + EXTRA_DETAILS_CSV_FIELDS
