@@ -12,7 +12,7 @@ include_filters = {
 
 class CareInspScotDataHandler(DataHandler):
     fileencoding='Latin-1'
-    tmp_fields=['iteration']
+    tmp_fields=['iteration','namefield']#,'serviceprovider']
     
     def all_filters(self, row: dict) -> bool:
 
@@ -37,9 +37,9 @@ class CareInspScotDataHandler(DataHandler):
     def find_names(self, fieldnames) -> list:
         ''' returns name keys which have non-null values'''
         
-        #v = ['Service_Provider','ServiceProvider','ServiceName']
-        #return [i for i in v if i in fieldnames]
-        return ['ServiceName']
+        v = ['ServiceProvider','ServiceName']
+        return [i for i in v if i in fieldnames]
+        #    return ['ServiceName']
 
     def find_id_name(self,row:dict) -> str:
         v = ['CSNumber', 'CaseNumber','ï»¿CSNumber']
@@ -73,7 +73,13 @@ class CareInspScotDataHandler(DataHandler):
         new_row["registerdate"] = self.map_date(row['DateReg'])
         new_row["removeddate"] = ''
         new_row['companyid'] = ''
+        new_row['namefield'] = namefield
         new_row["iteration"] = row['Iteration']
+        if 'ServiceName' in namefield:
+            new_row["iteration"] = 2000 # make ServiceName secondary
+        else:
+            new_row["iteration"] = row['Iteration']
+        #new_row['serviceprovider'] = row['ServiceProvider']
 
         super().sort_address_fields(new_row)
         return new_row

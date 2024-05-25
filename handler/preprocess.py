@@ -13,6 +13,7 @@ CIS_fields = ["CSNumber",
         "CareService",
         "Subtype",
         "Service",
+        "ServiceProvider",
         "Address_line_1",
         "Address_line_2",
         "Address_line_3",
@@ -40,6 +41,7 @@ def fix_care_inspectorate_files():
             date = os.path.basename(file).split('MDSF_data_')[-1].strip('.csv')
             with open(file, 'r', newline='', encoding='Latin-1') as infile:
                 csv_reader = csv.DictReader(infile)
+                #print(csv_reader.fieldnames)
                 v = ['CSNumber', 'CaseNumber','ï»¿CSNumber']
                 for i in v:
                     if i in csv_reader.fieldnames:
@@ -50,14 +52,23 @@ def fix_care_inspectorate_files():
                     if i in csv_reader.fieldnames:
                         servicetype = i
 
+                v = ['ServiceProvider','Service_Provider']
+                for i in v:
+                    if i in csv_reader.fieldnames:
+                        provider = i
+                    
+
                 for row in csv_reader:
                     
                     row['CSNumber'] = row[id_field]
                     row['ServiceType'] = row[servicetype]
                     row['Iteration'] = date
+                    row['ServiceProvider'] = row[provider]
                     for key in CIS_fields:
                         row.setdefault(key, '') 
                     row = {key: row[key] for key in CIS_fields}
+        
+        
                     
                     csv_writer.writerow(row)
                         
@@ -260,8 +271,8 @@ def fix_CQC_files():
 
 if __name__ == '__main__':
     #fix_coops_files()
-    #fix_care_inspectorate_files()
+    fix_care_inspectorate_files()
     #fix_mutuals_files()
     #fix_ScotHousingReg_files()
-    fix_CQC_files()
+    #fix_CQC_files()
 

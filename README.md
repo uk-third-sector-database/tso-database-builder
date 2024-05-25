@@ -28,7 +28,7 @@ To only install runtime requirements use:
 
 example:
 
-    python cli.py process-source txt.csv out.csv CompaniesHouse
+    python cli.py process-source  CompaniesHouse txt.csv out.csv
 
     use spine_bash_script.sh to see all commands and algorithm
 
