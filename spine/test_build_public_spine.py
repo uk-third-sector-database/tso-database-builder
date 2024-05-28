@@ -2,7 +2,7 @@ from .build_public_spine import *
 import pytest
 from copy import deepcopy
 from handler.base_definitions import public_spine_entry_creator, sub_spine_entry_creator, extra_csv_entry_creator, match_csv_entry_creator, MATCHES_CSV_FIELDS, SUB_SPINE_CSV_FIELDS, SPINE_CSV_FIELDS, EXTRA_DETAILS_CSV_FIELDS
-
+import datetime
 
 def assert_files_basically_same(a,b,ignore=False):
     def filter_na_lines(line):
@@ -24,8 +24,9 @@ def write_csv(file_name, data, fieldnames):
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for row in data:
-            filtered_row = {key: row[key] for key in fieldnames if key in row}
-            writer.writerow(filtered_row)
+            if any(field.strip() for field in row.values()):
+                filtered_row = {key: row[key] for key in fieldnames if key in row}
+                writer.writerow(filtered_row)
     print(f'Data saved to {file_name}')
     return file_name
 
@@ -367,11 +368,12 @@ def test_oscr_merge_extras(setup_base_ccew_orgs,setup_base_oscr_orgs):
     assert_files_basically_same(match_csv, expected_matches_csv)
 
 
-@pytest.mark.parametrize('reg_dateA,reg_dateB,expected_primary_date,expected_extra_date',
-[('01/01/2010','','01/01/2010',''),
-('01/01/2010','01/04/2010','01/01/2010','01/04/2010'),
-('01/01/2010','01/04/2009','01/04/2009','01/01/2010')])
-def test_merge_dates(reg_dateA, reg_dateB, expected_primary_date, expected_extra_date):
+@pytest.mark.parametrize('reg_dateA,reg_dateB,expected_primary_date,expected_extra_date,expected_extra_source',
+[('01/01/2010','','01/01/2010','',''),
+('01/01/2010','01/04/2010','01/01/2010','01/04/2010','oscr'),
+('01/01/2010','01/04/2009','01/04/2009','01/01/2010','ccew')
+])
+def test_merge_dates(reg_dateA, reg_dateB, expected_primary_date, expected_extra_date, expected_extra_source):
     baserow = sub_spine_entry_creator({
         "uid" : "GB-CHC-001",
         "organisationname" : "org",
@@ -388,23 +390,31 @@ def test_merge_dates(reg_dateA, reg_dateB, expected_primary_date, expected_extra
             "source" : "oscr",
             "crossborder" : '1',
             "id_in_source" : "44",})
+        if expected_extra_source == 'oscr': uid = "GB-SC-44"
+        else: uid =  "GB-CHC-001"
+        expected_extra = extra_csv_entry_creator({"uid" : uid,
+          "registerdate" : expected_extra_date,
+            "source" : expected_extra_source,})
     else:
-        new_row = [sub_spine_entry_creator({})]
+        new_row = sub_spine_entry_creator({})
+        expected_extra = extra_csv_entry_creator({})
+
     expected_main = public_spine_entry_creator({
         "uid" : "GB-CHC-001",
         "organisationname" : "org",
         "normalisedname" : "ORG",
         "registerdate" : expected_primary_date,
-        }),
-    expected_extra = extra_csv_entry_creator({"uid" : "GB-SC-44",
-        "registerdate" : expected_extra_date,
-        "source" : "oscr",})
+        })
+    
+    
+    
 
     base_file = write_input_data_to_tmp_file([baserow],[],SUB_SPINE_CSV_FIELDS)
+    print(f'base_file = {base_file}')
     new_file = write_input_data_to_tmp_file([new_row],[],SUB_SPINE_CSV_FIELDS+['crossborder'])
 
     expected_main_csv, expected_extra_csv, expected_matches_csv = write_expected_data_to_tmp_file([expected_main],[expected_extra],[])
-    
+    print(f'expected_main_csv = {expected_main_csv}')
     with open(expected_main_csv) as csv_file: expected_main_csv = csv_file.read()
     with open(expected_extra_csv) as csv_file: expected_extra_csv = csv_file.read()
 
@@ -442,10 +452,90 @@ def test_merge_dates(reg_dateA, reg_dateB, expected_primary_date, expected_extra
     assert main_csv == expected_main_csv
     assert_files_basically_same(extra_csv, expected_extra_csv)
 
+def test_sort_extras():
+    baserow = sub_spine_entry_creator({
+        "uid" : "GB-CHC-001",
+        "organisationname" : "org",
+        "normalisedname" : "ORG",
+        "registerdate" : '01/01/1990',
+        "source" : "ccew",
+        "id_in_source" : "001",})        
+    new_row = sub_spine_entry_creator({
+        "uid" : "GB-SC-44",
+        "organisationname" : "org",
+        "normalisedname" : "ORG",
+        "registerdate" : '01/01/1991',
+        "source" : "oscr",
+        "crossborder" : '1',
+        "id_in_source" : "44",})
+    
+    expected_main = public_spine_entry_creator({
+        "uid" : "GB-CHC-001",
+        "organisationname" : "org",
+        "normalisedname" : "ORG",
+        "registerdate" : '01/01/1990',
+        }),
+    expected_extra = extra_csv_entry_creator(
+        {"uid" : "GB-SC-44",
+        "registerdate" : '01/01/1991',
+        "source" : "oscr",})
+
+    base_file = write_input_data_to_tmp_file([baserow],[],SUB_SPINE_CSV_FIELDS)
+    new_file = write_input_data_to_tmp_file([new_row],[],SUB_SPINE_CSV_FIELDS+['crossborder'])
+
+        
+    main_orgs = process_csvs_to_build_spine([base_file,new_file])
+    print('STORES after process_csvs_to_build_spine: ')
+    print(f'_store = {main_orgs._store}')
+    print(f'byname = {main_orgs.byname}')
+    print(f'bycompanyid = {main_orgs.bycompanyid}')
+    print(f'bysourceid = {main_orgs.bysourceid}')
+    
+    expected_extra = ExtraInfo(
+        uid = "GB-SC-44",
+        registerdate = '01/01/1991',
+        source = "oscr",)
+
+    main_orgs._store["GB-CHC-001"].sort_matches()
+    main_orgs._store["GB-CHC-001"].sort_extras()
+    print('STORES after sort_extras: ')
+    print(f'_store = {main_orgs._store}')
+    assert main_orgs._store["GB-CHC-001"].extras == [expected_extra]
+    
 
 
-def test_ccni_merge_in():
-    ...
+def test_extras_no_change():
+    baserow = sub_spine_entry_creator({
+    "uid" : "GB-SC-44",
+    "organisationname" : "org",
+    "normalisedname" : "ORG",
+    "registerdate" : '01/01/1990',
+    "source" : "oscr",
+    "id_in_source" : "44",})  
+    extra = extra_csv_entry_creator(
+    {"uid" : "GB-SC-44",
+    "registerdate" : '01/01/1991',
+    "source" : "oscr",})      
+
+    base_file = write_input_data_to_tmp_file([baserow],[extra],SUB_SPINE_CSV_FIELDS)
+    supp_file = base_file.replace('.csv','.supplementary.csv')
+
+    main_orgs = process_csvs_to_build_spine([base_file])
+    with tempfile.TemporaryDirectory() as temp_dir:
+        main_file = f"{temp_dir}/main.csv"
+        extra_file = f"{temp_dir}/extra.csv"
+        match_file = f"{temp_dir}/match.csv"
+
+        main_orgs.write_out(main_file, extra_file, match_file)
+
+        with open(main_file) as main_csv_file, open(extra_file) as extra_csv_file, open(base_file) as expected_main_file, open(supp_file) as expected_supp_file:
+            main_csv = main_csv_file.read()
+            extra_csv = extra_csv_file.read()
+
+
+            expected_supp = expected_supp_file.read()
+    
+    assert_files_basically_same(extra_csv, expected_supp)
 
 
 def test_add_id_after_previous_match():
@@ -470,9 +560,96 @@ def test_ftc_match():
     ...
 
 # repeat CIS tests for CQC (@pytest.mark.parameterise)
-def test_CIS_link():
-    # add linkage 
-    ...
+@pytest.mark.parametrize('basesource,mergesource,basename,mergename,match_expected',
+[('oscr','CareInspectorateScot','ORG','ORG',True),
+('ccew','CareInspectorateScot','ORG','ORG',False),
+
+])
+def test_CIS_link(basesource,mergesource,basename,mergename,match_expected):
+    baserow = sub_spine_entry_creator({
+        "uid" : "GB-SC-001",
+        "organisationname" : "org",
+        "normalisedname" : basename,
+        "registerdate" : '01/01/1990',
+        "source" : basesource,
+        "id_in_source" : "001",})
+    cis_row = sub_spine_entry_creator({
+            "uid" : "GB-CIS-44",
+            "organisationname" : "org",
+            "normalisedname" : mergename,
+            "registerdate" : '01/01/1991',
+            "source" : mergesource,
+            "id_in_source" : "44",})
+
+
+    expected_main = public_spine_entry_creator({
+        "uid" : "GB-SC-001",
+        "organisationname" : "org",
+        "normalisedname" : basename,
+        "registerdate" : '01/01/1990',
+        })
+    if match_expected:
+        expected_extra = extra_csv_entry_creator({"uid" : "GB-CIS-44",
+            "registerdate" : '01/01/1991',
+            "source" : "CareInspectorateScot",})
+        expected_match = match_csv_entry_creator({
+            "uid" : 'GB-SC-001',
+            "orgA_id_in_source" : "001",
+            "orgA_source" : basesource,
+            "orgA_uid" : 'GB-SC-001',
+            "orgB_id_in_source" : "44",
+            "orgB_source" : mergesource,
+            "orgB_uid" : "GB-CIS-44",
+            'match_type' : "name - care",})
+    else:
+        expected_match = match_csv_entry_creator({})
+        expected_extra = extra_csv_entry_creator({})
+    
+
+    base_file = write_input_data_to_tmp_file([baserow],[],SUB_SPINE_CSV_FIELDS)
+    new_file = write_input_data_to_tmp_file([cis_row],[],SUB_SPINE_CSV_FIELDS)
+
+    expected_main_csv, expected_extra_csv, expected_matches_csv = write_expected_data_to_tmp_file([expected_main],[expected_extra],[expected_match])
+    print(f'expected_main_csv = {expected_main_csv}')
+    with open(expected_main_csv) as csv_file: expected_main_csv = csv_file.read()
+    with open(expected_extra_csv) as csv_file: expected_extra_csv = csv_file.read()
+    with open(expected_matches_csv) as csv_file: expected_match_csv = csv_file.read()
+
+    
+    main_orgs = process_csvs_to_build_spine([base_file,new_file])
+    print('STORES after process_csvs_to_build_spine: ')
+    print(f'_store = {main_orgs._store}')
+    print(f'byname = {main_orgs.byname}')
+    print(f'bycompanyid = {main_orgs.bycompanyid}')
+    print(f'bysourceid = {main_orgs.bysourceid}')
+    
+    # Write out to temporary files in a temp directory
+    with tempfile.TemporaryDirectory() as temp_dir:
+        main_file = f"{temp_dir}/main.csv"
+        extra_file = f"{temp_dir}/extra.csv"
+        match_file = f"{temp_dir}/match.csv"
+
+        # function being tested:
+        main_orgs.write_out(main_file, extra_file, match_file)
+        print('\n\nSTORES after write_out: ')
+        print(f'_store = {main_orgs._store}')
+        print(f'byname = {main_orgs.byname}')
+        print(f'bycompanyid = {main_orgs.bycompanyid}')
+        print(f'bysourceid = {main_orgs.bysourceid}')
+        
+        # Read the contents of the temporary files
+        with open(main_file) as main_csv_file, open(extra_file) as extra_csv_file, open(match_file) as match_csv_file:
+            main_csv = main_csv_file.read()
+            extra_csv = extra_csv_file.read()
+            match_csv = match_csv_file.read()
+
+        
+        
+    
+    assert main_csv == expected_main_csv
+    assert_files_basically_same(extra_csv, expected_extra_csv)
+    assert_files_basically_same(match_csv, expected_match_csv)
+
 
 def test_CIS_no_link():
     # if no match, drop record

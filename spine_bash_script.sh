@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ## --------------- preprocess sources to include iteration -----------
-python3 handler/preprocess()
+python3 handler/preprocess.py
 python3 cli.py preprocess-ch ../raw_data/CH.all.preprocess.csv
 ##--------------- process sources --------------------------
 
@@ -22,7 +22,7 @@ python3 cli.py process-source CoOps ../raw_data/co_ops.all.csv ../public_spine_d
 python3 cli.py process-source Mutuals ../raw_data/mutuals.all.csv ../public_spine_data/mutuals.spine.csv
 #
 ## Social Housing England:
-python3 cli.py process-source SocialHousingEng ../raw_data/SocialHousingEngland_202301016.csv ../public_spine_data/SocialHousingEngland_2023.spine.csv
+python3 cli.py process-source SocialHousingEng ../raw_data/SocialHousingEngland_202301016.csv ../public_spine_data/SocialHousingEngland.spine.csv
 #
 #
 ## Scottish Housing Regulator:
@@ -36,41 +36,11 @@ python3 cli.py process-source OSCR ../raw_data/oscr_spine_public.csv ../public_s
 
 ##-----------------------------
 
-# #concatenate all
-python3 cli.py concat ../public_spine_data/*.spine.csv -o ../public_spine_data/all.concat.csv
-python3 cli.py permutate ../public_spine_data/all.concat.csv -f False -o ../public_spine_data/all.concat.permutate.csv
- #find matches 
-python3 cli.py match ../public_spine_data/all.concat.permutate.csv 'companyid' -o ../public_spine_data/all.matched_companyid.csv
-python3 cli.py permutate ../public_spine_data/all.matched_companyid.csv -f False -o ../public_spine_data/all.matched_companyid.permutate.csv
+python3 cli.py build-spine ../public_spine_data/ccew.spine.csv ../public_spine_data/oscr.spine.csv ../public_spine_data/ccni.spine.csv ../public_spine_data/CH_all.spine.csv ../public_spine_data/CoOps.spine.csv ../public_spine_data/mutuals.spine.csv ../public_spine_data/ScotHousingReg.spine.csv ../public_spine_data/SocialHousingEngland.spine.csv ../public_spine_data/CareInspectScot.spine.csv ../public_spine_data/CQC.spine.csv -o ../public_spine_data/public_spine &> build_spine.out
 
-# upsetplot to see matches by companyid only:
-#python3 cli.py plot-upset ../public_spine_data/all.matched_companyid.permutate.csv all -o  all.companyid.upsetplot.png
 
-# find matches by normalisedname
-python3 cli.py match ../public_spine_data/all.matched_companyid.permutate.csv 'normalisedname' -o ../public_spine_data/all.matched_companyid.matched_normname.csv
-# permutate all names and addresses for identical uids
-#-f True as final permutation
-python3 cli.py permutate ../public_spine_data/all.matched_companyid.matched_normname.csv -f True -o ../public_spine_data/all.matched_companyid.matched_normname.permutate.csv
+##-----------------------------
+
 
 #counts
 python3 visualise/source_plots.py > all_data.matchtypes.out
-#plot to see in
-python3 cli.py plot-upset ../public_spine_data/all.matched_companyid.matched_normname.permutate.csv all -o  all.matches.upsetplot.png
-
-
-# just companies house: concat, match by company id. To see overlap between the three datasets
-
-python3 cli.py concat ../public_spine_data/CH_*csv -o ../public_spine_data/all_CH.concat.csv
-python3 cli.py plot-ch-venn ../public_spine_data/all_CH.concat.csv -o CH.sources_venn.png
-
-python3 cli.py concat ../public_spine_data/June_data/CH_June_2023.spine.csv ../public_spine_data/CH_2014.spine.csv ../public_spine_data/CH_gap_decade.spine.csv -o ../public_spine_data/all_CH.June.concat.csv
-
-# for June data: 
-#n='all_CH.June'  
-n='all_CH'
-
-
-python3 cli.py permutate ../public_spine_data/$n.concat.csv -f False -o ../public_spine_data/$n.concat.permutate.csv
-python3 cli.py match ../public_spine_data/$n.concat.permutate.csv 'companyid' -o ../public_spine_data/$n.matched_companyid.csv
-python3 cli.py permutate ../public_spine_data/$n.matched_companyid.csv -f False -o ../public_spine_data/$n.matched_companyid.permutate.csv
-python3 cli.py plot-ch-venn ../public_spine_data/$n.matched_companyid.permutate.csv -o $n.sources_venn.png
