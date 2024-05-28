@@ -270,9 +270,9 @@ def fix_CQC_files():
 
 
 if __name__ == '__main__':
-    #fix_coops_files()
+    fix_coops_files()
     fix_care_inspectorate_files()
-    #fix_mutuals_files()
-    #fix_ScotHousingReg_files()
-    #fix_CQC_files()
+    fix_mutuals_files()
+    fix_ScotHousingReg_files()
+    fix_CQC_files()
 

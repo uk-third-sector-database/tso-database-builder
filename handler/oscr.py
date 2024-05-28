@@ -70,6 +70,7 @@ class OSCRDataHandler(DataHandler):
         new_row['name_origin'] = row['name_origin'].replace('Sept 2021','2021').replace('Feb 2021','2020')
 
         new_row['iteration'] = row['iteration'].replace('Sept 2021','2021').replace('Feb 2021','2020')
+        new_row['crossborder'] = row['crossborder']
         
         super().sort_address_fields(new_row)
         return new_row
@@ -217,6 +218,8 @@ class OSCRDataHandler(DataHandler):
                 "uid" : r['uid'],
                 "removeddate" : date
             }))
+        for entry in new_extras_rows:
+            entry['source'] = r['source']
         
         return new_sub_spine_row, new_extras_rows
 

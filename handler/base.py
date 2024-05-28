@@ -192,6 +192,9 @@ class DataHandler:
                 "removeddate" : date
             }))
 
+        for entry in new_extras_rows:
+            entry['source'] = r['source']
+            
         return new_sub_spine_row, new_extras_rows
 
 

@@ -64,6 +64,7 @@ def extra_csv_entry_creator(overrides):
         "postcode" : "",
         "registerdate" : "",
         "removeddate" : "",
+        "source" : ""
         }
     entry.update(**overrides)
     return entry
