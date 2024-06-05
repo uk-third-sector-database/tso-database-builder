@@ -2,6 +2,7 @@ import pytest
 
 from .co_ops import CoOpsDataHandler
 from .base_definitions import sub_spine_entry_creator,extra_csv_entry_creator
+from .base import normalizer
 
 
 
@@ -60,8 +61,16 @@ def test_filters(company_category, expected):
     value = co_op_entry_creator({"CompanyCategory": company_category})
     assert CoOpsDataHandler().all_filters(value) == expected """
 
-
-
+@pytest.mark.parametrize(
+        "name,expectedname",
+        [("QUEEN ELIZABETH'S GIRLS' SCHOOL","QUEEN ELIZABETHS GIRLS SCHOOL"),
+         ("T.E.A LTD.(THE)","TEA LTD THE"),
+         ("J & M", "J AND M"),
+         ("44*9","44 9"),
+         ("THE LTD. _BOLD_","THE LTD BOLD")]
+)
+def test_normaliser(name,expectedname):
+    assert normalizer(name) == expectedname
 
 
 def test_row_formatting():

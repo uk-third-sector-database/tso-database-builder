@@ -7,27 +7,27 @@ from .base import DataHandler
 
 exclude_filters = {
     "companycategory": [
-        "Private Limited Company",
-        "Limited Partnership",
-        "Limited Liability Partnership",
-        "Public Limited Company",
-        "Private Unlimited Company",
-        "Scottish Partnership",
-        "Private Unlimited",
-        "Investment Company with Variable Capital(Umbrella)",
-        "PRIV LTD SECT. 30 (Private limited company, section 30 of the Companies Act)",
-        "Investment Company with Variable Capital (Securities)",
-        "Investment Company with Variable Capital",
-        "Overseas Entity",
-        "United Kingdom Economic Interest Grouping",
-        "Old Public Company",
-        "United Kingdom Societas",
-        "Converted/Closed",
-        "Other Company Type",
-        "Protected Cell Company",
-        "Royal Charter Company",
-        "Further Education and Sixth Form College Corps",
-        "Other company type"
+        "private limited company",
+        "limited partnership",
+        "limited liability partnership",
+        "public limited company",
+        "private unlimited company",
+        "scottish partnership",
+        "private unlimited",
+        "investment company with variable capital(umbrella)",
+        "priv ltd sect. 30 (private limited company, section 30 of the companies act)",
+        "investment company with variable capital (securities)",
+        "investment company with variable capital",
+        "overseas entity",
+        "united kingdom economic interest grouping",
+        "old public company",
+        "united kingdom societas",
+        "converted/closed",
+        "other company type",
+        "protected cell company",
+        "royal charter company",
+        "further education and sixth form college corps",
+        "other company type"
     ]
 }
 
@@ -39,7 +39,7 @@ class CompaniesHouse2014DataHandler(DataHandler):
         
         # exclude row if in exclude_filters
         for fieldname, exclude_values in exclude_filters.items():
-            if row.get(fieldname) in exclude_values:
+            if row.get(fieldname).lower() in exclude_values:
                 return False
             
         return True

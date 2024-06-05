@@ -1,7 +1,7 @@
 import pytest
 
 from .socialHousingEng import SocialHousingEngDataHandler  
-from .base_definitions import spine_entry_creator
+from .base_definitions import public_spine_entry_creator
 
 
 
@@ -36,12 +36,14 @@ def test_row_formatting():
 "Corporate form" : ''
 })
     namefield = 'Organisation name'
-    new_row = spine_entry_creator({
+    new_row = public_spine_entry_creator({
     "uid" : 'GB-SHPE-1234',
     "organisationname" : 'Something Name',
     "normalisedname": 'SOMETHING NAME',
-    "primaryid":'1234',
-    "primarysource":'SocialHousingEngland'
+    "id_in_source":'1234',
+    "source":'SocialHousingEngland',
+    'iteration':'',
+    'companyid':''
     })
     assert SocialHousingEngDataHandler().format_row(namefield,row) == new_row
 
@@ -55,13 +57,15 @@ def test_row_formatting_regdate():
 "Corporate form" : ''
 })
     namefield = 'Organisation name'
-    new_row = spine_entry_creator({
+    new_row = public_spine_entry_creator({
     "uid" : 'GB-SHPE-1234',
     "organisationname" : 'Something Name',
     "normalisedname": 'SOMETHING NAME',
-    "primaryid":'1234',
-    "primarysource":'SocialHousingEngland',
-    "primaryregdate":'12/12/1980'
+    "id_in_source":'1234',
+    "source":'SocialHousingEngland',
+    "registerdate":'12/12/1980',
+    'iteration':'',
+    'companyid':''
     })
     assert SocialHousingEngDataHandler().format_row(namefield,row) == new_row
 

@@ -49,8 +49,8 @@ def test_row_formatting_dates():
 'Society Name' :'something',
 'Society Address' :'33 street, city, LA, A12 2DF',
 'Iteration' : '12/2022',
-'Registration Date' : '23/06/1961',
-'Deregistration Date' : '23/06/2019',
+'Registration Date' : '1961-06-23',
+'Deregistration Date' : '2019-06-23',
 
 
     })
@@ -67,6 +67,7 @@ def test_row_formatting_dates():
 'iteration' : '12/2022',
 'registerdate': '23/06/1961',
 'removeddate' : '23/06/2019',
+'source':'mutuals'
     })
     assert MutualsDataHandler().format_row(namefield,row) == new_row
 
@@ -83,6 +84,7 @@ def test_combine_org_details_name():
 'iteration' : '12/2022',
 'registerdate': '23/06/1961',
 'removeddate' : '23/06/2019',
+'source':'mutuals'
     })
     row1 = copy.deepcopy(row)
     row1['iteration'] = '11/2022'
@@ -96,7 +98,8 @@ def test_combine_org_details_name():
     assert extra == [extra_csv_entry_creator({
         'organisationname' : 'A Previous Name',
         'normalisedname' : 'A PREVIOUS NAME',
-        "uid" : 'GB-MPR-12'
+        "uid" : 'GB-MPR-12',
+'source':'mutuals'
     })]
 
 
@@ -127,6 +130,7 @@ def test_combine_org_details_date():
 'iteration' : '12/2022',
 'registerdate': '23/06/1961',
 'removeddate' : '23/06/2019',
+'source':'mutuals'
     })
     row1 = copy.deepcopy(row)
     row1['iteration'] = '11/2022'
@@ -143,8 +147,10 @@ def test_combine_org_details_date():
         extra_csv_entry_creator({
         'organisationname' : 'A Previous Name',
         'normalisedname' : 'A PREVIOUS NAME',
-        "uid" : 'GB-MPR-12'}),
+        "uid" : 'GB-MPR-12',
+'source':'mutuals'}),
         extra_csv_entry_creator({
         'removeddate' : '23/06/2019',
-        "uid" : 'GB-MPR-12'})
+        "uid" : 'GB-MPR-12',
+'source':'mutuals'})
         ]

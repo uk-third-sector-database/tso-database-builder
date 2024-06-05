@@ -23,12 +23,15 @@ class MutualsDataHandler(DataHandler):
             return ''
         try:
             d = datetime.strptime(datestr,'%Y-%m-%d')
+            return d.strftime('%d/%m/%Y')
         except:
             try:
                 d = datetime.strptime(datestr,'%y-%b-%d')
+                return d.strftime('%d/%m/%Y')
             except:
                 print('error with date',datestr)
-        return d.strftime('%d/%m/%Y')
+                return ''
+         
     
     def format_row(self,namefield,row) -> dict:
         '''format a row into Spine format, for given namefield'''

@@ -295,7 +295,7 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
 #                print(f' --- crossborder match found for {self.normalisedname} (match.source = {[x.source.lower() for x in match]})')
                 matches_here.extend([(i, 'name - crossborder') for i in match])
 
-            if self.source.lower() == 'scottishhousingregulator' and any(x.source.lower() in ['ccew','ccni'] for x in match):
+            if self.source.lower() == 'scottishhousingregulator' and any(x.source.lower == 'oscr' for x in match):
 #                print(f' --- SHR match found for {self.normalisedname}')
                 matches_here.extend([(i, 'name - housing') for i in match])   
 

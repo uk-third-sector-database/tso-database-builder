@@ -1,7 +1,7 @@
 import pytest
 
 from .companies_house_gap_decade import CompaniesHouseGapDataHandler
-from .base_definitions import spine_entry_creator
+from .base_definitions import public_spine_entry_creator
 
 
 def companies_house_entry_creator(overrides):
@@ -49,14 +49,15 @@ def test_row_formatting():
                                          
                                     
     namefield = 'company_name'
-    new_row = spine_entry_creator({
+    new_row = public_spine_entry_creator({
     "uid" : 'GB-COH-1234',
     "organisationname" : 'Something Name',
     "normalisedname": 'SOMETHING NAME',
-    "primaryid":'1234',
+    "id_in_source":'1234',
     "fulladdress" : '4 THIS STREET',
     "city":'ANYTHING',
     "postcode":'AB1 4AB',
-    "primarysource":'adv_api  category'
+    "source":'CH',
+    'iteration' : '2022'
     })
     assert CompaniesHouseGapDataHandler().format_row(namefield,row) == new_row
