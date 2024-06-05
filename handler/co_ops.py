@@ -2,6 +2,7 @@
 from datetime import datetime
 
 from .base import DataHandler
+from .base_definitions import extra_csv_entry_creator,sub_spine_entry_creator
 
 exclude_filters = {
     "": []
@@ -10,6 +11,8 @@ exclude_filters = {
 
 class CoOpsDataHandler(DataHandler):
     fileencoding='UTF8'
+    tmp_fields = ['iteration']
+
     def all_filters(self, row: dict) -> bool:
 
         for fieldname, exclude_values in exclude_filters.items():
@@ -23,14 +26,16 @@ class CoOpsDataHandler(DataHandler):
         try:
             d = datetime.strptime(datestr,'%d/%m/%Y')
         except:
-            print('error with date',datestr)
+            try:
+                d = datetime.strptime(datestr,'%Y-%m-%d')
+            except:
+                print('error with date',datestr)
+                return
         return d.strftime('%d/%m/%Y')
     
 
     def find_names(self, fieldnames) -> list:
         ''' returns name keys which have non-null values'''
-        # 
-        name_keys=[]
         v = ['Registered Name','Trading Name']
         return [i for i in v if i in fieldnames]
     
@@ -40,55 +45,60 @@ class CoOpsDataHandler(DataHandler):
         #orgid = 'Registered Number'
         orgid = 'CUK Organisation ID'
 
-        if not row['Registered Number']:
-            print(f'{row[orgid]},{row[namefield]},{row["Registered Postcode"]}')
+        #if not row['Registered Number']:
+        #    print(f'{row[orgid]},{row[namefield]},{row["Registered Postcode"]}')
 
         new_row={}
         for field in row:
             row[field] = row[field].strip()
         if not row[orgid]: print(f'In co_ops.format_row. Issue: no id for row {row}')
 
-        new_row["uid"] =  'GB-COOP-'+ row[orgid]   
+        new_row["uid"] = 'GB-COOP-'+ row[orgid]   
         new_row["organisationname"] = row[namefield]
         new_row["normalisedname"] = ''
-        new_row["companyid"] = row[orgid]   
-        new_row["charitynumber"] = ''
-        new_row["housenumber"] = ''
-        
-        new_row["addressline1"] = row['Registered Street']
-        new_row["addressline2"] = ''
-        new_row["addressline3"] = ''
-
-        new_row["addressline4"] = ''
-        new_row["addressline5"] = ''
+        new_row["fulladdress"] = row['Registered Street']
         new_row["city"] = row['Registered City']
-        new_row["localauthority"] = row['Registered State/Province']
         new_row["postcode"] = row['Registered Postcode']
         new_row["source"] = 'CoOps'
+        new_row["id_in_source"] = row[orgid]   
+        new_row["registerdate"] = self.map_date(row['Incorporation Date'])
+        new_row["removeddate"] = self.map_date(row['Dissolved Date'])
+        new_row['companyid'] = row['Registered Number']
+        if namefield == 'Trading Name': 
+            new_row['iteration'] = '2000' # force trading names into extra details by giving an early iteration year.
+        else: 
+            new_row['iteration'] = row['Iteration']
 
-        new_row["registrationdate"] = self.map_date(row['Incorporation Date'])
-        new_row["dissolutiondate"] = self.map_date(row['Dissolved Date'])
         
         super().sort_address_fields(new_row)
         return new_row
+    
+
+   
+    def find_primary_info(self, details_list):
+        return super().find_primary_info(details_list)
+    
+    
+
+    def combine_org_details_per_source(self, rows: list):
+        return super().combine_org_details_per_source(rows)
         
 
-
 '''
-ccew data fields
-uid
-charitynumber
-organisationname
-normalisedname
-companyid
-housenumber
-addressline1
-addressline2
-addressline3
-addressline4
-addressline5
-city
-localauthority
-postcode
-source
+CUK Organisation ID
+Registered Number
+Registrar
+Registered Name
+Trading Name
+Legal Form
+Registered Street
+Registered City
+Registered State/Province
+Registered Postcode
+UK Nation
+FCA Reporting Classification
+Ownership Classification
+Registered Status
+Incorporation Date
+Dissolved Date
 '''

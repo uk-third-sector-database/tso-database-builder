@@ -1,7 +1,7 @@
 import pytest
 
 from .companies_house_gap_decade import CompaniesHouseGapDataHandler
-from .base_definitions import spine_entry_creator
+from .base_definitions import public_spine_entry_creator
 
 
 def companies_house_entry_creator(overrides):
@@ -36,16 +36,6 @@ def test_filters(company_category, expected):
     value = companies_house_entry_creator({"company_type": company_category})
     assert CompaniesHouseGapDataHandler().all_filters(value) == expected
 
-
-@pytest.mark.xfail
-@pytest.mark.parametrize(
-        'row,result',
-        [(companies_house_entry_creator({'date_of_creation': '2010-1-1'}),False),
-          (companies_house_entry_creator({'date_of_creation': '2015-1-1'}),True)]
-)
-def test_filter_by_incorporation(row,result):
-    assert CompaniesHouseGapDataHandler().all_filters(row) == result
-
 def test_row_formatting():
     row = companies_house_entry_creator({
         "company_name" : 'Something Name',
@@ -59,20 +49,15 @@ def test_row_formatting():
                                          
                                     
     namefield = 'company_name'
-    new_row = spine_entry_creator({
+    new_row = public_spine_entry_creator({
     "uid" : 'GB-COH-1234',
     "organisationname" : 'Something Name',
-    "normalisedname": '',
-    "companyid":'1234',
-    "housenumber":'',
-    "addressline1":'4 This Street',
-    "addressline2":'',
-    "addressline3":'',
-    "addressline4":'',
-    "addressline5":'',
-    "city":'Anything',
-    "localauthority":'',
+    "normalisedname": 'SOMETHING NAME',
+    "id_in_source":'1234',
+    "fulladdress" : '4 THIS STREET',
+    "city":'ANYTHING',
     "postcode":'AB1 4AB',
-    "source":'adv_api  category'
+    "source":'CH',
+    'iteration' : '2022'
     })
     assert CompaniesHouseGapDataHandler().format_row(namefield,row) == new_row

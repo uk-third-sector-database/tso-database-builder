@@ -38,37 +38,37 @@ from .base import DataHandler
 
 exclude_filters = {
     "company_type": [
-        'PRIVATE LIMITED COMPANY',
-        'LIMITED PARTNERSHIP',
-        'LIMITED LIABILITY PARTNERSHIP',
-        'PUBLIC LIMITED COMPANY',
-        'PRIVATE UNLIMITED COMPANY',
-        'SCOTTISH PARTNERSHIP',
-        'PRIVATE UNLIMITED',
-        'INVESTMENT COMPANY WITH VARIABLE CAPITAL(UMBRELLA)',
-        'PRIV LTD SECT. 30 (PRIVATE LIMITED COMPANY, SECTION 30 OF THE COMPANIES ACT)',
-        'INVESTMENT COMPANY WITH VARIABLE CAPITAL (SECURITIES)',
-        'INVESTMENT COMPANY WITH VARIABLE CAPITAL',
-        'OVERSEAS ENTITY',
-        'UNITED KINGDOM ECONOMIC INTEREST GROUPING',
-        'OLD PUBLIC COMPANY',
-        'UNITED KINGDOM SOCIETAS',
-        'CONVERTED/CLOSED',
-        'OTHER COMPANY TYPE',
-        'PROTECTED CELL COMPANY',
-        'ROYAL CHARTER COMPANY',
-        'FURTHER EDUCATION AND SIXTH FORM COLLEGE CORPS',
-        'OTHER COMPANY TYPE']
+        'private limited company',
+        'limited partnership',
+        'limited liability partnership',
+        'public limited company',
+        'private unlimited company',
+        'scottish partnership',
+        'private unlimited',
+        'investment company with variable capital(umbrella)',
+        'priv ltd sect. 30 (private limited company, section 30 of the companies act)',
+        'investment company with variable capital (securities)',
+        'investment company with variable capital',
+        'overseas entity',
+        'united kingdom economic interest grouping',
+        'old public company',
+        'united kingdom societas',
+        'converted/closed',
+        'other company type',
+        'protected cell company',
+        'royal charter company',
+        'further education and sixth form college corps',
+        'other company type']
 }
 
 
 class CompaniesHouseGapDataHandler(DataHandler):
     fileencoding='UTF8'
     def all_filters(self,row: dict) -> bool:
-        
+
         # exclude row if in exclude_filters
         for fieldname, exclude_values in exclude_filters.items():
-            if row.get(fieldname).upper() in exclude_values:
+            if row.get(fieldname).lower() in exclude_values:
                 return False
             
 
@@ -84,9 +84,7 @@ class CompaniesHouseGapDataHandler(DataHandler):
         return d.strftime('%d/%m/%Y')
     
     def find_names(self, row) -> list:
-        ''' returns name keys which have non-null values'''
-        # 
-        return ['company name']
+        return ['company_name']
 
 
     def format_row(self,namefield,row) -> dict:
@@ -98,20 +96,20 @@ class CompaniesHouseGapDataHandler(DataHandler):
         new_row["uid"] =  'GB-COH-'+ row['company_number']       
         new_row["organisationname"] = row[namefield]
         new_row["normalisedname"] = ''
-        new_row["companyid"] = row['company_number']
-        new_row["charitynumber"] = ''
-        new_row["housenumber"] = ''
+        new_row["id_in_source"] = row['company_number']
         new_row["addressline1"] = row['address_line_1']
         new_row["addressline2"] = row['address_line_2']
         new_row["addressline3"] = ''
         new_row["addressline4"] = ''
         new_row["addressline5"] = ''
         new_row["city"] = row['locality']
-        new_row["localauthority"] = ''
         new_row["postcode"] = row['postal_code']
-        new_row["source"] = 'adv_api %s'%' '.join([row['company_type'],row['company_subtype']])
-        new_row["dissolutiondate"] = self.map_date(row['date_of_cessation'])
-        new_row["registrationdate"] = self.map_date(row['date_of_creation'])
+        new_row["source"] = 'CH'#'adv_api %s'%' '.join([row['company_type'],row['company_subtype']])
+        new_row["removeddate"] = self.map_date(row['date_of_cessation'])
+        new_row["registerdate"] = self.map_date(row['date_of_creation'])
+        new_row["iteration"] = '2022'
+        
+        
 
         super().sort_address_fields(new_row)
         return new_row
@@ -152,3 +150,6 @@ class CompaniesHouseGapDataHandler(DataHandler):
 #locality,
 #postal_code,
 #region
+    
+
+

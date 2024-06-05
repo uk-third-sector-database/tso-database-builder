@@ -6,39 +6,40 @@ from .base import DataHandler
 
 exclude_filters = {
     "CompanyCategory": [
-        "Private Limited Company",
-        "Limited Partnership",
-        "Limited Liability Partnership",
-        "Public Limited Company",
-        "Private Unlimited Company",
-        "Scottish Partnership",
-        "Private Unlimited",
-        "Investment Company with Variable Capital(Umbrella)",
-        "PRIV LTD SECT. 30 (Private limited company, section 30 of the Companies Act)",
-        "Investment Company with Variable Capital (Securities)",
-        "Investment Company with Variable Capital",
-        "Overseas Entity",
-        "United Kingdom Economic Interest Grouping",
-        "Old Public Company",
-        "United Kingdom Societas",
-        "Converted/Closed",
-        "Other Company Type",
-        "Protected Cell Company",
-        "Royal Charter Company",
-        "Further Education and Sixth Form College Corps",
-        "Other company type"
+        "private limited company",
+        "limited partnership",
+        "limited liability partnership",
+        "public limited company",
+        "private unlimited company",
+        "scottish partnership",
+        "private unlimited",
+        "investment company with variable capital(umbrella)",
+        "priv ltd sect. 30 (private limited company, section 30 of the companies act)",
+        "investment company with variable capital (securities)",
+        "investment company with variable capital",
+        "overseas entity",
+        "united kingdom economic interest grouping",
+        "old public company",
+        "united kingdom societas",
+        "converted/closed",
+        "other company type",
+        "protected cell company",
+        "royal charter company",
+        "further education and sixth form college corps",
+        "other company type"
     ]
 }
 
 
 class CompaniesHouseDataHandler(DataHandler):
     fileencoding='UTF8'
+    tmp_fields = ['iteration','extraname']
     
     def all_filters(self, row: dict) -> bool:
         
         # exclude row if in exclude_filters
         for fieldname, exclude_values in exclude_filters.items():
-            if row.get(fieldname) in exclude_values:
+            if row.get(fieldname).lower() in exclude_values:
                 return False
         return True
             
@@ -55,7 +56,6 @@ class CompaniesHouseDataHandler(DataHandler):
 
 
     def find_names(self, fieldnames) -> list:
-        print(fieldnames)
         return [n for n in fieldnames if re.search('.*ompanyname',n, flags=re.IGNORECASE)]
 
     def find_addresses(self, row:dict) -> list:
@@ -72,13 +72,13 @@ class CompaniesHouseDataHandler(DataHandler):
         new_row={}
         for field in row:
             row[field] = row[field].strip()
+        
 
         new_row["uid"] =  'GB-COH-'+ row[' CompanyNumber']       
         new_row["organisationname"] = row[namefield]
         new_row["normalisedname"] = ''
-        new_row["companyid"] = row[' CompanyNumber']
-        new_row["charitynumber"] = ''
-        new_row["housenumber"] = ''
+        new_row["id_in_source"] = row[' CompanyNumber']
+
         if row['RegAddress.POBox']:
             new_row["addressline1"] = row['RegAddress.POBox']
             new_row["addressline2"] = row['RegAddress.AddressLine1']
@@ -87,35 +87,28 @@ class CompaniesHouseDataHandler(DataHandler):
             new_row["addressline1"] = row['RegAddress.AddressLine1']
             new_row["addressline2"] = row[' RegAddress.AddressLine2']
             new_row["addressline3"] = ''
-        new_row["addressline4"] = ''
-        new_row["addressline5"] = ''
         new_row["city"] = row['RegAddress.PostTown']
-        new_row["localauthority"] = row['RegAddress.County']
         new_row["postcode"] = row['RegAddress.PostCode']
-        new_row["source"] = '2023_download %s'%row['CompanyCategory']#'CompaniesHouse'
-        new_row["dissolutiondate"] = row['DissolutionDate']
-        new_row["registrationdate"] = row['IncorporationDate']
-
-        super().sort_address_fields(new_row)
-        print(new_row)
-        return new_row
+        new_row["source"] = 'CH'# %s'%row['CompanyCategory']#'CompaniesHouse'
+        new_row["removeddate"] = row['DissolutionDate']
+        new_row["registerdate"] = row['IncorporationDate']
+        if 'PreviousName' in namefield:
+            new_row['extraname'] = 1
+        else:
+            new_row['extraname'] = 0
+        
+        
         
 
+        super().sort_address_fields(new_row)
+        return new_row
+        
+    def find_primary_info(self, details_list):
+        return super().find_primary_info(details_list)
+    
+    def combine_org_details_per_source(self, rows: list):
+        return super().combine_org_details_per_source(rows)
 
-
-#         "organisationname",
-#         "normalisedname",
-#         "companyid",
-#         "housenumber",
-#         "addressline1",
-#         "addressline2",
-#         "addressline3",
-#         "addressline4",
-#         "addressline5",
-#         "city",
-#         "localauthority",
-#         "postcode",
-#         "source",
 
 
 # "CompanyName": "",
@@ -177,3 +170,21 @@ class CompaniesHouseDataHandler(DataHandler):
 #         r["transformed"] = "yes"
 
 #         return [r]
+
+
+
+'''
+Included company types: 
+
+ "PRI/LTD BY GUAR/NSC (Private, limited by guarantee, no share capital) "
+ "Charitable Incorporated Organisation "
+ "Community Interest Company "
+ "Registered Society "
+ "PRI/LBG/NSC (Private, Limited by guarantee, no share capital, use of 'Limited' exemption) "
+ "Scottish Charitable Incorporated Organisation "
+ "Industrial and Provident Society "
+
+'''
+
+
+
