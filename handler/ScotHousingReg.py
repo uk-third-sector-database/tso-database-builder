@@ -8,6 +8,7 @@ exclude_filters = {
 
 class ScotHousingRegDataHandler(DataHandler):
     fileencoding='Latin-1'
+    tmp_fields = ['iteration']
 
     def all_filters(self, row: dict) -> bool:
         for fieldname, exclude_values in exclude_filters.items():
@@ -28,30 +29,30 @@ class ScotHousingRegDataHandler(DataHandler):
         '''format a row into Spine format, for given namefield'''
         new_row={}
         for field in row:
-            row[field] = row[field].strip()
+            row[field] = row[field].strip()    
 
-        new_row["uid"] =  'GB-SHR-'+ row['Reg No']    
+
+        new_row["uid"] = 'GB-SHR-'+ row['Reg No']    
         new_row["organisationname"] = row[namefield]
         new_row["normalisedname"] = ''
-        new_row["companyid"] = row['Reg No']     
-        new_row["charitynumber"] = ''
-        new_row["housenumber"] = ''
-        
-        new_row["addressline1"] = ''
-        new_row["addressline2"] = ''
-        new_row["addressline3"] = ''
-        new_row["addressline4"] = ''
-        new_row["addressline5"] = ''
+        new_row["fulladdress"] = ''
         new_row["city"] = ''
-        new_row["localauthority"] = ''
         new_row["postcode"] = ''
         new_row["source"] = 'ScottishHousingRegulator'
-        new_row["dissolutiondate"] = '' 
-        new_row["registrationdate"] = ''
-        
+        new_row["id_in_source"] = row['Reg No']
+        new_row["registerdate"] = ''
+        new_row["removeddate"] = ''
+        new_row['companyid'] = ''
+        new_row['iteration'] = row['Iteration']
+
         super().sort_address_fields(new_row)
         return new_row
         
+    def find_primary_info(self, details_list):
+        return super().find_primary_info(details_list)
+    
+    def combine_org_details_per_source(self, rows: list):
+        return super().combine_org_details_per_source(rows)
 
 '''
 Scottish Housing Register data fields

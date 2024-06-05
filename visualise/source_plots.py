@@ -62,6 +62,7 @@ def match_type_counts(infile):
     df = pandas.read_csv(infile,usecols=['uid']).drop_duplicates()
 
     match_dict={}
+    unique_orgs = set()
 
     for m in list(df.uid):
         try:
@@ -69,15 +70,38 @@ def match_type_counts(infile):
         except TypeError:
             print('type error in re, uid = ',m)
             continue
+        for uid in m.split('_'):
+            unique_orgs.add(uid)
         s1='-'.join(s)
         if not s1 in match_dict.keys(): match_dict[s1]=1
         else: match_dict[s1]+=1
-
     k = list(match_dict.keys())
     k.sort()
 
+    print(f'Unique uids in {infile} : {len(unique_orgs)}')
+
     for id in k:
         print(f'{id} : {match_dict[id]}')
+
+def unique_orgs_per_source(infile,map_ch=True):
+    print(f'\n\nCounts of unique org per source, in file {infile}\n')
+    df = pandas.read_csv(infile,usecols=['uid','source']).drop_duplicates()
+    mapped_sources = ["2014_prior", "2023_download", "adv_api"]
+
+    if map_ch:
+        for s in mapped_sources:
+            mask = df['source'].str.startswith(s)
+            df.loc[mask,'source'] = 'COH'
+            df.drop_duplicates()
+    total = 0
+    for s in df['source'].unique():
+        l = len(df[df['source']==s]['uid'].unique())
+        total += l
+        print(f"{s} : {l}")
+
+    print(f'\nSum across sources = {total} uids')
+    print(f'\nThere are {len(df["uid"].unique())} unique UIDs in file {infile}, and {df.shape[0]} rows')
+
     
 
 if __name__=='__main__':
@@ -86,6 +110,17 @@ if __name__=='__main__':
       #  infile = '../processed_data/ch.%s.concat.match-companyid.match-normname.permutate.csv'%var
        # match_type_counts(infile)
 
-    infile = '../processed_data/all.matched_companyid.matched_normname.permutate.csv'
+    #infile = '../public_spine_data/all.matched_companyid.matched_normname.permutate.csv'
+    infile = '../public_spine_data/all.concat.csv'
     #infile = '../processed_data/FindThatCharity_matches_processed.csv'
-    match_type_counts(infile)
+    #match_type_counts(infile)
+    unique_orgs_per_source(infile,map_ch=True)
+    unique_orgs_per_source(infile,map_ch=False)
+
+
+   #infile = '../processed_data/all.concat.csv'
+   #unique_orgs_per_source(infile)
+
+
+   #infile = '../public_spine_data/all_CH.concat.csv'
+   #unique_orgs_per_source(infile)

@@ -1,7 +1,7 @@
 import pytest
 
 from .companies_house_2014 import CompaniesHouse2014DataHandler
-from .base_definitions import spine_entry_creator
+from .base_definitions import public_spine_entry_creator
 
 
 
@@ -37,7 +37,7 @@ def test_find_name_keys_noextranames(row,keys):
 
 @pytest.mark.parametrize(
         'row,result',
-        [(companies_house_entry_creator({'chremy': '1980'}),False),
+        [(companies_house_entry_creator({'chremy': '1980'}),True),
           (companies_house_entry_creator({'chremy': ''}),True)]
 )
 def test_filter_by_dissolution(row,result):
@@ -50,21 +50,14 @@ def test_row_formatting():
     "regaddresspostcode": "code",
     "companycategory":'category',})
     namefield = 'companyname'
-    new_row = spine_entry_creator({
+    new_row = public_spine_entry_creator({
     "uid" : 'GB-COH-1234',
     "organisationname" : 'Something Name',
-    "normalisedname": '',
-    "companyid":'1234',
-    "housenumber":'',
-    "addressline1":'',
-    "addressline2":'',
-    "addressline3":'',
-    "addressline4":'',
-    "addressline5":'',
-    "city":'',
-    "localauthority":'',
+    "normalisedname": 'SOMETHING NAME',
+    "id_in_source":'1234',
     "postcode":'code',
-    "source":'2014_prior category',
+    "source":'CH',
+    "iteration" : '2014'
     })
     assert CompaniesHouse2014DataHandler().format_row(namefield,row) == new_row
 

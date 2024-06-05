@@ -1,7 +1,7 @@
 import pytest
 
 from .careQC import CQCDataHandler  
-from .base_definitions import spine_entry_creator
+from .base_definitions import sub_spine_entry_creator
 
 
 
@@ -22,6 +22,7 @@ def CQC_entry_creator(overrides):
         "Location URL" : '',
         "CQC Location ID (for office use only)" : '',
         "CQC Provider ID (for office use only)" : '',
+        'Iteration':''
     }
     entry.update(**overrides)
     return entry
@@ -38,28 +39,32 @@ def test_row_formatting():
 
 })
     namefield = 'Name'
-    new_row = spine_entry_creator({
+    new_row = sub_spine_entry_creator({
     "uid" : 'GB-CQC-1234',
     "organisationname" : 'Something Name',
-    "normalisedname": '',
-    "companyid":'1234',
-    "source":'CareQualityCommission'
+    "normalisedname": 'SOMETHING NAME',
+    "id_in_source":'1234',
+    "source":'CareQualityCommission',
+    'iteration':'2000'
     })
     assert CQCDataHandler().format_row(namefield,row) == new_row
 
-def test_row_formatting_alt_name():
+def test_row_formatting_provider_name():
     row = CQC_entry_creator({
         "CQC Provider ID (for office use only)" :'1234',
         "Name" :'Something Name',
         "Also known as" : 'Something something',
+        'Provider name' : 'Provider name',
+    'Iteration':'04/2024'
 
 })
-    namefield = 'Also known as'
-    new_row = spine_entry_creator({
+    namefield = 'Provider name'
+    new_row = sub_spine_entry_creator({
     "uid" : 'GB-CQC-1234',
-    "organisationname" : 'Something something',
-    "normalisedname": '',
-    "companyid":'1234',
-    "source":'CareQualityCommission'
+    "organisationname" : 'Provider name',
+    "normalisedname": 'PROVIDER NAME',
+    "id_in_source":'1234',
+    "source":'CareQualityCommission',
+    'iteration':'04/2024'
     })
     assert CQCDataHandler().format_row(namefield,row) == new_row

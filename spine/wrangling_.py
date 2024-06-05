@@ -139,24 +139,6 @@ def dedupe_addr(a):
     return addresses
 
 
-def replace_CH_source_field(s):
-    # s is string or list of sources
-    # return same type, with mapped_sources = ["2014_prior","2023_download","adv_api"] replaced by 'CH'
-    mapped_sources = ["2014_prior","2023_download","adv_api"]
-    def ch(x):
-        for i in mapped_sources:
-            if i in x: return 'CH'
-        return x
-    
-    if type(s)==str:
-        for i in mapped_sources:
-            if i in s:
-                return 'CH'
-            else: return s
-            
-    if type(s)==list:
-        return list(map(ch,s))
-
 
 def sort_dates(date_list):
     ''' convert input list of str dates to set (no duplicates) of datetime objects, to then sort'''
@@ -178,12 +160,12 @@ def sort_dates(date_list):
 
     return as_str
 
-
+'''
 def combine_org_details(rows, final=True):
-    '''
-    For input rows of data, find unique names and addresses, and create rows for each combination of name & address
-    (called by compress_per_org and permutate)
-    '''
+    
+    #For input rows of data, find unique names and addresses, and create rows for each combination of name & address
+    #(called by compress_per_org and permutate)
+    
     names=[]
     addresses=[]
     
@@ -265,43 +247,7 @@ def combine_org_details(rows, final=True):
     return new_spine_rows,new_extras_rows
         
 
-
 '''
-def permutate(csv_in,csv_out,final):
-    """
-    For all records with the same uid, find unique names and addresses and create all permutations of these
-    If final permutation (after matching etc), remove references to different companies house scrapes
-    """
-
-
-    # create dictionary key'd by uid
-    print(f'Running spine.wrangling.permutate with file {csv_in}')
-    uid_dict = dict_indexed_by_field(csv_in,'uid')
-
-    # for each uid, if more than one record, find unique names and addresses
-    # and write lines to csv_out
-    writer = csv.DictWriter(csv_out, fieldnames=FINAL_SPINE_CSV_FORMAT, extrasaction='ignore')
-    writer.writeheader()
-    for uid in uid_dict.keys():
-        if not uid.split('-')[-1]:
-            # uid doesn't have id attached, don't permutate across addresses
-            for line in uid_dict[uid]:
-                print(f'in wrangling.permutate. Line has truncated uid: {line}')
-                writer.writerow(line)
-
-        elif len(uid_dict[uid]) > 1: # more than one record with this uid - create combinations
-            writer.writerows(combine_org_details(uid_dict[uid],final))
-
-        else: # only one record with this uid - write directly
-            # replace source if needed:
-            if final:
-                uid_dict[uid][0]['source'] = replace_CH_source_field(uid_dict[uid][0]['source'])
-                
-            writer.writerow(uid_dict[uid][0])
-    print(f'Completed spine.wrangling.permutate - output in {csv_out}')
-
-'''
-
 
 def wrangle_findthatcharity_data(infile:str,field:str,ofile):
     df = pandas.read_csv(infile,usecols=[field])
@@ -321,9 +267,9 @@ def wrangle_findthatcharity_data(infile:str,field:str,ofile):
 
 
 def final_processing(fulldatafile):
-    # read in fulldatafile, add rowid field with unique value per row, and ignore field charitynumber
-    
-    ofilename = fulldatafile.name[:-3] + 'final.csv' #'final_matching_spine.csv'
+    # read in fulldatafile, add rowid field with unique value per row, 
+
+    ofilename = fulldatafile.name[:-3] + 'final.csv'
     ofile = open(ofilename,'w+')
 
     writer = csv.DictWriter(ofile, fieldnames=FINAL_SPINE_CSV_FORMAT, extrasaction='ignore')

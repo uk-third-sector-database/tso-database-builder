@@ -1,8 +1,6 @@
 import click
-import csv
 
-from handler.base import do_csv_processing
-from handler.base_definitions import NEW_SPINE_CSV_FORMAT
+from handler.base import do_csv_processing,compress_org_details
 
 from handler.companies_house import CompaniesHouseDataHandler
 from handler.companies_house_2014 import CompaniesHouse2014DataHandler
@@ -17,14 +15,13 @@ from handler.ccew import CCEWDataHandler
 from handler.ccni import CCNIDataHandler
 from handler.oscr import OSCRDataHandler
 
-from spine.wrangling import concat as concatenate
-from spine.wrangling import permutate as write_permutations
-from spine.wrangling import final_processing
-from spine.matching import deduplicate
+from spine.build_public_spine import process_csvs_to_build_spine
 
 from visualise.venn_diagrams import venn_diagram_info_using_pandas,venn3_by_source_list
 from visualise.source_plots import sources, source_codes
 from visualise.source_plots import plot_upset_by_code, match_type_counts
+
+from handler.all_companies_house import main_process
 
 
 
@@ -56,64 +53,34 @@ def process_source(source, infile, outfile):
     """
     Generate a SPINE format file using data pulled from a source
     """
-    intermediate_ofile = outfile.split('.csv')[0] + '.tmp.csv'
-    do_csv_processing(infile, intermediate_ofile, handler_map[source]())
-
-    #consolidate all details for each org, and add geography lookup fields
-    write_permutations(open(intermediate_ofile,'r'),open(outfile,'w+'),False)
-
-
-@cli.command()
-@click.argument("src", type=click.File("r", encoding='UTF8'), nargs = -1) 
-@click.option(
-    "-o", "--output", default="concat.out.csv", show_default=True, type=click.File("w", encoding='UTF8')
-)
-def concat(src, output):
-    """
-    Concatenate SPINE files into a single SPINE file.
-    """
-    print(src)
-    print(output)
-    concatenate(src, output)
-
+    if 'CompaniesHouse' in source:
+        
+        # companies house data preprocessed to concatenate prior to creating spine and supplementary tables (in all_companies_house.py)
+        compress_org_details(infile,outfile,CompaniesHouseDataHandler())
+    else:
+        do_csv_processing(infile, outfile, handler_map[source]())
 
 
 
 @cli.command()
-@click.argument("src", type=click.File("r"), nargs=1)
-@click.argument("field", type=click.Choice(NEW_SPINE_CSV_FORMAT), nargs=1)
-@click.option("-t", "--threshold", default=4, show_default=True, type=click.INT)
-@click.option("-o", "--output", default="direct_matches.out.csv", show_default=True, type=click.File("w"))
-def match(src, output, field, threshold):
-    """
-    For a given input csv file (in SPINE format), find direct matches between records
-    Charities with company ids: direct lookup
-    100% match between name and postcode
-    (later: this will also call deduplicate to find close matches for human checking)
-    """
-    deduplicate(src,output,field,threshold)
-
+@click.argument('ofile',default = 'CH.all.preprocess.csv')
+def preprocess_CH(ofile):
+    main_process(ofile)
+    print(f'file {ofile} written')
 
 
 @cli.command()
-@click.argument("src", type=click.File("r", encoding='UTF8'), nargs=1)
-@click.option("-o", "--output", default="permutate.out.csv", show_default=True, type=click.File("w"))
-@click.option("-f", "--final", default=False, type=click.BOOL)
-def permutate(src, output,final):
+@click.argument("infiles", nargs =-1)
+@click.option("-o", "outfile_base", default="public_spine")
+def build_spine(infiles, outfile_base):
     """
-    For a given input csv file (in SPINE format), find all with the same uid and create rows for all
-    permutations of names and addresses associated
-    Use option -f if final permutation - consolidates all companies house source info to 'CH' only
+    Generate organisational spine, plus matches, plus supplementary files, for all given inputs (in format {source}.spine.csv with {source}.supplementary.csv in the same folder)
     """
-    write_permutations(src,output,final)
-    print('Permutations complete. Output written to %s'%output)
-
-    if final:
-        # add rowid field, and remove charitynumber field
-
-        final_filename = final_processing(output)
-        print('Final processing complete. Output written to %s'%final_filename)
-
+    MainOrgs = process_csvs_to_build_spine(infiles)
+    MainOrgs.write_out(outfile_base+'.spine.csv', 
+                       outfile_base+'.supplementary.csv', 
+                       outfile_base+'.matches.csv')
+    
 
 
 @cli.command()
