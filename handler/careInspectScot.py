@@ -12,7 +12,7 @@ include_filters = {
 
 class CareInspScotDataHandler(DataHandler):
     fileencoding='Latin-1'
-    tmp_fields=['iteration','namefield']#,'serviceprovider']
+    tmp_fields=['iteration']#,'namefield']#,'serviceprovider']
     
     def all_filters(self, row: dict) -> bool:
 
@@ -73,7 +73,7 @@ class CareInspScotDataHandler(DataHandler):
         new_row["registerdate"] = self.map_date(row['DateReg'])
         new_row["removeddate"] = ''
         new_row['companyid'] = ''
-        new_row['namefield'] = namefield
+        #new_row['namefield'] = namefield
         new_row["iteration"] = row['Iteration']
         if 'ServiceName' in namefield:
             new_row["iteration"] = 2000 # make ServiceName secondary

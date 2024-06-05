@@ -38,37 +38,37 @@ from .base import DataHandler
 
 exclude_filters = {
     "company_type": [
-        'PRIVATE LIMITED COMPANY',
-        'LIMITED PARTNERSHIP',
-        'LIMITED LIABILITY PARTNERSHIP',
-        'PUBLIC LIMITED COMPANY',
-        'PRIVATE UNLIMITED COMPANY',
-        'SCOTTISH PARTNERSHIP',
-        'PRIVATE UNLIMITED',
-        'INVESTMENT COMPANY WITH VARIABLE CAPITAL(UMBRELLA)',
-        'PRIV LTD SECT. 30 (PRIVATE LIMITED COMPANY, SECTION 30 OF THE COMPANIES ACT)',
-        'INVESTMENT COMPANY WITH VARIABLE CAPITAL (SECURITIES)',
-        'INVESTMENT COMPANY WITH VARIABLE CAPITAL',
-        'OVERSEAS ENTITY',
-        'UNITED KINGDOM ECONOMIC INTEREST GROUPING',
-        'OLD PUBLIC COMPANY',
-        'UNITED KINGDOM SOCIETAS',
-        'CONVERTED/CLOSED',
-        'OTHER COMPANY TYPE',
-        'PROTECTED CELL COMPANY',
-        'ROYAL CHARTER COMPANY',
-        'FURTHER EDUCATION AND SIXTH FORM COLLEGE CORPS',
-        'OTHER COMPANY TYPE']
+        'private limited company',
+        'limited partnership',
+        'limited liability partnership',
+        'public limited company',
+        'private unlimited company',
+        'scottish partnership',
+        'private unlimited',
+        'investment company with variable capital(umbrella)',
+        'priv ltd sect. 30 (private limited company, section 30 of the companies act)',
+        'investment company with variable capital (securities)',
+        'investment company with variable capital',
+        'overseas entity',
+        'united kingdom economic interest grouping',
+        'old public company',
+        'united kingdom societas',
+        'converted/closed',
+        'other company type',
+        'protected cell company',
+        'royal charter company',
+        'further education and sixth form college corps',
+        'other company type']
 }
 
 
 class CompaniesHouseGapDataHandler(DataHandler):
     fileencoding='UTF8'
     def all_filters(self,row: dict) -> bool:
-        
+
         # exclude row if in exclude_filters
         for fieldname, exclude_values in exclude_filters.items():
-            if row.get(fieldname).upper() in exclude_values:
+            if row.get(fieldname).lower() in exclude_values:
                 return False
             
 

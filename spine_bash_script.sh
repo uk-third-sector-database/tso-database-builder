@@ -43,4 +43,4 @@ python3 cli.py build-spine ../public_spine_data/ccew.spine.csv ../public_spine_d
 
 
 #counts
-python3 visualise/source_plots.py > all_data.matchtypes.out
+#python3 visualise/source_plots.py > all_data.matchtypes.out

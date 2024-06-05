@@ -49,7 +49,7 @@ class SocialHousingEngDataHandler(DataHandler):
         new_row["uid"] =  'GB-SHPE-'+ row['Registration number']   
         new_row["organisationname"] = row[namefield]
         new_row["normalisedname"] = ''
-        new_row["primaryid"] = row['Registration number']
+        new_row["id_in_source"] = row['Registration number']
         new_row["fulladdress"] = ''
         new_row["city"] = ''
         new_row["postcode"] = ''

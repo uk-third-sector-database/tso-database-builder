@@ -1,0 +1,319 @@
+% if there's been a data update, run stats_and_visuals.ipynb to regenerate tables and figures 
+
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{tabularx}
+\usepackage[export]{adjustbox} % to keep graphics centred even if they're wider than \textwidth
+
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+
+\geometry{
+    a4paper,
+    left=20mm,
+    right=20mm,
+    top=25mm,
+    bottom=25mm
+}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{1em} 
+
+
+\title{Database of third sector organisations: schema and process}
+\author{FCK, AD}
+%\date{\today}
+
+
+\begin{document}
+
+\maketitle
+\section{Introduction}
+This document is a guide to the Third Sector Database, a ‘spine’ of all 
+organisations comprising the third sector in the United Kingdom, along with 
+linkages between organisations which appear in more than one register.
+
+Ten data sources are combined in order to build the organisational spine. This document briefly introduces the processes of data collection, pre-processing of 
+data per source, and combining all sources to create one master list. 
+
+\section{Building the organisational spine}
+
+
+
+The organisational spine consists of three csv files: 
+\begin{itemize}
+\item public\_spine.spine.csv contains a row for each organisation considered to make up the UK's thrid sector, with name, address and date details. The data dictionary
+is found in table \ref{tab:spine_fields}.
+\item public\_spine.supplementary.csv contains any name, address and date information associated with an organsiation which is additional to what is in the spine, 
+such as 'Also Known As' names, previous addresses. See table \ref{tab:supplementary_fields} for data dictionary
+\item public\_spine.matches.csv lists the organisations which are linked or matched according to our searches (see \ref{sec:match}), along with the type of match. Data dictionary
+in table \ref{tab:match_fields}
+\end{itemize}
+
+
+\begin{table}[h]
+  \centering
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    Fieldname  &	Notes \\
+    \hline \hline
+    uid &	UID created for each source, e.g. GB-CHC-1234\\    \hline
+    organisationname &	Name as primary in source\\    \hline
+    normalisedname &	Name normalised to capitalise, remove extra spaces and punctuation - to aid matching \\    \hline
+    fulladdress &	Full address as found in source with highest precendence across any matched organisations\\    \hline
+    city &	City matching full address as defined above\\    \hline
+    postcode &	Postcode matching full address as defined above\\    \hline
+    registerdate &	Earliest registration date found in records for this organisation across all sources\\    \hline
+    removeddate &	Latest dissolution date found in records for this organisation across all sources\\    \hline
+\end{tabularx}
+\caption{Public spine csv fields}
+\label{tab:spine_fields}
+\end{table}
+
+\begin{table}[h]
+  \centering
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+Fieldname &	Notes \\ \hline \hline
+uid &	UID created for each source using source and id from original source \\ \hline
+organisationname &	Alternative name \\ \hline
+normalisedname &	(Alt name normalised) \\ \hline
+fulladdress &	Alternative address \\ 
+city &	 Alternative address\\ 
+postcode &	Alternative address\\ \hline
+registerdate &	 Alternative registration date \\ \hline
+removeddate & Alternative removed / dissolved date \\ \hline
+\end{tabularx}
+\caption{Supplementary csv fields}
+\label{tab:supplementary_fields}
+\end{table}
+
+\begin{table}[h]
+  \centering
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+Fieldname &	Notes \\ \hline \hline
+uid &	UID created for each source, matches table \ref{tab:spine_fields} - if match is unambiguous; blank otherwise\\ \hline
+
+orgA\_id\_in\_source &  ID in original source, for matched organisation A\\ \hline
+orgA\_source & original source of organisation A\\ \hline
+orgA\_uid & UID created for organisation A\\ \hline
+orgB\_id\_in\_source & ID in original source, for matched organisation B\\ \hline
+orgB\_source & original source of organisation B\\ \hline
+orgB\_uid & UID created for organisation B\\ \hline
+match\_type & Type of match (e.g. by name, by companyid)\\ \hline
+
+\end{tabularx}
+\caption{Matched organisations fields}
+\label{tab:match_fields}
+\end{table}
+
+
+\clearpage
+\subsection{What constitutes a match?}
+\label{sec:match}
+
+The main dataset has one row per organisation. If an organisation appears in two datasets, 
+the linked organisation is noted by a row in the matches lookup table. We prioritise those organisations on the 
+charity register, and add new organisations to the main dataset from other sources only if they do not match one already present in the set. 
+
+The following routes lead to a match:
+
+\begin{itemize}
+\item Matching by Company ID:
+
+The charity regulator in England and Wales, CCEW, collects information about orgnaisations' associated registration at Companies House. If two charities 
+share the same companyid they match the same companies house record and are therefore linked.
+
+This same company id is used to generate matches between CCEW and Companies House directly.
+
+Organisations in the Cooperatives register may have an additional id, 'Registered Number', which represents its linkage to 
+the Mutuals Public Register. Matches are thus sought between CoOps and Mutuals using this id.
+
+
+
+\item Matching by Normalised Name:
+
+If two organsiations have the same normalised name they are tentatively matched, but require an additional check. 
+Any of the following being true will create a match:
+
+  \begin{enumerate}
+
+  \item Organisation is in Care Quality Commission (CQC) data, and the matched core organisation is flagged as having a CQC registration, 
+  which is a flag in CCEW data.
+  \item Organisation is in the Scottish charity regular (OSCR) register and has a 'cross border' flag, 
+  indicating that a match is expected between itself and an organsiation in CCEW.
+  \item Organisation is in Scottish Housing Regulator or Care Inspectorate Scotland, and normalised name match is with an organisation in OSCR.
+  \item Organisation is in Social Housing England Regulator or Care Quality Commission, and matches an organisation in CCEW.
+  \end{enumerate}
+
+
+\item Matching using work by Find That Charity:
+
+A lookup table provided by David Kane\footnote{\url{https://raw.githubusercontent.com/drkane/charity-lookups/master/relationships/_sameas.csv}} is also used to generate matches. These links include historic reregistrations, allowing
+this dataset to be further deduplicated.
+\end{itemize}
+
+
+
+The  order in table \ref{tab:order} shows the precendence given to sources where matches occur: the higher precendence
+source will provide the data and uid in the main spine table. Matches will be found in the matches table, and any data
+found in addition to the primary fields will be in the supplementary table, indexed by the uid given at source. The first eight sources are processed such that any organisations not already present 
+in the dataset are added to it. Sources CIS and CQC are only noted in the matches table where they link to a source present.
+
+\begin{table}[h]
+  \centering
+  \begin{tabularx}{\textwidth}{|c|X|c|}
+    \hline
+Order &	Source & Code \\ \hline \hline
+1 &	Charity Commission, England and Wales	& CHC	\\ \hline
+2 &	Scottish Charity Register	& SC	\\ \hline
+3 &	Charity Commission, Northern Ireland	& NIC	\\ \hline
+4 &	Companies House 	& COH	\\ \hline
+5 &	Co-operatives 	& COOP	\\ \hline
+6 &	Mutuals Public Register 	& MPR	\\ \hline
+7 &	Scottish Housing Register 	& SHR	\\ \hline
+8 &	Social Housing England 	& SHPE	\\ \hline
+- &	Care Inspectorate Scotland 	& CIS	\\ \hline
+- &	Care Quality Commission 	& CQC	\\ \hline
+\hline
+
+\end{tabularx}
+\caption{Precedence order of sources for matched organisations}
+\label{tab:order}
+\end{table}
+
+\clearpage
+\subsection{Match types visualised}
+\label{sec:match_vis}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=1.2\textwidth,center]{../public_spine_data/public_spine.matches.csv.upsetplot.png}
+\includegraphics[width=0.6\textwidth,center]{../public_spine_data/public_spine.matchtypes.png}
+\caption{Matches between sources in public spine}
+\label{fig:Matches}
+\end{figure}
+
+
+\clearpage
+\section{Ingesting data from each source}
+
+Each of the ten sources use different conventions for their databases. These needed to be pre-processed individually to accomodate different fieldnames,
+encodings, systems of marking alternative names, and so on. The pre-process step identified primary names and addresses for each organisation, 
+choosing the most recent where multiple iterations exist, and storing alternatives for completeness.
+
+More information about the processes for each source are found in the appendix, as well as the project source code\footnote{\url{https://github.com/uk-third-sector-database/tso-database-builder}}.
+
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{../public_spine_data/public_spine.sources.png}
+  \caption{Sources found in public spine}
+  \label{fig:Sources}
+  \end{figure}
+
+
+
+\clearpage
+\appendix
+\section*{Appendix: Data Sources}
+
+All data in the spine comes from publicly available sources. The number of organisations in the database (whether in the list of 
+core organisation or via matching) are shown in figure \ref{fig:all_used_orgs}, with counts shown in table \ref{tab:all_used_orgs}.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{../public_spine_data/public_spine.all.sources.png}
+  \caption{Sources contributing to the database}
+  \label{fig:all_used_orgs}
+  \end{figure}
+
+\input{../public_spine_data/public_spine.all_used_orgs.tab.tex}
+
+
+Details for each source are given in the sections below.
+
+\subsection{Charity Commission for England and Wales (CCEW)}
+\url{https://www.gov.uk/government/organisations/charity-commission}
+
+\subsection{Scottish Charity Regulator (OSCR)}
+\url{https://www.oscr.org.uk/}
+
+
+\subsection{Charity Commission for Northern Island (CCNI)}
+\url{https://www.charitycommissionni.org.uk/}
+
+\subsection{Companies House}
+\url{https://www.gov.uk/government/organisations/companies-house}
+
+
+
+Companies House release a bulk download every quarter of all currently live companies\footnote{\url{https://download.companieshouse.gov.uk/en_output.html}}. The Beta public 
+spine encorporates these downloads for June 2023, October 2023, March 2024 and May 2024. 
+
+Using bulk downloads alone would only mean organisations that were dissolved earlier than 2023 would not be present in the database. However the companies house API allows for detailed searching of the data, so we used 
+this to find any companies registered and dissolved which fit our inclusion criteria (in particular the company type, see table \ref{tab:CH_companytypes}). The code used to search the API is found in our github repository 
+\url{https://github.com/uk-third-sector-database/ch_adv_scraper}.
+
+% inlcuded company types from CH
+
+
+\subsubsection{Company types}
+Companies house data includes a 'company category' for each organisation. Table \ref{tab:CH_companytypes} shows the full list of these, along with which have been included in the public spine data.
+
+\begin{table}[h]
+  \centering
+  \begin{tabularx}{\textwidth}{|X|l|}
+    \hline
+    Company category  &	Included / Excluded \\ \hline
+    \hline
+    Charitable Incorporated Organisation & Included \\ \hline
+    Community Interest Company & Included \\ \hline
+    Industrial and Provident Society & Included \\ \hline
+    PRI/LBG/NSC (Private, Limited by guarantee, no share capital, use of 'Limited' exemption) & Included \\ \hline
+    PRI/LTD BY GUAR/NSC (Private, limited by guarantee, no share capital) & Included \\ \hline
+    Registered Society & Included \\ \hline
+    Scottish Charitable Incorporated Organisation & Included \\ \hline
+    \hline
+    Private Limited Company & Excluded \\ \hline
+    Limited Partnership & Excluded \\ \hline
+    Limited Liability Partnership & Excluded \\ \hline
+    Public Limited Company & Excluded \\ \hline
+    Private Unlimited Company & Excluded \\ \hline
+    Scottish Partnership & Excluded \\ \hline
+    Private Unlimited & Excluded \\ \hline
+    Investment Company with Variable Capital(Umbrella) & Excluded \\ \hline
+    PRIV LTD SECT. 30 (Private limited company, section 30 of the Companies Act) & Excluded \\ \hline
+    Investment Company with Variable Capital (Securities) & Excluded \\ \hline
+    Investment Company with Variable Capital & Excluded \\ \hline
+    Overseas Entity & Excluded \\ \hline
+    United Kingdom Economic Interest Grouping & Excluded \\ \hline
+    Old Public Company & Excluded \\ \hline
+    United Kingdom Societas & Excluded \\ \hline
+    Converted/Closed & Excluded \\ \hline
+    Other Company Type & Excluded \\ \hline
+    Protected Cell Company & Excluded \\ \hline
+    Royal Charter Company & Excluded \\ \hline
+    Further Education and Sixth Form College Corps & Excluded \\ \hline
+    Other company type & Excluded \\ \hline
+    \hline
+
+\end{tabularx}
+\caption{Companies house 'company category' field}
+\label{tab:CH_companytypes}
+\end{table}
+
+
+
+\subsection{Co-operatives 	}
+\subsection{Mutuals Public Register }
+\subsection{Scottish Housing Register }
+\subsection{Social Housing England 	}
+\subsection{Care Inspectorate Scotland }
+\subsection{Care Quality Commission }
+
+\end{document}

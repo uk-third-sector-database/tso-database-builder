@@ -1,7 +1,7 @@
 import pytest
 
 from .companies_house import CompaniesHouseDataHandler
-from .base_definitions import spine_entry_creator
+from .base_definitions import public_spine_entry_creator
 
 def companies_house_entry_creator(overrides):
     entry = {
@@ -116,15 +116,16 @@ def test_row_formatting_POBox():
     "RegAddress.PostCode": "code",
     "CompanyCategory":'category'})
     namefield = ' CompanyName'
-    new_row = spine_entry_creator({
+    new_row = public_spine_entry_creator({
     "uid" : 'GB-COH-1234',
     "organisationname" : 'Something Name',
     "normalisedname": 'SOMETHING NAME',
-    "primaryid":'1234',
+    "id_in_source":'1234',
     "fulladdress":'POBOX TEXT, A1, A2',
     "city":'TOWN',
     "postcode":'code',
-    "primarysource":'CH category'
+    "source":'CH',
+    'extraname':0
     })
     assert CompaniesHouseDataHandler().format_row(namefield,row) == new_row
 
@@ -139,15 +140,16 @@ def test_row_formatting_prev_name_no_POBox():
     "RegAddress.PostCode": "code",
     "CompanyCategory":'category'})
     namefield = 'PreviousName_1.CompanyName'
-    new_row = spine_entry_creator({
+    new_row = public_spine_entry_creator({
     "uid" : 'GB-COH-1234',
     "organisationname" : 'Something1 Name',
     "normalisedname": 'SOMETHING1 NAME',
-    "primaryid":'1234',
+    "id_in_source":'1234',
     "fulladdress":'A1, A2',
     "city":'TOWN',
     "postcode":'code',
-    "primarysource":'CH category'
+    "source":'CH',
+    'extraname':1,
     })
     assert CompaniesHouseDataHandler().format_row(namefield,row) == new_row
 

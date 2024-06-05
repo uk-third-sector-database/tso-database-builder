@@ -110,6 +110,7 @@ def test_row_formatting(setup_data_CIS_format,setup_intermediate_file):
     int_row = setup_intermediate_file
 
     namefield = 'ServiceName'
+    int_row[0]['iteration'] = 2000
 
     assert CareInspScotDataHandler().format_row(namefield,cis_row[0]) == int_row[0]
 
@@ -133,13 +134,15 @@ def test_combine_extra_details(setup_intermediate_file):
     expected_extra_rows.append(extra_csv_entry_creator({
         'organisationname' : 'A Previous Name',
         'normalisedname' : 'A PREVIOUS NAME',
-        'uid' : 'GB-CIS-CS2003000137'
+        'uid' : 'GB-CIS-CS2003000137',
+        'source' : 'CareInspectorateScot'
     }))
     expected_extra_rows.append(extra_csv_entry_creator({
         'fulladdress' : 'A PREVIOUS ADDRESS',
         'city': 'GLASGOW',
         'postcode': 'G20 9TD',
-        'uid' : 'GB-CIS-CS2003000137'
+        'uid' : 'GB-CIS-CS2003000137',
+        'source' : 'CareInspectorateScot'
     }))
     assert sorted(extrarows, key=lambda x: sorted(x.items())) == sorted(expected_extra_rows, key=lambda x: sorted(x.items()))
 
@@ -176,12 +179,14 @@ def test_sort_by_iteration_date(setup_intermediate_file):
         'uid' : 'GB-CIS-CS2003000137',
         'organisationname' : 'East Park',
         'normalisedname' : 'EAST PARK',
+        'source' : 'CareInspectorateScot'
     }))
     expected_extrarows.append(extra_csv_entry_creator({
         'uid' : 'GB-CIS-CS2003000137',
         'fulladdress' : '1092 MARYHILL ROAD',
         'city' : 'GLASGOW',
         'postcode' : 'G20 9TD',    
+        'source' : 'CareInspectorateScot'
         }))
         
     _, extrarows = CareInspScotDataHandler().combine_org_details_per_source(datarows)

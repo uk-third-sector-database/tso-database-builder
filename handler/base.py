@@ -1,6 +1,7 @@
 import csv
 import string
 from datetime import datetime
+import re
 
 from .base_definitions import SUB_SPINE_CSV_FIELDS,EXTRA_DETAILS_CSV_FIELDS,ORG_ID_MAPPING,sub_spine_entry_creator,extra_csv_entry_creator
 from spine.wrangling import dict_indexed_by_field
@@ -18,8 +19,11 @@ class DataHandler:
     def transform_row(self, row: dict) -> list[dict]:
         spine_rows = []
         for name in self.names:
-            if row[name]:
-                spine_rows.append(self.format_row(name,row))
+            #if row[name]:
+            # Must allow for null names due to formatting of charity data - extra info on rows with no name
+            new_row = self.format_row(name,row)
+            if not new_row in spine_rows:
+                spine_rows.append(new_row)
         return spine_rows
 
     
@@ -214,8 +218,18 @@ def normalizer(name, norm_dict=None):
         name = name.upper()
         for key, value in norm_dict.items():
             name = name.replace(key, value)
-        name = name.replace(r"\(.*\)", "")  # remove brackets
-        name = "".join(l for l in name if l not in string.punctuation) # keep text other than punctuation
+        name = name.replace(r"\(.*\)", " ")  # remove brackets
+        name = name.replace(r"&", "AND")  
+        name = name.replace(r"\+", "AND")  
+        name = re.sub(r"(?<=\w)'(?=\w)", '', name)
+        name = re.sub(r"(?<=\w)\.(?=\w)", '', name)
+        for punct in string.punctuation:
+            name = name.replace(punct, ' ')
+
+        # Replace apostrophe with an empty string
+        
+
+        #name = "".join(l for l in name if l not in string.punctuation) # keep text other than punctuation
         name = ' '.join(name.split()).strip()
         return name
     return None
@@ -245,6 +259,7 @@ def do_csv_processing(input_csv_filename,
         for new_row in filter(
             data_handler.all_filters, iter_csv_rows(input_csv_filename,data_handler)):
             processed_rows += 1
+
             writer.writerows(data_handler.transform_row(new_row))
     
     print(f"Intermediate process complete, {processed_rows} lines written to {intermediate_ofile}\n")

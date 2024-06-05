@@ -162,11 +162,13 @@ def test_combining_details_extra_rows(setup_data_intermediate_file):
     expected_extrarows.append(extra_csv_entry_creator({
     'normalisedname': 'PREVIOUS TRUST FUND',
     'organisationname': 'Previous Trust Fund',
-    'uid': 'GB-SC-101'}))
+    'uid': 'GB-SC-101',
+    'source': 'oscr',}))
     expected_extrarows.append(extra_csv_entry_creator({'city': 'Lincoln',
     'fulladdress': '33 Previous Address Road',
     'postcode': 'LL1 1LL',
-    'uid': 'GB-SC-101'}))
+    'uid': 'GB-SC-101',
+    'source': 'oscr',}))
 
     print(f'extrarows = {extrarows}')
     print(f'expected_extrarows = {expected_extrarows}')
@@ -207,7 +209,8 @@ def test_date_logic_date_extras(setup_data_intermediate_file):
     'postcode': '',
     'registerdate': '',
     'removeddate': '',
-    'uid': 'GB-SC-101'}))
+    'uid': 'GB-SC-101',
+    'source': 'oscr',}))
     expected_extrarows.append(extra_csv_entry_creator({'city': 'Lincoln',
     'fulladdress': '33 Previous Address Road',
     'normalisedname': '',
@@ -215,7 +218,8 @@ def test_date_logic_date_extras(setup_data_intermediate_file):
     'postcode': 'LL1 1LL',
     'registerdate': '',
     'removeddate': '',
-    'uid': 'GB-SC-101'}))
+    'uid': 'GB-SC-101',
+    'source': 'oscr',}))
     expected_extrarows.append(extra_csv_entry_creator({'city': '',
     'fulladdress': '',
     'normalisedname': '',
@@ -223,7 +227,8 @@ def test_date_logic_date_extras(setup_data_intermediate_file):
     'postcode': '',
     'registerdate': '23/06/1961',
     'removeddate': '',
-    'uid': 'GB-SC-101'}))
+    'uid': 'GB-SC-101',
+    'source': 'oscr',}))
     expected_extrarows.append(extra_csv_entry_creator({'city': '',
     'fulladdress': '',
     'normalisedname': '',
@@ -231,7 +236,8 @@ def test_date_logic_date_extras(setup_data_intermediate_file):
     'postcode': '',
     'registerdate': '30/06/1980',
     'removeddate': '',
-    'uid': 'GB-SC-101'}))
+    'uid': 'GB-SC-101',
+    'source': 'oscr',}))
     expected_extrarows.append(extra_csv_entry_creator({'city': '',
     'fulladdress': '',
     'normalisedname': '',
@@ -239,7 +245,8 @@ def test_date_logic_date_extras(setup_data_intermediate_file):
     'postcode': '',
     'registerdate': '',
     'removeddate': '23/06/2019',
-    'uid': 'GB-SC-101'}))
+    'uid': 'GB-SC-101',
+    'source': 'oscr',}))
 
     assert sorted(extrarows, key=lambda x: sorted(x.items())) == sorted(expected_extrarows, key=lambda x: sorted(x.items()))
    

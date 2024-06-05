@@ -45,7 +45,7 @@ def test_row_formatting():
     "normalisedname": 'SOMETHING NAME',
     "id_in_source":'1234',
     "source":'CareQualityCommission',
-    'iteration':''
+    'iteration':'2000'
     })
     assert CQCDataHandler().format_row(namefield,row) == new_row
 
@@ -55,6 +55,7 @@ def test_row_formatting_provider_name():
         "Name" :'Something Name',
         "Also known as" : 'Something something',
         'Provider name' : 'Provider name',
+    'Iteration':'04/2024'
 
 })
     namefield = 'Provider name'
@@ -64,6 +65,6 @@ def test_row_formatting_provider_name():
     "normalisedname": 'PROVIDER NAME',
     "id_in_source":'1234',
     "source":'CareQualityCommission',
-    'iteration':''
+    'iteration':'04/2024'
     })
     assert CQCDataHandler().format_row(namefield,row) == new_row

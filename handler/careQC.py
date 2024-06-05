@@ -9,7 +9,7 @@ exclude_filters = {
 
 class CQCDataHandler(DataHandler):
     fileencoding='UTF8'
-    tmp_fields =['iteration','namefield']
+    tmp_fields =['iteration']#,'namefield']
     def all_filters(self, row: dict) -> bool:
 
         # other filters?
@@ -47,7 +47,7 @@ class CQCDataHandler(DataHandler):
         new_row["registerdate"] = ''
         new_row["removeddate"] = ''
         new_row['companyid'] = ''
-        new_row['namefield'] = namefield
+        #new_row['namefield'] = namefield
         if namefield == 'Also known as' or namefield == 'Name': 
             new_row['iteration'] = '2000' # force AKA names into extra details by giving an early iteration year.
         else: 
