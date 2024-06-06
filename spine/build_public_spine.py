@@ -86,18 +86,10 @@ class CoreOrganisation(BaseModel): # orgs for public spine
 
     extras: list[ExtraInfo] = []
 
-    matched_orgs: list = []
+    matched_orgs: list = [] # list of (SubSpineOrg,matchtype:str) tuples
     sorted_matches: list[MatchInfo] = []
 
-  #def __str__(self):
-  #    return (
-  #        f"CoreOrganisation(uid={self.uid}, "
-  #        f"organisationname={self.organisationname}, "
-  #        f"normalisedname={self.normalisedname}, "
-  #        f"fulladdress={self.fulladdress}, "
-  #        f"city={self.city}, "
-  #        f"postcode={self.postcode}, )"
-  #             )
+  
 
     def to_extra_info(self) -> ExtraInfo:
         
@@ -105,7 +97,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
 
     
     def to_main_csv(self):
-        return self.model_dump(exclude={"extras","matched_orgs","matches"})
+        return self.model_dump(exclude={"extras","matched_orgs","sorted_matches"})
         
     def to_extras_csv(self):
         for x in self.extras:
@@ -361,6 +353,26 @@ class MainOrgList:
     def __iter__(self):
         return iter(self._store)
     
+    def report(self):
+        sourcedict = {}
+        matchdict = {}
+        all_uids = set()
+        for uid in self._store:
+            all_uids.add(uid)
+            source = self._store[uid].source
+            if source in sourcedict:
+                sourcedict[source] += 1
+            else:
+                sourcedict[source] = 1
+            matches = self._store[uid].matched_orgs
+            for m,matchtype in matches:
+                all_uids.add(m.uid)
+                if not m.source in matchdict:
+                    matchdict[m.source] = 1
+                else:
+                    matchdict[m.source] += 1
+        return sourcedict,matchdict,len(list(all_uids))
+    
     def add_to_stores(self, org):#:SubSpineOrg):
 
         def add_to_dict(dictionary, key, org):
@@ -395,57 +407,6 @@ class MainOrgList:
         
         
 
-    def old_add_to_stores(self,org):
-        if isinstance(org,SubSpineOrg):
-            new_core_org = org.to_core_org()
-            self._store[org.uid] = new_core_org
-
-
-
-
-            if not org.normalisedname in self.byname:
-                self.byname[org.normalisedname] = [new_core_org]
-            elif new_core_org not in self.byname[org.normalisedname]:
-                self.byname[org.normalisedname].append(new_core_org)
-
-            if org.companyid and org.companyid != '0'*len(org.companyid):
-                if not org.companyid in self.bycompanyid:
-                    self.bycompanyid[org.companyid] = [new_core_org]
-                elif new_core_org not in self.bycompanyid[org.companyid]:
-                    self.bycompanyid[org.companyid].append(new_core_org)
-
-            if not org.id_in_source in self.bysourceid:
-                self.bysourceid[org.id_in_source] = [new_core_org]
-            elif new_core_org not in self.bysourceid[org.id_in_source]:
-                self.bysourceid[org.id_in_source].append(new_core_org)
-
-
-        # also add the keys for anything in org.matched_orgs
-        if isinstance(org,CoreOrganisation):
-            for m in org.matched_org:
-                if not m.normalisedname in self.byname:
-                    self.byname[m.normalisedname] = [org]
-                elif org not in self.byname[m.normalisedname]:
-                    self.byname[m.normalisedname].append(org)
-
-                if m.companyid and m.companyid != '0'*len(m.companyid):
-                    if not m.companyid in self.bycompanyid:
-                        self.bycompanyid[m.companyid] = [org]
-                    elif org not in self.bycompanyid[m.companyid]:
-                        self.bycompanyid[m.companyid].append(org)
-
-                if not m.id_in_source in self.bysourceid:
-                    self.bysourceid[m.id_in_source] = [org]
-                elif org not in self.bysourceid[m.id_in_source]:
-                    self.bysourceid[m.id_in_source].append(org)
-
-        
-
-        #print(f'\n\n are stores updated?? \
-        #     \nself.store.keys = {self._store.keys()}\
-        #     \nself.byname.keys() = {self.byname.keys()}\
-        #     \nself.bycompanyid.keys() = {self.bycompanyid.keys()}\
-        #     \nself.bysourceid.keys() = {self.bysourceid.keys()}\n\n')
 
     def merge(self, orgs: list[SubSpineOrg]):
 
@@ -495,10 +456,10 @@ class MainOrgList:
     def write_out(self, filename_main: str, filename_extras: str, filename_matches: str):
 
         self.sort_matches()
-        print('\n\nsort_matches complete.')
+        #print('\n\nsort_matches complete.')
 
         self.sort_extras()
-        print('\n\nsort_extras complete.')
+        #print('\n\nsort_extras complete.')
 
 
         with open(filename_main, "w+") as out_main:
@@ -569,16 +530,24 @@ def convert_csv_to_list_of_subspine_orgs(csv_file: str) -> list[SubSpineOrg]:
 
 def process_csvs_to_build_spine(csv_file_list_order):
     main_orgs = MainOrgList()
+    progress = []
     for csv_file in csv_file_list_order:
         print(f'\n\n------------------ PROCESS: Processing file {csv_file} ------------------')
 
         base_orgs = convert_csv_to_list_of_subspine_orgs(csv_file)
-        #print(f'\n\nbase_orgs = {base_orgs}\n\n')
+        print(f'\nFile contained {len(base_orgs)} organisations \n\n')
         main_orgs.merge(base_orgs)
+        source_dict,match_dict, unique_uids = main_orgs.report()
+        if base_orgs:
+            progress.append((base_orgs[0].source,source_dict,match_dict,unique_uids))
 
-        print(f'\nPROCESS: Orgs merged into main spine: {len(main_orgs._store.keys())} organisations, of which {len([x for x in main_orgs._store.keys() if main_orgs._store[x].matched_orgs])} have matched orgs\n\n')
+        print(f'BUILD PROGRESS:\n Cumulative total of {unique_uids} organisations now processed.\n')
+        print(f'Orgs merged into main spine: {len(main_orgs._store.keys())} organisations, of which {len([x for x in main_orgs._store.keys() if main_orgs._store[x].matched_orgs])} have matched orgs\n\n')
+        print(f'Sources now in the main spine: {source_dict}\nSources from which matches were found: {match_dict}\n')
 
-        
-
+    print('For plotting:\n reports = [')  
+    for t in progress:
+        print(f'{t},')
+    print(']')
     return main_orgs
 

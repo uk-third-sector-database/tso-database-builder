@@ -37,16 +37,6 @@ example:
 Each datasource should be added as a subclass of `DataHandler` and have a mapping to it defined 
 in cli.py 
 
-## Raw data on sharepoint:
-
-    CH: TSOData/Masterlist/CompaniesHouse (use most recent bulk download)
-    Care Inspectorate: TSOData/Masterlist/CareInspectorateScotland
-    Care Quality Commission: TSOData/Masterlist/careQualityCommission
-    CoOps: TSOData/SpineData
-    Mutuals: TSOData/SpineData
-    Social housing England: TSOData/Masterlist/SocialHousingEngland
-    Scottish housing regulator: TSOData/Masterlist/ScottishHousingRegulator
-    Charity regulators: TSOData/[NorthernIreland/ccni_spine.csv]|[Scotland/ocsr_spine.csv]|[EW/ccew_spine.csv]
 
 
 
