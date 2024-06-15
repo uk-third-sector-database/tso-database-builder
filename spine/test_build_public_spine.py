@@ -2,7 +2,7 @@ from .build_public_spine import *
 import pytest
 from copy import deepcopy
 from handler.base_definitions import public_spine_entry_creator, sub_spine_entry_creator, extra_csv_entry_creator, match_csv_entry_creator, MATCHES_CSV_FIELDS, SUB_SPINE_CSV_FIELDS, SPINE_CSV_FIELDS, EXTRA_DETAILS_CSV_FIELDS
-import datetime
+
 
 def assert_files_basically_same(a,b,ignore=False):
     def filter_na_lines(line):
@@ -79,7 +79,6 @@ def setup_base_oscr_orgs():
         "source" : "oscr",
         "id_in_source" : "102",})
     
-
     b2 = sub_spine_entry_creator({
         "uid" : "GB-SC-103",
         "organisationname" : "The 41st Charity group",
@@ -405,9 +404,6 @@ def test_merge_dates(reg_dateA, reg_dateB, expected_primary_date, expected_extra
         "normalisedname" : "ORG",
         "registerdate" : expected_primary_date,
         })
-    
-    
-    
 
     base_file = write_input_data_to_tmp_file([baserow],[],SUB_SPINE_CSV_FIELDS)
     print(f'base_file = {base_file}')
@@ -538,10 +534,6 @@ def test_extras_no_change():
     assert_files_basically_same(extra_csv, expected_supp)
 
 
-def test_add_id_after_previous_match():
-    '''when a match has already been found in a source - does the {source}_id field get updated (not overwritten)'''
-
-    ...
 
 def test_build_subspine_list(setup_base_oscr_orgs):
 
@@ -556,8 +548,6 @@ def test_build_subspine_list(setup_base_oscr_orgs):
 
     assert expected_l == l
 
-def test_ftc_match():
-    ...
 
 # repeat CIS tests for CQC (@pytest.mark.parameterise)
 @pytest.mark.parametrize('basesource,mergesource,basename,mergename,match_expected',
@@ -650,10 +640,66 @@ def test_CIS_link(basesource,mergesource,basename,mergename,match_expected):
     assert_files_basically_same(extra_csv, expected_extra_csv)
     assert_files_basically_same(match_csv, expected_match_csv)
 
+@pytest.mark.parametrize('ccew_remdate,oscr_remdate',
+[('01/02/2019',''),
+('','01/02/2019')])
+def test_degreg_date(setup_base_ccew_orgs,setup_base_oscr_orgs,ccew_remdate,oscr_remdate):
+    # when there's a match, only fill spine dereg date if all matched orgs have also been deregistered
+    
+    oscr_datarow = [setup_base_oscr_orgs[0]]
+    ccew_datarow = [setup_base_ccew_orgs[0]]
+    ccew_datarow[0]['removeddate'] =  ccew_remdate
+    oscr_datarow[0]['removeddate'] = oscr_remdate
+    oscr_extras = [extra_csv_entry_creator({})]
+    ccew_extras = [extra_csv_entry_creator({})]
+    
+    oscr_file = write_input_data_to_tmp_file(oscr_datarow,oscr_extras,SUB_SPINE_CSV_FIELDS+['crossborder'])
+    ccew_file = write_input_data_to_tmp_file(ccew_datarow,ccew_extras,SUB_SPINE_CSV_FIELDS)
+    
+    main_orgs = process_csvs_to_build_spine([ccew_file,oscr_file])
+    
 
-def test_CIS_no_link():
-    # if no match, drop record
-    ...
+    # Write out to temporary files in a temp directory
+    with tempfile.TemporaryDirectory() as temp_dir:
+        print(temp_dir)
+        main_file = f"{temp_dir}/main.csv"
+        extra_file = f"{temp_dir}/extra.csv"
+        match_file = f"{temp_dir}/match.csv"
+        main_orgs.write_out(main_file, extra_file, match_file)
+        # Read the contents of the temporary files
+        with open(main_file) as main_csv_file:
+            main_csv = main_csv_file.read()
+            print(f'main_csv, output of process_csvs_to_build_spine: {main_csv}')
+        with open(extra_file) as extra_csv_file:
+            extra_csv = extra_csv_file.read()
+        with open(match_file) as match_csv_file:
+            match_csv = match_csv_file.read()
+
+    expected_main_rows = [
+    public_spine_entry_creator({
+        "uid" : "GB-CHC-1001",
+        "organisationname" : "101 Trust Fund",
+        "normalisedname" : "101 TRUST FUND",
+        "fulladdress" : "1 Trust Fund Lane",
+        "city" : "Dundee",
+        "postcode" : "LL1 1LL",
+        "registerdate" : "23/06/1961",
+        "removeddate" : "",}),
+    ]
+
+
+    expected_extra_rows = []#extra_csv_entry_creator({})]
+
+    expected_main_csv,expected_extra_csv,b = write_expected_data_to_tmp_file(expected_main_rows,expected_extra_rows,[])
+
+    with open(expected_main_csv) as csv_file:
+        expected_main_csv = csv_file.read()
+
+    assert_files_basically_same(main_csv, expected_main_csv)
+
+        
+
+
 
 def test_empty_extras():
     e = ExtraInfo(uid='1')

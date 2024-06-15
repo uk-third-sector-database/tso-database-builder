@@ -159,14 +159,14 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                     if not matched_org.source.lower() in ['careinspectoratescot','carequalitycommission']:
                         new_main_rows.append(matched_org)
                     
-                    self.sorted_matches.append(MatchInfo(uid = '', 
-                    orgA_id_in_source = self.id_in_source,
-                    orgA_source = self.source,
-                    orgA_uid = self.uid,
-                    orgB_id_in_source = matched_org.id_in_source,
-                    orgB_source = matched_org.source,
-                    orgB_uid = matched_org.uid,
-                    match_type = matchtype))
+                self.sorted_matches.append(MatchInfo(uid = '', 
+                orgA_id_in_source = self.id_in_source,
+                orgA_source = self.source,
+                orgA_uid = self.uid,
+                orgB_id_in_source = matched_org.id_in_source,
+                orgB_source = matched_org.source,
+                orgB_uid = matched_org.uid,
+                match_type = matchtype))
 
             
         return new_main_rows
@@ -174,6 +174,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
 
     def sort_extras(self):
         # Helper function to handle date parsing
+
         def parse_date(date_str):
             if date_str:
                 return datetime.strptime(date_str, '%d/%m/%Y')
@@ -191,16 +192,23 @@ class CoreOrganisation(BaseModel): # orgs for public spine
             return primary
 
         registerdates = []
+        all_orgs_removed = True # assume all organisations in list have a remdate - if not, this will be set to False and remdate in spine will not be set
         removeddates = []
+
+        if not self.removeddate:
+            all_orgs_removed = False
 
         for e in self.extras:
             if e.registerdate:
                 registerdates.append(parse_date(e.registerdate))
-            if e.removeddate:
+            if not e.removeddate:
+                all_orgs_removed = False
+            else:
                 removeddates.append(parse_date(e.removeddate))
+            
 
         earliest_register = fix_dates_set(registerdates, 0)
-        latest_removed = fix_dates_set(removeddates, -1)
+        
 
         if earliest_register:
             orgregdate = parse_date(self.registerdate)
@@ -210,13 +218,22 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                 self.extras.append(ExtraInfo(uid = self.uid, source=self.source, registerdate=self.registerdate))
                 self.registerdate = earliest_register.strftime('%d/%m/%Y')
 
-        if latest_removed:
-            orgremdate = parse_date(self.removeddate)
-            if not orgremdate:
-                self.removeddate = latest_removed.strftime('%d/%m/%Y')
-            elif latest_removed > orgremdate:
+
+        if all_orgs_removed:
+            latest_removed = fix_dates_set(removeddates, -1)
+
+            if latest_removed:
+                orgremdate = parse_date(self.removeddate)
+                if not orgremdate:
+                    self.removeddate = latest_removed.strftime('%d/%m/%Y')
+                elif latest_removed > orgremdate:
+                    self.extras.append(ExtraInfo(uid = self.uid, source=self.source, removeddate=self.removeddate))
+                    self.removeddate = latest_removed.strftime('%d/%m/%Y')
+        else:
+            # need to put self.removeddate as a supplementary info, as not all matched orgs have been dissolved
+            if self.removeddate:
                 self.extras.append(ExtraInfo(uid = self.uid, source=self.source, removeddate=self.removeddate))
-                self.removeddate = latest_removed.strftime('%d/%m/%Y')
+                self.removeddate = ''
 
         # if address info missing in primary data, find in extras? Add here if so.
 
@@ -255,7 +272,6 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
     extras: list[ExtraInfo] = []
 
     def to_extra_info(self) -> ExtraInfo:
-        #print(self.model_dump())
         return ExtraInfo(**self.model_dump())
 
 
@@ -266,9 +282,6 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
 
     def matches(self, byname:dict, bycompanyid:dict, bysourceid:dict, spinelist:dict):
         #print('in SubSpineOrg.matches')
-
-        # TO DO: we also want to look for matches in extras - spinelist[org].extras.[companyid | normalisedname] - perhaps this needs an inverse dictionary too?
-        # TO DO: need to also look in org.matched_orgs so we don't miss anything.
 
         matches_here = []
         
@@ -288,7 +301,7 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
                 matches_here.extend([(i, 'name - crossborder') for i in match])
 
             if self.source.lower() == 'scottishhousingregulator' and any(x.source.lower == 'oscr' for x in match):
-#                print(f' --- SHR match found for {self.normalisedname}')
+                print(f' --- SHR match found for {self.normalisedname}')
                 matches_here.extend([(i, 'name - housing') for i in match])   
 
             if self.source.lower() == 'socialhousingengland' and any(x.source.lower() == 'ccew' for x in match):
@@ -474,19 +487,19 @@ class MainOrgList:
                         csv_x.writeheader()
 
                     for org in self._store.values():
-                        if org.source.lower() in ['careinspectoratescot','carequalitycommission']:
-                            continue
+                        if not org.source.lower() in ['careinspectoratescot','carequalitycommission']:
+                            
                         
-                        for row in [org.to_main_csv()]:
-                            filtered_row = {key: row[key] for key in SPINE_CSV_FIELDS if key in row}
-                            main_csv.writerow(filtered_row)
-                        
-                        for row in org.to_extras_csv():
-                            filtered_row = {key: row[key] for key in EXTRA_DETAILS_CSV_FIELDS if key in row}
-                            extras_csv.writerow(filtered_row)
-                        
-                        for row in org.to_match_csv():
-                            matches_csv.writerow(row)
+                            for row in [org.to_main_csv()]:
+                                filtered_row = {key: row[key] for key in SPINE_CSV_FIELDS if key in row}
+                                main_csv.writerow(filtered_row)
+
+                            for row in org.to_extras_csv():
+                                filtered_row = {key: row[key] for key in EXTRA_DETAILS_CSV_FIELDS if key in row}
+                                extras_csv.writerow(filtered_row)
+
+                            for row in org.to_match_csv():
+                                matches_csv.writerow(row)
 
 
 
@@ -544,6 +557,8 @@ def process_csvs_to_build_spine(csv_file_list_order):
         print(f'BUILD PROGRESS:\n Cumulative total of {unique_uids} organisations now processed.\n')
         print(f'Orgs merged into main spine: {len(main_orgs._store.keys())} organisations, of which {len([x for x in main_orgs._store.keys() if main_orgs._store[x].matched_orgs])} have matched orgs\n\n')
         print(f'Sources now in the main spine: {source_dict}\nSources from which matches were found: {match_dict}\n')
+
+        
 
     print('For plotting:\n reports = [')  
     for t in progress:
