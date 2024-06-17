@@ -255,8 +255,8 @@ Details for each source are given in the sections below.
 Companies House release a bulk download every quarter of all currently live companies\footnote{\url{https://download.companieshouse.gov.uk/en_output.html}}. The Beta public 
 spine encorporates these downloads for June 2023, October 2023, March 2024 and May 2024. 
 
-Using bulk downloads alone would only mean organisations that were dissolved earlier than 2023 would not be present in the database. However the companies house API allows for detailed searching of the data, so we used 
-this to find any companies registered and dissolved which fit our inclusion criteria (in particular the company type, see table \ref{tab:CH_companytypes}). The code used to search the API is found in our github repository 
+Using bulk downloads alone would only mean organisations that were dissolved earlier than 2023 would not be present in the database. Using the Companies House API
+we found all companies registered and dissolved which fit our inclusion criteria (in particular the company type, see table \ref{tab:CH_companytypes}). The code used to search the API is found in our github repository 
 \url{https://github.com/uk-third-sector-database/ch_adv_scraper}.
 
 % inlcuded company types from CH
@@ -308,12 +308,18 @@ Companies house data includes a 'company category' for each organisation. Table 
 \end{table}
 
 
-
+\clearpage
 \subsection{Co-operatives 	}
+\url{https://www.uk.coop/resources/open-data}
 \subsection{Mutuals Public Register }
+\url{https://mutuals.fca.org.uk/}
 \subsection{Scottish Housing Register }
+\url{https://www.housingregulator.gov.scot/landlord-performance/statistical-information/}
 \subsection{Social Housing England 	}
+\url{https://www.gov.uk/government/publications/registered-providers-of-social-housing}
 \subsection{Care Inspectorate Scotland }
+\url{https://www.careinspectorate.com/index.php/statistics-and-analysis/data-and-analysis}
 \subsection{Care Quality Commission }
+\url{https://www.cqc.org.uk/about-us/transparency/using-cqc-data}
 
 \end{document}
