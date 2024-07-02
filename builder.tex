@@ -223,7 +223,7 @@ More information about the processes for each source are found in the appendix, 
 \section*{Appendix: Data Sources}
 
 All data in the spine comes from publicly available sources. The number of organisations in the database (whether in the list of 
-core organisation or via matching) are shown in figure \ref{fig:all_used_orgs}, with counts shown in table \ref{tab:all_used_orgs}.
+core organisation or via matching) are shown in Figure \ref{fig:all_used_orgs}, with counts shown in Table \ref{tab:all_used_orgs}.
 
 \begin{figure}[h]
   \centering
@@ -237,16 +237,295 @@ core organisation or via matching) are shown in figure \ref{fig:all_used_orgs}, 
 
 Details for each source are given in the sections below.
 
+\clearpage
 \subsection{Charity Commission for England and Wales (CCEW)}
 \url{https://www.gov.uk/government/organisations/charity-commission}
 
+This section outlines the use of CCEW regulatory data in the construction of the third sector
+organisational spine\footnote{For further detail on how this data was used, please see the accompanying
+ccew\_publicspine\_prep.do file.}.
+
+The CCEW data used in this project comprised 27 individual data files that were obtained
+between 2001 and 2023. These files were used to compile a list of unique charities, and to
+extract   as   many   unique   names,   addresses,   registration   dates,   and   removal   dates   for   each
+organisation. These files are detailed below: 
+\begin{itemize}
+  \item CC\_appended\_March23.dta [English and Welsh Charity Register - March 2023]
+
+  \item CC\_charity\_other\_names.dta [File containing additional names for English and Welsh
+charities - March 2023]
+  \item ccr2001\_repaired.dta   [Historical   file   from   2001,   used   to   extract   charity   names,
+addresses, company numbers, dates of registration and removal]
+  \item 24 historical snapshots from June 2011, March 2012 to 2019, April 2020 to 21, and March
+2022 [Used to extract charity names, addresses, dates of registration and removal]
+\end{itemize}
+
+In order to compile all available information from these files, we created separate lists of unique
+names, addresses, registration dates, and removal dates. These lists were grouped using the
+identification number assigned to each charity by the CCEW (e.g., Stroud Earth Community in
+Gloucestershire operates under the charity number 1199586). These lists were then normalised
+in order to de-duplicate the information. For charity names, this process entailed removing
+leading   spaces,   removing   trailing   spaces,   collapsing   consecutive   internal   spaces,   and
+converting all characters to lower case. In the case of addresses, the same process was followed
+using a concatenated string comprising the first address line and the postcode. For registration
+and removal dates, we converted all dates to the same format (dd/mm/yyyy).
+
+Once this normalisation was complete, we de-duplicated each list to keep only unique pieces of
+information.   This   de-duplication   process   keeps   the   first   appearance   of   each   piece   of
+information and we provide variables in the dataset to show from which data iteration each
+value originates. These separate list of unique names, addresses, and dates are then compiled
+into a single dataset which is later merged with data from all other data sources. Using the
+historical file from 2001, we also extract 4,700 Companies House identification numbers that
+are absent from the later files we use (i.e., 2011–2023). Later in the process, we use Companies
+House IDs to link together the various data sources that produce the third sector organisational
+spine.
+The codebook of variables is found in Table \ref{tab:ccew_preprocess}.
+
+\subsubsection{Limitations }
+Despite the extensive temporal coverage of these data files (2001–2023), there are 13,243
+unique charity numbers in the data for which we do not have address information. A large
+majority of these organisations were removed from the CCEW register before 1997. Similarly,
+three of these charity numbers do not have an organisation name in any of the data iterations
+used. 
+\subsubsection{Notes}
+For   a   subset   of   charity   numbers,   these   data   contain   multiple   dates   of   registration   and/or
+removal. The data contains 341,990 unique charity numbers with 12,148 (3.55\%) having more
+than one registration date. Of the 177,706 charity numbers that have a removal date, 4,074
+(2.29\%) have more than one. 
+Below are some possible explanations for a charity having more than one date of registration or
+removal, though these are not exhaustive. 
+\begin{enumerate}
+  \item Data entry errors that are corrected in later data iterations.
+\item The CCEW removes organisations that they believe have ceased operating. In some
+cases, the organisations are still active and the CCEW adds them back to the register
+once they have confirmed their continued activity. This creates multiple distinct dates
+for the same charity number. 
+\item These multiple values show the registration/removal dates for distinct organisations that
+have since merged into a single organisation with a single charity number. In this case,
+the component parts of the merger retain their distinct dates in historical data files and
+these are kept in the final organisational spine dataset. 
+Related to point 3 above, there are charity numbers and organisations in the organisational spine
+that have since been merged into single entities. For more detail on this, please see data on
+merged charities held by the CCEW (\url{https://www.gov.uk/government/publications/register-of-
+merged-charities}). 
+\end{enumerate}
+
+\begin{table}[h]
+  \centering
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    Fieldname  &	Notes \\
+    \hline \hline
+
+uid &  Unique ID assigned to each organisation in compiled data \\ \hline
+charitynumber &  ID assigned to each organisation by CCEW \\ \hline
+organisationname &  Name of organisation \\ \hline
+normalisedname &  \\ \hline
+companyid &  ID assigned to organisation by Companies House \\ \hline
+housenumber &  \\ \hline
+addressline1 &  First line of address \\ \hline
+addressline2 &  Second line of address \\ \hline
+addressline3 &  Third line of address \\ \hline
+addressline4 &  Fourth line of address \\ \hline
+addressline5 &  Fifth line of address \\ \hline
+city &  City \\ \hline
+localauthority &  Local Authority area \\ \hline
+postcode &  Postcode \\ \hline
+registerdate &  Date of registration \\ \hline
+removeddate &  Date of removal \\ \hline
+name\_origin &  Iteration from which the organisation name originates \\ \hline
+address\_origin &  Iteration from which the organisation address originates \\ \hline
+regdate\_origin &  Iteration from which the registration date originates \\ \hline
+remdate\_origin &  Iteration from which the removal date originates \\ \hline
+iteration &  Iteration from which all data in a given row originates \\ \hline
+source &  Variable to indicate the data source (in this case, CCEW) \\ \hline
+% 
+  \end{tabularx}
+\caption{Fields in pre-processing of CCEW data}
+\label{tab:ccew_preprocess}
+\end{table}
+
+\clearpage%
 \subsection{Scottish Charity Regulator (OSCR)}
 \url{https://www.oscr.org.uk/}
 
+This section outlines the use of OSCR regulatory data in the construction of the third sector
+organisational spine\footnote{ For further detail on how this data was used, please see the accompanying
+oscr\_publicspine\_prep.do file.}.
 
+The OSCR data used in this project comprised six individual data files that were obtained
+between 2012 and 2023. These files were used to compile a list of unique charities, and to
+extract   as   many   unique   names,   addresses,   registration   dates,   and   removal   dates   for   each
+organisation. These files are detailed below: 
+\begin{itemize}
+  \item CharityExport-12-Apr-2023.csv : Scottish Charity Register, April 2023
+  \item CharityExport-Removed-12-Apr-2023.csv : List of removed charities, April 2023
+  \item oscr\_20210909.xlsx : Scottish Charity Register and Annual Returns, September 2021
+  \item oscr\_20210203.xlsx : Scottish Charity Register and Annual Returns, February 2021
+  \item ocsr\_scr-and-ar\_20190109.xlsx   : Scottish   Charity   Register   and   Annual   Returns,
+January 2019
+  \item sc\_chars2012.xlsx [Historical file from 2012]
+\end{itemize}
+In order to compile all available information from these files, we created separate lists of unique
+names, addresses, registration dates, and removal dates. These lists were grouped using the
+identification number assigned to each charity by OSCR (e.g., Inverness Civic Trust operates
+under the charity number SC021748). These lists were then normalised in order to de-duplicate
+the information. For charity names, this process entailed removing leading spaces, removing
+trailing spaces, collapsing consecutive internal spaces, and converting all characters to lower
+case. In the case of addresses, the same process was followed using a concatenated string
+comprising the first address line and the postcode. For registration and removal dates, we
+converted all dates to the same format (dd/mm/yyyy). 
+
+Once this normalisation was complete, we de-duplicated each list to keep only unique pieces of
+information.   This   de-duplication   process   keeps   the   first   appearance   of   each   piece   of
+information and we provide variables in the dataset to show from which data iteration each
+value originates. These separate list of unique names, addresses, and dates are then compiled
+into a single dataset which is later merged with data from all other data sources.
+Finally, the 2012 historical data file includes additional charity regulator and companies house
+ID numbers. These additional IDs were gathered at the time the data file was created and we
+include them in the final dataset in case they prove useful for future research.
+
+The codebook of variables is found in Table \ref{tab:oscr_preprocess}.
+
+
+\begin{table}[h]
+  \centering
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    Fieldname  &	Notes \\
+    \hline \hline
+uid & Unique ID assigned to each organisation in compiled data \\ \hline
+charitynumber & ID assigned to each organisation by OSCR \\ \hline
+organisationname & Name of organisation \\ \hline
+normalisedname & \\ \hline
+companyid & ID assigned to organisation by Companies House \\ \hline
+address & Full street address \\ \hline
+housenumber & \\ \hline
+addressline1 & First line of address \\ \hline
+addressline2 & Second line of address \\ \hline
+addressline3 & Third line of address \\ \hline
+addressline4 & Fourth line of address \\ \hline
+addressline5 & Fifth line of address \\ \hline
+addressline6 & Sixth line of address \\ \hline
+addressline7 & Seventh line of address \\ \hline
+addressline8 & Eighth line of address \\ \hline
+city & City \\ \hline
+localauthority & Local Authority area \\ \hline
+postcode & Postcode \\ \hline
+registerdate & Date of registration \\ \hline
+removeddate & Date of removal \\ \hline
+name\_origin & Iteration from which the organisation name originates \\ \hline
+iteration & Iteration from which all data in a given row originates \\ \hline
+charitynumber\_2012 & Alternative OSCR ID (originates in 2012 data) \\ \hline
+companyid1\_2012 & Alternative Companies House ID (originates in 2012 data) \\ \hline
+companyid2\_2012 & Alternative Companies House ID (originates in 2012 data) \\ \hline
+companyid3\_2012 & Alternative Companies House ID (originates in 2012 data) \\ \hline
+source & Variable to indicate the data source (in this case, OSCR) \\ \hline
+\end{tabularx}
+\caption{Fields in pre-processing of OSCR data}
+\label{tab:oscr_preprocess}
+\end{table}
+
+\subsubsection{Limitations}
+There are 1,776 unique charity numbers in this data that don’t have organisation names or any
+address information. Similarly, there is no useful data on registration or removal dates for these
+organisations.   OSCR   uses   default   values   for   registration   (01/01/1992)   and   removal
+(02/06/2012) dates for many organisations in their data. For these 1,776 charities, all have the
+default removal date and all but two have the default registration date. Due to the lack of
+organisation names, addresses, and dates for these organisations, we exclude them from the
+final dataset. 
+
+In addition to the 1,776 charities outlined above, there are 7,591 charities for which we don’t
+have any address data. Of these 7,591 charities, 7,572 were removed from the register on the
+default date of 02/06/2012. Despite these limitations, these charities are retained in the final
+data because we do have info on charity name, registration date, and removal date.
+Finally, there are 194 charities for which we have street address information, but the data files
+do not contain the accompanying postcode. Of these 194 charities, 189 were removed from the
+charity register on the default date of 02/06/2012. These charities are also retained in the final
+data because we do have info on charity name, registration date, removal date, and partial
+address data. 
+
+\subsubsection{Notes}
+The 2012 historical data file does not include any information on addresses, registration dates,
+or removal dates. As such, many of the names in our data file are first observed in 2012 while
+the earliest point of observation for the other key pieces of information is 2019.
+
+\clearpage
 \subsection{Charity Commission for Northern Island (CCNI)}
 \url{https://www.charitycommissionni.org.uk/}
 
+This section outlines the use of CCNI regulatory data in the construction of the third sector
+organisational spine\footnote{For further detail on how this data was used, please see the accompanying
+ccni\_publicspine\_prep.do file.}.
+
+The CCNI data used in this project comprised one open data file obtained in April 
+2023\footnote{ccni-charity-register-2023-04-19.xlsx [CCNI charity register - 19 April 2023]}. This
+file was used to compile a list of unique charities with accompanying names, addresses, and
+registration dates for each organisation. 
+
+Unlike the preceding sections on CCEW and OSCR data, the research team did not have
+historical files to supplement the open date provided by the CCNI. Additionally, the CCNI data
+provide only one organisation name, address, and registration date per CCNI charity number
+(e.g., S\'{o}l\'{a}s in Belfast operates under the charity number 100114). As such, we did not need to
+de-duplicate the CCNI data. This dataset is later merged with data from all other data sources.
+
+The codebook of variables is found in Table \ref{tab:ccni_preprocess}.
+
+\subsubsection{Limitations}
+Unlike the other charity regulator data sources, our data for CCNI does not provide multiple
+unique names, addresses, or registration dates. This information can be gathered going forward
+by updating the data periodically with the most recent CCNI open data download. However, at
+this point in time, the CCNI data is less comprehensive than its counterparts in England, Wales,
+and Scotland. Additionally, the CCNI does not provide information on the date that a charity is
+removed from the charity register. This further limits the CCNI data at this time.
+Finally, there are 17 CCNI organisations for which the data does not provide valid postcodes.
+These observations are kept in the final dataset because we do have information on charity
+names, registrations dates, and street addresses. 
+
+
+\begin{table}[h]
+  \centering
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    Fieldname  &	Notes \\
+    \hline \hline
+uid & Unique ID assigned to each organisation in compiled data \\ \hline
+charitynumber & ID assigned to each organisation by CCNI \\ \hline
+organisationname & Name of organisation \\ \hline
+normalisedname & \\ \hline
+companyid & ID assigned to organisation by Companies House \\ \hline
+housenumber & \\ \hline
+address & Full street address and postcode \\ \hline
+city & City \\ \hline
+localauthority & Local Authority area \\ \hline
+postcode & Postcode \\ \hline
+registerdate & Date of registration \\ \hline
+source & Variable to indicate the data source (in this case - CCNI) \\ \hline
+\end{tabularx}
+\caption{Fields in pre-processing of CCNI data}
+\label{tab:ccni_preprocess}
+\end{table}
+
+\clearpage
+\subsection{Overview of charity regulator data}
+\begin{table}[h]
+  \centering
+  \begin{tabularx}{\textwidth}{|X|l|l|l|l|}
+    \hline
+&CCEW&OSCR&CCNI&Total \\ \hline \hline
+Unique organisations & 341,990 & 50,652 & 7,746 & 400,388\\ \hline
+Unique names & 545,091 & 61,124 & 7,746 & 613,966\\ \hline
+Unique addresses & 668,888 & 53,612 & 7,746 & 730,517\\ \hline
+Unique registration dates & 357,631 & 50,655 & 7,746 & 416,032\\ \hline
+Unique removal dates & 182,703 & 25,262 & 0 & 207,965\\ \hline
+\end{tabularx}
+\caption{Overview of charity regulator data}
+\label{tab:char_regulator_inputs}
+\end{table}
+
+\clearpage
+
+\clearpage
 \subsection{Companies House}
 \url{https://www.gov.uk/government/organisations/companies-house}
 
@@ -309,16 +588,30 @@ Companies house data includes a 'company category' for each organisation. Table 
 
 
 \clearpage
+
+\clearpage
 \subsection{Co-operatives 	}
 \url{https://www.uk.coop/resources/open-data}
+
+
+
+\clearpage
 \subsection{Mutuals Public Register }
 \url{https://mutuals.fca.org.uk/}
+
+\clearpage
 \subsection{Scottish Housing Register }
 \url{https://www.housingregulator.gov.scot/landlord-performance/statistical-information/}
+
+\clearpage
 \subsection{Social Housing England 	}
 \url{https://www.gov.uk/government/publications/registered-providers-of-social-housing}
+
+\clearpage
 \subsection{Care Inspectorate Scotland }
 \url{https://www.careinspectorate.com/index.php/statistics-and-analysis/data-and-analysis}
+
+\clearpage
 \subsection{Care Quality Commission }
 \url{https://www.cqc.org.uk/about-us/transparency/using-cqc-data}
 
