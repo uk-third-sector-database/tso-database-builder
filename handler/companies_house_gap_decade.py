@@ -104,7 +104,7 @@ class CompaniesHouseGapDataHandler(DataHandler):
         new_row["addressline5"] = ''
         new_row["city"] = row['locality']
         new_row["postcode"] = row['postal_code']
-        new_row["source"] = 'CH'#'adv_api %s'%' '.join([row['company_type'],row['company_subtype']])
+        new_row["source"] = row['company_type']#'CH'#'adv_api %s'%' '.join([row['company_type'],row['company_subtype']])
         new_row["removeddate"] = self.map_date(row['date_of_cessation'])
         new_row["registerdate"] = self.map_date(row['date_of_creation'])
         new_row["iteration"] = '2022'

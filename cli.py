@@ -20,6 +20,7 @@ from spine.build_public_spine import process_csvs_to_build_spine
 
 from handler.all_companies_house import main_process
 
+import subprocess
 
 
 # Add entries here of handler name to handler type for use by the command line
@@ -78,7 +79,8 @@ def build_spine(infiles, outfile_base):
                        outfile_base+'.supplementary.csv', 
                        outfile_base+'.matches.csv')
     
-
+    # create doc and zip 
+    subprocess.run('./preprocess.sh')
 
 
 

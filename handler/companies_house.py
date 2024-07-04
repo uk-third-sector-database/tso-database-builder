@@ -89,7 +89,7 @@ class CompaniesHouseDataHandler(DataHandler):
             new_row["addressline3"] = ''
         new_row["city"] = row['RegAddress.PostTown']
         new_row["postcode"] = row['RegAddress.PostCode']
-        new_row["source"] = 'CH'# %s'%row['CompanyCategory']#'CompaniesHouse'
+        new_row["source"] = row['CompanyCategory']#'CompaniesHouse'#'CH'
         new_row["removeddate"] = row['DissolutionDate']
         new_row["registerdate"] = row['IncorporationDate']
         if 'PreviousName' in namefield:

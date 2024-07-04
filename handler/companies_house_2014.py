@@ -84,7 +84,7 @@ class CompaniesHouse2014DataHandler(DataHandler):
         new_row["fulladdress"] = ''
         new_row["city"] = ''
         new_row["postcode"] = row['regaddresspostcode']
-        new_row["source"] = 'CH'#'2014_prior %s'%row['companycategory']#'CompaniesHouse2014'
+        new_row["source"] = row['companycategory']#'CompaniesHouse2014'#CH
         new_row["removeddate"] = self.map_date(row['chremy'])
         new_row["registerdate"] = self.map_date(row['chregy'])
         new_row["iteration"] = '2014'
