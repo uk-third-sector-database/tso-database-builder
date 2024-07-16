@@ -1,6 +1,5 @@
 
 import re
-import time
 from datetime import datetime
 
 from .base import DataHandler

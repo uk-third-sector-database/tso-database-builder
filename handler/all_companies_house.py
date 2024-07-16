@@ -59,10 +59,10 @@ def main_process(ofilename):
         process_api_scrape(api_scrape_file,csv_writer)
 
         historic_data = '../raw_data/soton14reduced.csv'
-        process_2014_data(historic_data,csv_writer)
+        #process_2014_data(historic_data,csv_writer)
 
         bulk_downloads = glob.glob('../raw_data/BasicCompanyDataAsOneFile*csv')
-        for file in bulk_downloads:
-            process_bulk_download(file,csv_writer)
+        #for file in bulk_downloads:
+        #    process_bulk_download(file,csv_writer)
 
         #process_bulk_download('ch_test-2023-03-01.csv',csv_writer)

@@ -16,6 +16,7 @@ from handler.ccni import CCNIDataHandler
 from handler.oscr import OSCRDataHandler
 
 from spine.build_public_spine import process_csvs_to_build_spine
+from spine.verify_build import verify_representation
 
 
 from handler.all_companies_house import main_process
@@ -79,10 +80,18 @@ def build_spine(infiles, outfile_base):
                        outfile_base+'.supplementary.csv', 
                        outfile_base+'.matches.csv')
     
+
+    
     # create doc and zip 
-    subprocess.run('./preprocess.sh')
+    #subprocess.run('./prepare_zip.sh')
 
-
+@cli.command()
+@click.argument("infiles", nargs =-1)
+@click.option("-o", "outfile_base", default="public_spine")
+def check_spine(infiles, outfile_base):
+    verify_representation(infiles,outfile_base)
+    
 
 if __name__ == "__main__":
     cli()
+

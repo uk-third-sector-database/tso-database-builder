@@ -4,8 +4,21 @@ from datetime import datetime
 import re
 
 from .base_definitions import SUB_SPINE_CSV_FIELDS,EXTRA_DETAILS_CSV_FIELDS,ORG_ID_MAPPING,sub_spine_entry_creator,extra_csv_entry_creator
-from spine.wrangling import dict_indexed_by_field
 
+    
+def dict_indexed_by_field(csv_in,fieldname):
+    field_dict={}
+    with open(csv_in,'r') as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            if not fieldname in row.keys():
+                print(f'Error: no field "{fieldname}" in row keys ({row.keys()})')
+            
+            if not row[fieldname] in field_dict.keys():
+                field_dict[row[fieldname]]=[row]
+            else:
+                field_dict[row[fieldname]].append(row)
+    return field_dict
 
 class DataHandler:
     fileencoding = None
