@@ -8,6 +8,7 @@ import glob
 from .companies_house import CompaniesHouseDataHandler
 from .companies_house_gap_decade import CompaniesHouseGapDataHandler
 from .companies_house_2014 import CompaniesHouse2014DataHandler
+from .companies_house_all_orgs import CompaniesHouse_ALL_DataHandler
 
 from .base import iter_csv_rows
 
@@ -26,13 +27,13 @@ def process_2014_data(file,ofile):
         data_handler.all_filters, iter_csv_rows(file,data_handler)):
         ofile.writerows(data_handler.transform_row(new_row))
 
-def process_bulk_download(file,ofile):
+def process_bulk_download(file,ofile,datahandler):
     # extract date from filename, eg. BasicCompanyDataAsOneFile-2023-06-01.csv
     print(file)
     year,month = os.path.basename(file).split('-')[1:3]
     date = '%s/%s'%(month,year)
 
-    data_handler = CompaniesHouseDataHandler()
+    data_handler = datahandler()
     for new_row in filter(
         data_handler.all_filters, iter_csv_rows(file,data_handler)):
         rows =  data_handler.transform_row(new_row)
@@ -42,27 +43,40 @@ def process_bulk_download(file,ofile):
             else:
                 r['iteration'] = date
             r.pop('extraname')
-        ofile.writerows(rows)
+
+        filtered_rows = [{key: row[key] for key in ofile.fieldnames if key in row} for row in rows]
+    
+        ofile.writerows(filtered_rows)
 
 
 
 
-def main_process(ofilename):
+def main_process(ofilename,noexclusions):
     # open outputfile 'w+ as csvwriter
     with open(ofilename, 'w+', newline='', encoding='UTF8') as outfile:
-    
-        csv_writer = csv.DictWriter(outfile, fieldnames=SUB_SPINE_CSV_FIELDS+['iteration'])  # possibly change field list to a CH specific one?
+
+        #for AD: all orgs from bulkdownloads, no filter on companytype
+
+        if noexclusions:
+            datahandler = CompaniesHouse_ALL_DataHandler #CompaniesHouseDataHandler
+        #    fields = ['uid','organisationname','source']
+        else:
+            datahandler =  CompaniesHouseDataHandler
+        fields = SUB_SPINE_CSV_FIELDS + ['iteration']
+        
+        csv_writer = csv.DictWriter(outfile, fieldnames=fields)  # possibly change field list to a CH specific one?
         csv_writer.writeheader()  
 
-
         api_scrape_file = '../raw_data/ch_adv_scrape.csv'
-        process_api_scrape(api_scrape_file,csv_writer)
-
         historic_data = '../raw_data/soton14reduced.csv'
-        #process_2014_data(historic_data,csv_writer)
-
         bulk_downloads = glob.glob('../raw_data/BasicCompanyDataAsOneFile*csv')
-        #for file in bulk_downloads:
-        #    process_bulk_download(file,csv_writer)
 
-        #process_bulk_download('ch_test-2023-03-01.csv',csv_writer)
+        if not noexclusions:
+            # not using older data for the filter-free output
+            process_api_scrape(api_scrape_file,csv_writer)
+            process_2014_data(historic_data,csv_writer)
+
+
+        for file in bulk_downloads:
+            process_bulk_download(file,csv_writer,datahandler)
+

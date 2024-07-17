@@ -16,7 +16,7 @@ from handler.ccni import CCNIDataHandler
 from handler.oscr import OSCRDataHandler
 
 from spine.build_public_spine import process_csvs_to_build_spine
-from spine.verify_build import verify_representation
+from spine.verify_build import verify_representation,create_tex_table
 
 
 from handler.all_companies_house import main_process
@@ -62,9 +62,11 @@ def process_source(source, infile, outfile):
 
 
 @cli.command()
-@click.argument('ofile',default = 'CH.all.preprocess.csv')
-def preprocess_CH(ofile):
-    main_process(ofile)
+@click.argument('ofile',default = 'CH.all.preprocess.csv',nargs=1)
+@click.option('-n','noexclusions',default=False,is_flag=True)
+def preprocess_CH(ofile,noexclusions):
+    print(f'Running preprocess CH. Noexclusions = {noexclusions}')
+    main_process(ofile,noexclusions)
     print(f'file {ofile} written')
 
 
@@ -91,6 +93,11 @@ def build_spine(infiles, outfile_base):
 def check_spine(infiles, outfile_base):
     verify_representation(infiles,outfile_base)
     
+
+@cli.command()
+@click.argument("outfile_base", default="public_spine", nargs = 1)
+def tex_table_spine(outfile_base):
+    create_tex_table(outfile_base)
 
 if __name__ == "__main__":
     cli()

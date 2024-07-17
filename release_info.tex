@@ -1,0 +1,91 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{tabularx}
+\usepackage[export]{adjustbox} % to keep graphics centre
+
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+
+\geometry{
+    a4paper,
+    left=20mm,
+    right=20mm,
+    top=25mm,
+    bottom=25mm
+}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{1em} 
+
+
+\title{Release notes for database}
+\author{FCK}
+%\date{\today}
+
+
+\begin{document}
+
+\maketitle
+
+\section{Beta release 1: July 4 2024}
+
+Our first public release. 
+
+\begin{table}[h]
+    \centering
+    \begin{tabularx}{0.6\textwidth}{|X|r|r|r|}
+    \hline
+    source & count in & count in & count in \\
+    & spine.csv &  matches.csv &  matches.csv \\
+    &&& not spine.csv \\
+    \hline
+    CHC & 337826 & 73189 & 4044 \\
+SC & 49306 & 10086 & 1260 \\
+NIC & 7746 & 659 & 0 \\
+COH & 354443 & 86626 & 73833 \\
+COOP & 9239 & 9978 & 1323 \\
+MPR & 18649 & 13036 & 13024 \\
+SHR & 158 & 15 & 0 \\
+SHPE & 10 & 702 & 702 \\
+CIS & 0 & 531 & 531 \\
+CQC & 0 & 970 & 970 \\
+\hline
+    \end{tabularx}
+\caption{Counts of unique uids in 4-7-2024 spine and matches csvs}
+\end{table}
+
+\section{Beta release 2: July 16 2024}
+
+Second public release. Bug fix to ensure all matches are listed in the .matches.csv file. Previous version
+missed 1211 organisations due to a code bug which only included one match for each match type, so if
+an organisation matched two others by the same route it the second was omitted.
+
+\begin{table}[h]
+    \centering
+    \begin{tabularx}{0.6\textwidth}{|X|r|r|r|}
+    \hline
+    source & count in & count in & count in \\
+    & spine.csv &  matches.csv &  matches.csv \\
+    &&& not spine.csv \\
+    \hline
+    CHC & 337858 & 73309 & 4132 \\
+    SC & 49306 & 10172 & 1346 \\
+    NIC & 7746 & 659 & 0 \\
+    COH & 354443 & 87023 & 74230 \\
+    COOP & 9239 & 9978 & 1323 \\
+    MPR & 18649 & 13036 & 13024 \\
+    SHR & 158 & 15 & 0 \\
+    SHPE & 10 & 1310 & 1310 \\
+    CIS & 0 & 1882 & 1882 \\
+    CQC & 0 & 975 & 975 \\
+    \hline
+\end{tabularx}
+\caption{Counts of unique uids in 16-7-2024 spine and matches csvs}
+\end{table}
+
+
+
+\end{document}
