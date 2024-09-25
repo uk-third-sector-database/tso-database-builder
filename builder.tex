@@ -45,7 +45,7 @@ data per source, and combining all sources to create one master list.
 
 The organisational spine consists of three csv files: 
 \begin{itemize}
-\item public\_spine.spine.csv contains a row for each organisation considered to make up the UK's thrid sector, with name, address and date details. The data dictionary
+\item public\_spine.spine.csv contains a row for each organisation considered to make up the UK's third sector, with name, address and date details. The data dictionary
 is found in table \ref{tab:spine_fields}.
 \item public\_spine.supplementary.csv contains any name, address and date information associated with an organsiation which is additional to what is in the spine, 
 such as 'Also Known As' names, previous addresses. See table \ref{tab:supplementary_fields} for data dictionary
@@ -535,9 +535,13 @@ Unique removal dates & 182,703 & 25,262 & 0 & 207,965\\ \hline
 Companies House release a bulk download every quarter of all currently live companies\footnote{\url{https://download.companieshouse.gov.uk/en_output.html}}. The Beta public 
 spine encorporates these downloads for June 2023, October 2023, March 2024 and May 2024. 
 
-Using bulk downloads alone would only mean organisations that were dissolved earlier than 2023 would not be present in the database. Using the Companies House API
-we found all companies registered and dissolved which fit our inclusion criteria (in particular the company type, see table \ref{tab:CH_companytypes}). The code used to search the API is found in our github repository 
-\url{https://github.com/uk-third-sector-database/ch_adv_scraper}.
+Using bulk downloads alone would only mean organisations that were dissolved earlier than 2023 would 
+not be present in the database. Using the Companies House API
+we found all companies registered and dissolved which fit our inclusion criteria (in particular the 
+company type, see table \ref{tab:CH_companytypes}). The code used to search the API is found in our 
+github repository 
+\url{https://github.com/uk-third-sector-database/ch_adv_scraper}. Previous work by members of our team 
+identified charitible organisations in companies house data during the period ......  
 
 % inlcuded company types from CH
 
@@ -587,38 +591,249 @@ Companies house data includes a 'company category' for each organisation. Table 
 \label{tab:CH_companytypes}
 \end{table}
 
+Each of the three companies house data sources were pre-processed to identify primary name and address for each 
+included organisation, with any alternative names and addresses also stored. The three sources were then 
+also combined, since there is significant overlap between them, and the most recent name and address
+per organsiation was included in the companies house spine data, to be used for matching with other 
+registries to form the public spine.
+
+Counts of organisations ingested from each source, along with the overlaps in UIDS, are shown in 
+Figure \ref{fig:ch_source_venn}.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{CH_venn.builder.png}
+  \caption{Companies house organisations - intersections of UIDs across the three sources.}
+  \label{fig:ch_source_venn}
+\end{figure}
+
+This process led to a total of 428,673 organisations from companies house, of which 193,742 
+had supplementary/additional information. 
+
 
 \clearpage
 
 \clearpage
-\subsection{Co-operatives 	}
+\subsection{Co-operatives}
 \url{https://www.uk.coop/resources/open-data}
 
+The Co-operatives UK organisations used in this project were from open data downloads in April 2022 and April 2024.
+Open data from the Co-operatives UK organisation was mapped to the format required by the public spine
+according to the rules shown in Table \ref{tab:coop_preprocess} below.
 
+\begin{table}[h]
+  \centering
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    Fieldname  &	Notes \\
+    \hline \hline
+uid & Unique ID assigned to each organisation using \\
+&'GB-COOP-' + \textbf{CUK Organisation ID} \\ \hline
+organisationname & \textbf{Registered Name} \\ \hline
+normalisedname & Normalised version of organisationname\\ \hline
+companyid & \textbf{Registered Number} \\
+&(COOPs data links to Mutuals data using this field) \\ \hline
+fulladdress & \textbf{Registered Street} \\ \hline
+city & \textbf{Registered City} \\ \hline
+postcode & \textbf{Registered Postcode} \\ \hline
+registerdate & \textbf{Incorporation Date} \\ \hline
+removeddate & \textbf{Dissolved Date} \\ \hline
+source & Variable to indicate the data source (in this case - COOP) \\ \hline
+\hline \hline
+organisationname & \textbf{Trading Name} \\
+(in supplementary data) & \\ \hline
+\end{tabularx}
+  \caption{Fields in pre-procesing of COOP data (bold text indicates fieldname in co-op open data)}
+  \label{tab:coop_preprocess}
+  
+\end{table}
+
+Where an organisation has multiple options for name and address, the most recent
+is used in the primary data, and alternatives are stored in supplementary data.
+
+This process yeilds 10562 unique organisations, of which 8675 had additional
+ information in the supplementary csv.
 
 \clearpage
 \subsection{Mutuals Public Register }
 \url{https://mutuals.fca.org.uk/}
 
+The Mutuals Public Register is a public record of mutual societies registered by the Financial Conduct Authority. 
+Openly available register data has information for societies currently registered, and those no longer registered.
+For this project, downloads from June 2023 and April 2024 are used. The field mapping is shown in table 
+\ref{tab:mpr_preprocess}. 
+
+\begin{table}[h]
+  \centering
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    Fieldname  &	Notes \\
+    \hline \hline
+uid & Unique ID assigned to each organisation using \\
+&'GB-MPR-' + \textbf{Full Registration Number} \\ \hline
+organisationname & \textbf{Society Name} \\ \hline
+normalisedname & Normalised version of organisationname\\ \hline
+companyid &  \\ \hline
+fulladdress & \textbf{Society Address} \\ \hline
+city & \\ \hline
+postcode & Postcode taken from \textbf{Society Address} : \\ 
+&  = last two 'words' of address if their lengths are at most 4 characters each\\ \hline
+registerdate & \textbf{Registration Date} mapped from yyyy-mm-dd format to dd/mm/yyyy\\ \hline
+removeddate & \textbf{Deregistration Date} mapped from yyyy-mm-dd format to dd/mm/yyyy\\ \hline
+source & Variable to indicate the data source (in this case - MPR) \\ \hline
+\hline 
+\end{tabularx}
+  \caption{Fields in pre-procesing of Mutuals data (bold text indicates fieldname in Mutuals Public Register data)}
+  \label{tab:mpr_preprocess}
+  
+\end{table}
+
+This process yeilds 31673 unique organisations, of which 475 had additional information in the supplementary csv.
+
 \clearpage
 \subsection{Scottish Housing Register }
 \url{https://www.housingregulator.gov.scot/landlord-performance/statistical-information/}
+
+\begin{table}[h]
+  \centering
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    Fieldname  &	Notes \\
+    \hline \hline
+uid & Unique ID assigned to each organisation using \\
+&'GB-SHR-' + \textbf{Reg No}\\ \hline
+organisationname & \textbf{Social Landlord} \\ \hline
+normalisedname & Normalised version of organisationname\\ \hline
+companyid &  \\ \hline
+fulladdress &  \\ \hline
+city & \\ \hline
+postcode & \\ \hline
+registerdate & \\ \hline
+removeddate & \\ \hline
+source & Variable to indicate the data source (in this case - SHR) \\ \hline
+\hline 
+\end{tabularx}
+  \caption{Fields in pre-procesing of Scottish Housing Regulator data (bold text indicates fieldname in register)}
+  \label{tab:shr_preprocess}
+  
+\end{table}
+
+
+This process yeilds 158 unique organisations.
+
 
 \clearpage
 \subsection{Social Housing England 	}
 \url{https://www.gov.uk/government/publications/registered-providers-of-social-housing}
 
+\begin{table}[h]
+  \centering
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    Fieldname  &	Notes \\
+    \hline \hline
+uid & Unique ID assigned to each organisation using \\
+&'GB-SHPE-' + \textbf{Registration number}\\ \hline
+organisationname & \textbf{Organisation name} \\ \hline
+normalisedname & Normalised version of organisationname\\ \hline
+companyid &  \\ \hline
+fulladdress &  \\ \hline
+city & \\ \hline
+postcode & \\ \hline
+registerdate & \textbf{Registration date} \\ \hline
+removeddate & \\ \hline
+source & Variable to indicate the data source (in this case - SHPE) \\ \hline
+\hline 
+\end{tabularx}
+  \caption{Fields in pre-procesing of Social Housing Providers England data (bold text indicates fieldname in register)}
+  \label{tab:shpe_preprocess}
+  
+\end{table}
+
+
+
+This process yeilds 1320 unique organisations.
+
 \clearpage
 \subsection{Care Inspectorate Scotland }
 \url{https://www.careinspectorate.com/index.php/statistics-and-analysis/data-and-analysis}
+
+
+Organisations are included where field "Service Type" =  'Voluntary or Not for Profit'. Organisations
+have both a 'Provider Name' and a 'Service Name' in the Care Inspectorate data. We have retained
+Service Names, however the primary name for matching is the Provider Name.
+
+\begin{table}[h]
+  \centering
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    Fieldname  &	Notes \\
+    \hline \hline
+uid & Unique ID assigned to each organisation using \\
+&'GB-CIS-' + \textbf{CSNumber} or \textbf{CaseNumber}\\ \hline
+organisationname & \textbf{ServiceProvider} \\ \hline
+normalisedname & Normalised version of organisationname\\ \hline
+companyid &  \\ \hline
+fulladdress &  Concatenation of \\
+& \textbf{Address\_line\_1}, \textbf{Address\_line\_2}, \\
+& \textbf{Address\_line\_3}, and 
+\textbf{Address\_line\_4}\\
+\\ \hline
+city & \textbf{Service\_town}\\ \hline
+postcode & \textbf{Service\_Postcode}\\ \hline
+registerdate & \textbf{DateReg} \\ \hline
+removeddate & \\ \hline
+source & Variable to indicate the data source (in this case - CIS) \\ \hline
+\hline \hline
+organisationname & \textbf{ServiceName} \\
+(in supplementary data) & \\ \hline
+\hline
+\end{tabularx}
+  \caption{Fields in pre-procesing of Care Inspectorate Scotland data (bold text indicates fieldname in register)}
+  \label{tab:cis_preprocess}
+  
+\end{table}
+
+
+
+
+This process yeilds 3464 unique organisations, of which 3146 had additional information in the supplementary csv
 
 \clearpage
 \subsection{Care Quality Commission }
 \url{https://www.cqc.org.uk/about-us/transparency/using-cqc-data}
 
 
+\begin{table}[h]
+  \centering
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    Fieldname  &	Notes \\
+    \hline \hline
+uid & Unique ID assigned to each organisation using \\
+&'GB-CQC-' + \textbf{CQC Provider ID (for office use only)}\\ \hline
+organisationname & \textbf{Provider name} \\ \hline
+normalisedname & Normalised version of organisationname\\ \hline
+companyid &  \\ \hline
+fulladdress &  \textbf{Address}\\ \hline
+city & \\ \hline
+postcode & \textbf{Postcode}\\ \hline
+registerdate & \textbf{} \\ \hline
+removeddate & \\ \hline
+source & Variable to indicate the data source (in this case - CQC) \\ \hline
+\hline \hline
+organisationname & \textbf{Name} \\
+(in supplementary data) & \\ \hline
+organisationname & \textbf{Also known as} \\
+(in supplementary data) & \\ \hline
+\hline
+\end{tabularx}
+  \caption{Fields in pre-procesing of Care Inspectorate Scotland data (bold text indicates fieldname in register)}
+  \label{tab:cqc_preprocess}
 
+\end{table}
 
+This process yeilds 36629 unique organisations, of which 27406 had additional information in the supplementary csv
 
 
 \end{document}

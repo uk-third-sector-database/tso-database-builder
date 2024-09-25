@@ -58,6 +58,7 @@ class ExtraInfo(BaseModel):
         fields.remove('source')
         return all(getattr(self, field) == '' for field in fields)
     
+    
 class MatchInfo(BaseModel):
     uid: str
     orgA_id_in_source : str
@@ -178,6 +179,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
 
     def sort_extras(self):
         # Helper function to handle date parsing
+#        print(f'\n\nstart of sort_extras for org {self.uid}: \n\tself.extras = {self.extras}, \n\tself.matches = {self.matched_orgs} \n ** self.removeddate = {self.removeddate}')
 
         def parse_date(date_str):
             if date_str:
@@ -194,6 +196,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
             else:
                 return None
             return primary
+        
 
         registerdates = []
         all_orgs_removed = True # assume all organisations in list have a remdate - if not, this will be set to False and remdate in spine will not be set
@@ -202,15 +205,32 @@ class CoreOrganisation(BaseModel): # orgs for public spine
         if not self.removeddate:
             all_orgs_removed = False
 
-        for e in self.extras:
-            if e.registerdate:
-                registerdates.append(parse_date(e.registerdate))
-            if not e.removeddate:
+        # we look through matched orgs to find out if all matched orgs have been dissolved or not
+        for m in self.matched_orgs:
+            org = m[0]
+            if not org.removed():
                 all_orgs_removed = False
-            else:
-                removeddates.append(parse_date(e.removeddate))
-            
 
+        
+        
+        for extra in self.matched_orgs:
+            e = extra[0]
+            reg_date = parse_date(e.registerdate)
+            rem_date = parse_date(e.removeddate)
+            if reg_date: #e.registerdate:
+                registerdates.append(reg_date) #parse_date(e.registerdate))
+            if rem_date:
+                removeddates.append(rem_date) #parse_date(e.removeddate))
+
+        for e in self.extras:
+            reg_date = parse_date(e.registerdate)
+            rem_date = parse_date(e.removeddate)
+            if reg_date: #e.registerdate:
+                registerdates.append(reg_date) #parse_date(e.registerdate))
+            if rem_date:
+                removeddates.append(rem_date) #parse_date(e.removeddate))
+
+        #print(f' ** removeddates = {removeddates}, all_orgs_removed = {all_orgs_removed}')
         earliest_register = fix_dates_set(registerdates, 0)
         
 
@@ -225,6 +245,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
 
         if all_orgs_removed:
             latest_removed = fix_dates_set(removeddates, -1)
+            #print(f'latest_removed = {latest_removed}')
 
             if latest_removed:
                 orgremdate = parse_date(self.removeddate)
@@ -240,7 +261,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                 self.removeddate = ''
 
         # if address info missing in primary data, find in extras? Add here if so.
-
+        #print(f'self.removeddate = {self.removeddate}')
 
         for x in self.extras:       
             if (self.organisationname == x.organisationname) and (self.normalisedname == x.normalisedname):
@@ -250,6 +271,8 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                 x.fulladdress = ''
                 x.postcode=''
                 x.city=''
+            if (self.postcode == x.postcode):
+                x.postcode = ''
             if self.registerdate == x.registerdate:
                 x.registerdate=''
             if self.removeddate == x.removeddate:
@@ -282,10 +305,20 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
     def to_core_org(self) -> CoreOrganisation:
         kwargs = self.model_dump()
         return CoreOrganisation(**kwargs)
+    
+    def removed(self) -> bool:
+        removed = False
+        if self.removeddate:
+            removed = True
+        for e in self.extras:
+            if e.removeddate:
+                removed = True
+        return removed
+
 
 
     def matches(self, byname:dict, bycompanyid:dict, bysourceid:dict, spinelist:dict):
-        #print('in SubSpineOrg.matches')
+        ##print('in SubSpineOrg.matches')
 
         matches_here = []
         
@@ -476,8 +509,6 @@ class MainOrgList:
         new_store_items = []
         for org in self._store.values():
             for_store = org.sort_matches()
-            if org.normalisedname=='THE WESTMINSTER ABBEY TRUST':
-                print(f'org.sort_matches = {for_store}')
             if for_store:
                 new_store_items.extend(for_store)
 

@@ -110,7 +110,7 @@ class CompaniesHouseGapDataHandler(DataHandler):
         new_row["removeddate"] = self.map_date(row['date_of_cessation'])
         new_row["registerdate"] = self.map_date(row['date_of_creation'])
         new_row["iteration"] = '2022'
-        
+        new_row['SIC'] = row['sic_codes'].strip('[').strip(']').replace("'",'')
         
 
         super().sort_address_fields(new_row)

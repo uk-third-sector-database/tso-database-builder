@@ -87,6 +87,7 @@ class CompaniesHouse2014DataHandler(DataHandler):
         new_row["removeddate"] = self.map_date(row['chremy'])
         new_row["registerdate"] = self.map_date(row['chregy'])
         new_row["iteration"] = '2014'
+        new_row['SIC'] = ''
         
         
 

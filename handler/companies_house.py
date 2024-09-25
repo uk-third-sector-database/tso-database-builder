@@ -97,6 +97,8 @@ class CompaniesHouseDataHandler(DataHandler):
         else:
             new_row['extraname'] = 0
         
+        sic_codes = [row['SICCode.SicText_1'],row['SICCode.SicText_2'],row['SICCode.SicText_3'],row['SICCode.SicText_4']]
+        new_row['SIC'] = ', '.join([f for f in sic_codes if f]) 
         
         
 

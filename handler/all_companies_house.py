@@ -8,7 +8,7 @@ import glob
 from .companies_house import CompaniesHouseDataHandler
 from .companies_house_gap_decade import CompaniesHouseGapDataHandler
 from .companies_house_2014 import CompaniesHouse2014DataHandler
-from .companies_house_all_orgs import CompaniesHouse_ALL_DataHandler
+
 
 from .base import iter_csv_rows
 
@@ -32,10 +32,13 @@ def process_bulk_download(file,ofile,datahandler):
     print(file)
     year,month = os.path.basename(file).split('-')[1:3]
     date = '%s/%s'%(month,year)
-
+    i=0
     data_handler = datahandler()
+    print('data_handler = ',data_handler)
     for new_row in filter(
         data_handler.all_filters, iter_csv_rows(file,data_handler)):
+        i+=1
+        if i>10: break
         rows =  data_handler.transform_row(new_row)
         for r in rows:
             if r['extraname'] == 1:
@@ -51,18 +54,13 @@ def process_bulk_download(file,ofile,datahandler):
 
 
 
-def main_process(ofilename,noexclusions):
+def main_process(ofilename):
     # open outputfile 'w+ as csvwriter
     with open(ofilename, 'w+', newline='', encoding='UTF8') as outfile:
 
-        #for AD: all orgs from bulkdownloads, no filter on companytype
 
-        if noexclusions:
-            datahandler = CompaniesHouse_ALL_DataHandler #CompaniesHouseDataHandler
-        #    fields = ['uid','organisationname','source']
-        else:
-            datahandler =  CompaniesHouseDataHandler
-        fields = SUB_SPINE_CSV_FIELDS + ['iteration']
+        datahandler =  CompaniesHouseDataHandler
+        fields = SUB_SPINE_CSV_FIELDS + ['iteration'] + ['SIC']
         
         csv_writer = csv.DictWriter(outfile, fieldnames=fields)  # possibly change field list to a CH specific one?
         csv_writer.writeheader()  
@@ -71,10 +69,8 @@ def main_process(ofilename,noexclusions):
         historic_data = '../raw_data/soton14reduced.csv'
         bulk_downloads = glob.glob('../raw_data/BasicCompanyDataAsOneFile*csv')
 
-        if not noexclusions:
-            # not using older data for the filter-free output
-            process_api_scrape(api_scrape_file,csv_writer)
-            process_2014_data(historic_data,csv_writer)
+        process_api_scrape(api_scrape_file,csv_writer)
+        process_2014_data(historic_data,csv_writer)
 
 
         for file in bulk_downloads:

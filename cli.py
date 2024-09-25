@@ -63,10 +63,9 @@ def process_source(source, infile, outfile):
 
 @cli.command()
 @click.argument('ofile',default = 'CH.all.preprocess.csv',nargs=1)
-@click.option('-n','noexclusions',default=False,is_flag=True)
-def preprocess_CH(ofile,noexclusions):
-    print(f'Running preprocess CH. Noexclusions = {noexclusions}')
-    main_process(ofile,noexclusions)
+def preprocess_CH(ofile):
+    print(f'Running preprocess CH. ')
+    main_process(ofile)
     print(f'file {ofile} written')
 
 
