@@ -286,7 +286,7 @@ def compress_org_details(csv_in,
                          spine_csv_out, 
                          data_handler: DataHandler):
     
-    '''run as part of initial processing of an input
+    '''run as part of initial processing of an input;
     required as some sources have details across multiple lines, which need to be processed
     on a per-source basis.
     Outputs the two csvs - spine and supplementary - for this source (DataHandler)

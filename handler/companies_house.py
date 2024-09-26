@@ -29,7 +29,17 @@ exclude_filters = {
         "other company type"
     ]
 }
-
+include_filters = {
+    "CompanyCategory":[
+    'pri/ltd by guar/nsc (private, limited by guarantee, no share capital)',
+    "pri/lbg/nsc (private, limited by guarantee, no share capital, use of 'limited' exemption)",
+    'charitable incorporated organisation',
+    'community interest company',
+    'registered society',
+    'scottish charitable incorporated organisation',
+    'industrial and provident society'
+]
+}
 
 class CompaniesHouseDataHandler(DataHandler):
     fileencoding='UTF8'
@@ -37,12 +47,11 @@ class CompaniesHouseDataHandler(DataHandler):
     
     def all_filters(self, row: dict) -> bool:
         
-        # exclude row if in exclude_filters
+        ##exclude row if in exclude_filters
         for fieldname, exclude_values in exclude_filters.items():
             if row.get(fieldname).lower() in exclude_values:
                 return False
         return True
-            
 
     def map_date(self, datestr):
         if not datestr:
@@ -89,7 +98,8 @@ class CompaniesHouseDataHandler(DataHandler):
             new_row["addressline3"] = ''
         new_row["city"] = row['RegAddress.PostTown']
         new_row["postcode"] = row['RegAddress.PostCode']
-        new_row["source"] = row['CompanyCategory']#'CompaniesHouse'#'CH'
+        new_row["source"] = 'CH'
+        new_row["companytype"] = row['CompanyCategory']#'CompaniesHouse'#'CH'
         new_row["removeddate"] = row['DissolutionDate']
         new_row["registerdate"] = row['IncorporationDate']
         if 'PreviousName' in namefield:
@@ -97,8 +107,8 @@ class CompaniesHouseDataHandler(DataHandler):
         else:
             new_row['extraname'] = 0
         
-        sic_codes = [row['SICCode.SicText_1'],row['SICCode.SicText_2'],row['SICCode.SicText_3'],row['SICCode.SicText_4']]
-        new_row['SIC'] = ', '.join([f for f in sic_codes if f]) 
+        #sic_codes = [row['SICCode.SicText_1'],row['SICCode.SicText_2'],row['SICCode.SicText_3'],row['SICCode.SicText_4']]
+        #new_row['SIC'] = ', '.join([f for f in sic_codes if f]) 
         
         
 

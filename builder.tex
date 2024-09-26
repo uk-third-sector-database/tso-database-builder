@@ -218,6 +218,28 @@ More information about the processes for each source are found in the appendix, 
   \end{figure}
 
 
+  \begin{table}[h]
+    \centering
+  \begin{tabularx}{0.8\textwidth}{|X|r|r|r|}
+    \hline
+    source & count in spine & count of matches & count of matches not in spine \\
+    \hline
+    CHC & 337858 & 73308 & 4132 \\\hline
+    SC & 49306 & 10172 & 1346 \\\hline
+    NIC & 7746 & 659 & 0 \\\hline
+    COH & 362311 & 87023 & 74229 \\\hline
+    COOP & 9239 & 9978 & 1323 \\\hline
+    MPR & 18649 & 13036 & 13024 \\\hline
+    SHR & 158 & 15 & 0 \\\hline
+    SHPE & 9 & 1311 & 1311 \\\hline
+    CIS & 0 & 1882 & 1882 \\\hline
+    CQC & 0 & 975 & 975 \\\hline
+    \hline
+\end{tabularx}
+    \caption{Counts of organisations in the spine, and matched to the spine, from each source register}
+    \label{tab:counts_per_source}
+    \end{table}
+
 
 \clearpage
 \appendix
@@ -607,8 +629,67 @@ Figure \ref{fig:ch_source_venn}.
   \label{fig:ch_source_venn}
 \end{figure}
 
-This process led to a total of 428,673 organisations from companies house, of which 193,742 
+This process led to a total of 436,540 organisations from companies house, of which 197,517 
 had supplementary/additional information. 
+
+The distribution across company categories is seen in Table \ref{tab:CH_types_dist}. There are different abbreviations used, depending on 
+source of the data. Additionally there are numbers of cases where the company type includes Community Interest Company along with another type. 
+
+
+\begin{table}[h]
+  \begin{tabularx}{\textwidth}{|X|r|}
+    \hline
+    Company Type (alphabeticalised) & Count of organisations \\ \hline
+    \hline
+    CLG                                                                                        &  189348 \\ \hline
+    Charitable Incorporated Organisation                                                       &  346682 \\ \hline
+    Community Interest Company                                                                 &  358012 \\ \hline
+    Industrial and Provident Society                                                           &   15366 \\ \hline
+    PRI/LBG/NSC (Private, Limited by guarantee, no share capital, use of 'Limited' exemption)  &  436013 \\ \hline
+    PRI/LTD BY GUAR/NSC (Private, limited by guarantee, no share capital)                      & 1212152 \\ \hline
+    Registered Society                                                                         &  105512 \\ \hline
+    Scottish Charitable Incorporated Organisation                                              &   63394 \\ \hline
+    ltd community-interest-company                                                             &    9343 \\ \hline
+    plc community-interest-company                                                             &       2 \\ \hline
+    private-limited-guarant-nsc                                                                &  193501 \\ \hline
+    private-limited-guarant-nsc community-interest-company                                     &   82326 \\ \hline
+    private-limited-guarant-nsc-limited-exemption                                              &   67796 \\ \hline
+    private-limited-guarant-nsc-limited-exemption community-interest-company                   &     102 \\ \hline
+
+\hline
+  \end{tabularx}
+  \caption{Distribution of company types in dataset.}
+  \label{tab:CH_types_dist}
+\end{table}
+
+Compressing these categories such that all Community Interest Companies are grouped, and all remaining companies which are
+limited by guarantee (with or without 'limited exemption', with or without 'private'),
+ gives the counts shown in Table \ref{tab:CH_types_compressed}, and in Figure \ref{fig:CH_types_compressed}.
+
+\begin{table}[h]
+  \centering
+  \begin{tabularx}{0.8\textwidth}{|X|r|}
+    \hline
+    Company Type (alphabeticalised) & Count of organisations \\ \hline
+    \hline
+Charitable Incorporated Organisation          &    346682\\ \hline
+Community Interest Company                    &    449785\\ \hline
+Company Limited by Guarantee                  &   2098810\\ \hline
+Industrial and Provident Society              &     15366\\ \hline
+Registered Society                            &    105512\\ \hline
+Scottish Charitable Incorporated Organisation &     63394\\ \hline
+\end{tabularx}
+\caption{Distribution of company types in dataset (compressed company types).}
+\label{tab:CH_types_compressed}
+\end{table}
+
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{CH_dist.png}
+  \caption{Companies house organisations by company type (compressed).}
+  \label{fig:CH_types_compressed}
+\end{figure}
 
 
 \clearpage

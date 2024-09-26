@@ -178,9 +178,8 @@ class CoreOrganisation(BaseModel): # orgs for public spine
 
 
     def sort_extras(self):
-        # Helper function to handle date parsing
-#        print(f'\n\nstart of sort_extras for org {self.uid}: \n\tself.extras = {self.extras}, \n\tself.matches = {self.matched_orgs} \n ** self.removeddate = {self.removeddate}')
 
+        # Helper function to handle date parsing
         def parse_date(date_str):
             if date_str:
                 return datetime.strptime(date_str, '%d/%m/%Y')
@@ -230,7 +229,6 @@ class CoreOrganisation(BaseModel): # orgs for public spine
             if rem_date:
                 removeddates.append(rem_date) #parse_date(e.removeddate))
 
-        #print(f' ** removeddates = {removeddates}, all_orgs_removed = {all_orgs_removed}')
         earliest_register = fix_dates_set(registerdates, 0)
         
 
@@ -245,7 +243,6 @@ class CoreOrganisation(BaseModel): # orgs for public spine
 
         if all_orgs_removed:
             latest_removed = fix_dates_set(removeddates, -1)
-            #print(f'latest_removed = {latest_removed}')
 
             if latest_removed:
                 orgremdate = parse_date(self.removeddate)
@@ -261,7 +258,6 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                 self.removeddate = ''
 
         # if address info missing in primary data, find in extras? Add here if so.
-        #print(f'self.removeddate = {self.removeddate}')
 
         for x in self.extras:       
             if (self.organisationname == x.organisationname) and (self.normalisedname == x.normalisedname):

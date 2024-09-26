@@ -32,13 +32,10 @@ def process_bulk_download(file,ofile,datahandler):
     print(file)
     year,month = os.path.basename(file).split('-')[1:3]
     date = '%s/%s'%(month,year)
-    i=0
     data_handler = datahandler()
     print('data_handler = ',data_handler)
     for new_row in filter(
         data_handler.all_filters, iter_csv_rows(file,data_handler)):
-        i+=1
-        if i>10: break
         rows =  data_handler.transform_row(new_row)
         for r in rows:
             if r['extraname'] == 1:
@@ -60,7 +57,7 @@ def main_process(ofilename):
 
 
         datahandler =  CompaniesHouseDataHandler
-        fields = SUB_SPINE_CSV_FIELDS + ['iteration'] + ['SIC']
+        fields = SUB_SPINE_CSV_FIELDS + ['iteration'] + ['companytype']
         
         csv_writer = csv.DictWriter(outfile, fieldnames=fields)  # possibly change field list to a CH specific one?
         csv_writer.writeheader()  
