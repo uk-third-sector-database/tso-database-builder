@@ -73,3 +73,4 @@ def main_process(ofilename):
         for file in bulk_downloads:
             process_bulk_download(file,csv_writer,datahandler)
 
+
