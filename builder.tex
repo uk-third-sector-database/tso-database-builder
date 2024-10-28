@@ -32,8 +32,8 @@
 
 \maketitle
 \section{Introduction}
-This document is a guide to the Third Sector Database, a ‘spine’ of all 
-organisations comprising the third sector in the United Kingdom, along with 
+This document is a guide to the UK Third Sector and Civil Society Database, a ‘spine’ of all 
+registered organisations comprising the third sector and civil society in the United Kingdom, along with 
 linkages between organisations which appear in more than one register.
 
 Ten data sources are combined in order to build the organisational spine. This document briefly introduces the processes of data collection, pre-processing of 
@@ -555,21 +555,23 @@ Unique removal dates & 182,703 & 25,262 & 0 & 207,965\\ \hline
 
 
 Companies House release a bulk download every quarter of all currently live companies\footnote{\url{https://download.companieshouse.gov.uk/en_output.html}}. The Beta public 
-spine encorporates these downloads for June 2023, October 2023, March 2024 and May 2024. 
+spine encorporates these downloads for June 2023, October 2023, March 2024 and May 2024. Beta release \#3 additionally includes the September 2024 download.
 
-Using bulk downloads alone would only mean organisations that were dissolved earlier than 2023 would 
+Using bulk downloads alone would mean organisations that were dissolved earlier than 2023 would 
 not be present in the database. Using the Companies House API
-we found all companies registered and dissolved which fit our inclusion criteria (in particular the 
-company type, see table \ref{tab:CH_companytypes}). The code used to search the API is found in our 
+we found all companies registered and dissolved which fit our inclusion criteria (see table \ref{tab:CH_companytypes} for included
+company types). 
+The code used to search the API is found in our 
 github repository 
 \url{https://github.com/uk-third-sector-database/ch_adv_scraper}. Previous work by members of our team 
-identified charitible organisations in companies house data during the period ......  
+identified charitible organisations in companies house data during a period up to 2014, which was used alongside these Companies House sources. 
 
 % inlcuded company types from CH
 
 
 \subsubsection{Company types}
-Companies house data includes a 'company category' for each organisation. Table \ref{tab:CH_companytypes} shows the full list of these, along with which have been included in the public spine data.
+Companies house data includes a 'company category' for each organisation. Table \ref{tab:CH_companytypes} shows the 
+full list of these, indicating which have been included in the public spine data.
 
 \begin{table}[h]
   \centering

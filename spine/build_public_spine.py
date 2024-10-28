@@ -4,6 +4,7 @@ import os
 from  pydantic import BaseModel
 from datetime import datetime
 
+
 from handler.base_definitions import EXTRA_DETAILS_CSV_FIELDS, SPINE_CSV_FIELDS, MATCHES_CSV_FIELDS, match_csv_entry_creator, ORG_ID_MAPPING
 
 def read_dkane_sameas(file):
@@ -23,20 +24,35 @@ def read_dkane_sameas(file):
 
     ftc_dict = {}
     tuples = list(zip(trimmed_df['org_id_a'],trimmed_df['org_id_b']))
-    for x,y in tuples:
-        if x in ftc_dict:
-            ftc_dict[x].append(y)
-        else:
-            ftc_dict[x] = [y]
-        if y in ftc_dict:
-            ftc_dict[y].append(x)
-        else:
-            ftc_dict[y] = [x]
+    # orgB in _sameas is the transferee in mergers (see relationships/ccew-register-of-mergers.csv in drkane's github):
+    #  the org that receives the merged charity and so should be the primary. 
+    # So we want to note that and check for primacy in subspinelist.matches()
+    # For other sources we want to allow matches to be found in both directions.
 
-    return ftc_dict
+    primary_orgs = []
+
+    for x,y in tuples:
+        x_source = x.split('-')[1]
+        y_source = y.split('-')[1]
+        if x_source == 'CHC' and y_source == 'CHC':
+            primary_orgs.append(y)
+            
+        if x in ftc_dict:
+            #ftc_dict[x].append(y)
+            ftc_dict[x].add(y)
+        else:
+            ftc_dict[x] = {y}
+        if y in ftc_dict:
+            ftc_dict[y].add(x)
+        else:
+            ftc_dict[y] = {x}
+
+    return ftc_dict, primary_orgs
     
 
-ftc_dict = read_dkane_sameas('../raw_data/dkane_relationships_sameas.csv')
+ftc_dict, primary_ftc_orgs = read_dkane_sameas('../raw_data/FTC_data/dkane_relationships_sameas.csv')
+
+
 
 class ExtraInfo(BaseModel):
     uid: str
@@ -69,6 +85,8 @@ class MatchInfo(BaseModel):
     orgB_uid : str
     match_type : str
 
+
+
 class CoreOrganisation(BaseModel): # orgs for public spine
     uid: str
     organisationname: str
@@ -89,7 +107,6 @@ class CoreOrganisation(BaseModel): # orgs for public spine
     matched_orgs: list = [] # list of (SubSpineOrg,matchtype:str) tuples
     sorted_matches: list[MatchInfo] = []
 
-  
 
     def to_extra_info(self) -> ExtraInfo:
         
@@ -110,6 +127,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
             yield m.model_dump()
 
 
+  
     def sort_matches(self):
         # decide what goes in main spine and what's in extras
 
@@ -120,8 +138,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
         # matchtype is in ['companyid - companyid', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source', 'ftc']
 
         matchtype_order = ['ftc', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source' , 'name - housing', 'name - care', 'companyid - companyid']
-
-
+#   
         if len(self.matched_orgs)==0:
             return
         
@@ -168,11 +185,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                     match_type = matchtype))
 
         
-        if self.normalisedname == 'THE WESTMINSTER ABBEY TRUST' or self.uid in ['GB-CHC-265550','GB-CHC-1116371','GB-CHC-268963']:
-            print(self)
-            print(f'\nin self.sort_matches. new_main_rows = {new_main_rows}\n')
-            print(f'\nin self.sort_matches. assured_matched_orgs = {assured_matched_orgs}\n')
-
+                                
 
         return new_main_rows
 
@@ -275,6 +288,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                 x.removeddate=''
     
         self.extras = [e for e in self.extras if not e.isempty()]
+
 
 
 class SubSpineOrg(BaseModel):  # sub spine format (per source)
@@ -383,6 +397,7 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
                     matches_here.append((spinelist[m],'ftc')) 
     
 
+        
         return matches_here
 
 
@@ -419,9 +434,8 @@ class MainOrgList:
                     matchdict[m.source] += 1
         return sourcedict,matchdict,len(list(all_uids))
     
-    def add_to_stores(self, org):#:SubSpineOrg):
-
-
+    def add_to_stores(self, org):
+        
         def add_to_dict(dictionary, key, org):
             if key:
                 if key not in dictionary:
@@ -432,21 +446,16 @@ class MainOrgList:
 
         if isinstance(org, SubSpineOrg):
             new_core_org = org.to_core_org()
-            self._store[org.uid] = new_core_org
+            org = new_core_org
 
-            add_to_dict(self.byname, org.normalisedname, new_core_org)
-            if org.companyid and org.companyid != '0' * len(org.companyid):
-                add_to_dict(self.bycompanyid, org.companyid, new_core_org)
-            add_to_dict(self.bysourceid, org.id_in_source, new_core_org)
-
-            #if org.normalisedname=='THE WESTMINSTER ABBEY TRUST':
-            #    print(f'\n\n in add to stores:\n self.byname[name] = {self.byname[org.normalisedname]}\n')
-            #    print(f'self.bysourceid = {self.bysourceid[org.id_in_source]}\n')
-            #    print(f'_store[uid] = {self._store[org.uid]}\n\n')
+        self._store[org.uid] = org
+        add_to_dict(self.byname, org.normalisedname, org)
+        if org.companyid and org.companyid != '0' * len(org.companyid):
+            add_to_dict(self.bycompanyid, org.companyid, org)
+        add_to_dict(self.bysourceid, org.id_in_source, org)
 
         # also add the keys for anything in org.matched_orgs
         if isinstance(org, CoreOrganisation):
-            
 
             for m,matchtype in org.matched_orgs:
                 add_to_dict(self.byname, m.normalisedname, org)
@@ -454,36 +463,51 @@ class MainOrgList:
                     add_to_dict(self.bycompanyid, m.companyid, org)
                 add_to_dict(self.bysourceid, m.id_in_source, org)
 
-                #if org.normalisedname=='THE WESTMINSTER ABBEY TRUST':
-                #    print(f'\n\n in add to stores:\n self.byname[name] = {self.byname[m.normalisedname]}\n')
-                #    print(f'self.bysourceid = {self.bysourceid[m.id_in_source]}\n')
-                #    print(f'_store[uid] = {self._store[org.uid]}\n\n')
+    def remove_from_stores(self, org):
+        def remove_from_dict(dictionary, key):
+            dictionary.pop(key, None)
+        remove_from_dict(self.byname, org.normalisedname)
+        remove_from_dict(self.bycompanyid, org.companyid)
+        remove_from_dict(self.bysourceid, org.id_in_source)
+        remove_from_dict(self._store, org.uid)
 
-        
-        
 
 
     def merge(self, orgs: list[SubSpineOrg]):
+        # merge SubSpineOrgs onto MainOrgList (self): check for matches
 
-        for org in orgs:
-
-            matched_org = org.matches(self.byname, self.bycompanyid, self.bysourceid, self._store)
-            
+        for this_subspine_org in orgs:
+            # does this_subspine_org match anything already in the spine (MainList (self))?
+            matched_org = this_subspine_org.matches(self.byname, self.bycompanyid, self.bysourceid, self._store)
+            #print(f'\n MATCHED_ORG = {matched_org}\n')
             if matched_org:
-   
-                # add this org to all matched org already in the spine:
-                for o,matchtype in matched_org: # o is higher up the precedence order than org
+                #print(f'\nFound matched org: {this_subspine_org.normalisedname} with match {matched_org[0][0].normalisedname} ')
+                # check if this org should be primary rather than matched:
+                if this_subspine_org.uid in primary_ftc_orgs:
+                    print(f'Primary org found for {this_subspine_org.normalisedname}: {this_subspine_org.uid}')
+                    # this is the primary org in the match
+                    new_coreorg = this_subspine_org.to_core_org()
 
-                    o.matched_orgs.append((org,matchtype))
-                    self.add_to_stores(o)
+                    # need to attach any matches so far to new_coreorg, instead of matched_org
+                    for m,matchtype in matched_org:
+                        new_coreorg.matched_orgs.extend([i for i in m.matched_orgs if i not in new_coreorg.matched_orgs])
+                        reverted_m = SubSpineOrg(**m.__dict__)  # need to downgrade matched coreorg to subspine, and put it as a match in new_coreorg.
+                        self.add_to_stores(reverted_m)
+                        self.remove_from_stores(m)
+                        new_coreorg.matched_orgs.append((reverted_m,matchtype))
+                        self.add_to_stores(new_coreorg)
+                        #print(f'added new_coreorg to store: self._store[new_coreorg.uid] = {self._store[new_coreorg.uid]} ')
 
-                    #if org.normalisedname=='THE WESTMINSTER ABBEY TRUST':
-                    #    print('org = ',org)
-                    #    print('matched_org = ',matched_org)
-                    #    print('org in matched_org (after append) = ',o)
+                else:
+                    # add this_subspine_org to all matched this_subspine_org already in the spine:
+                    for matched_coreorg,matchtype in matched_org: # o is higher up the precedence order than this_subspine_org
+                        matched_coreorg.matched_orgs.append((this_subspine_org,matchtype))
+                        #print(f'not primary: adding to store {matched_coreorg}')
+                        self.add_to_stores(matched_coreorg)
 
             else:
-                self.add_to_stores(org)
+                # no matches: add this as a new org in the spine
+                self.add_to_stores(this_subspine_org)
 
 
 
@@ -499,6 +523,7 @@ class MainOrgList:
                 for extras_row in extras_csv:
                     main_row = self._store[extras_row["uid"]]
                     main_row.extras.append(ExtraInfo(**extras_row))
+
 
 
     def sort_matches(self):
@@ -597,7 +622,7 @@ def process_csvs_to_build_spine(csv_file_list_order):
         base_orgs = convert_csv_to_list_of_subspine_orgs(csv_file)
         print(f'\nFile contained {len(base_orgs)} organisations \n\n')
         main_orgs.merge(base_orgs)
-        source_dict,match_dict, unique_uids = main_orgs.report()
+        source_dict, match_dict, unique_uids = main_orgs.report()
         if base_orgs:
             progress.append((base_orgs[0].source,source_dict,match_dict,unique_uids))
 
@@ -606,6 +631,8 @@ def process_csvs_to_build_spine(csv_file_list_order):
         print(f'Sources now in the main spine: {source_dict}\nSources from which matches were found: {match_dict}\n')
 
         
+
+    #main_orgs.check_primary_orgs()
 
     print('For plotting:\n reports = [')  
     for t in progress:
