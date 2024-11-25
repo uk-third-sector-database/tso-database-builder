@@ -200,6 +200,21 @@ Order &	Source & Code \\ \hline \hline
 \end{figure}
 
 
+\subsection{Determining primary organisations}
+The above techniques are used to match organisations between sources. Where a match occurs from within the same source regulator, 
+the primary organisation is determined by the following rules:
+\begin{itemize}
+\item If an organisation from the Charity Commission for England and Wales matches an organisation from the same commission,
+the primary organisation uses the Find That Charity lookup to identify which of the two is the 'transferee' in a reregistration. The 
+transferor is then linked to the transferee in the matches table, with the transferee being the primary organisation.
+\item In other cases where there are two organisations from the same regulator which match, the organisation considered primary
+is the one without a removal date (and is therefore still active), or the one with the most recent removal date (and was therefore
+active most recently).
+\end{itemize}
+
+If neither of these conditions lead to a decision, in particular where neither of the matched organisation have a removal date,
+the organisation with the earliest registration date is considered primary.
+
 \clearpage
 \section{Ingesting data from each source}
 

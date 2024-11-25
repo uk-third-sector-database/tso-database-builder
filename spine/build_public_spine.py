@@ -50,7 +50,7 @@ def read_dkane_sameas(file):
     return ftc_dict, primary_orgs
     
 
-ftc_dict, primary_ftc_orgs = read_dkane_sameas('../raw_data/FTC_data/dkane_relationships_sameas.csv')
+ftc_dict, primary_ccew_orgs_ftc = read_dkane_sameas('../raw_data/FTC_data/dkane_relationships_sameas.csv')
 
 
 
@@ -397,7 +397,9 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
                     matches_here.append((spinelist[m],'ftc')) 
     
 
-        
+        if len(matches_here) > 1:
+            matched_orgs = [(i[0].uid,i[1]) for i in matches_here]
+            print(f'more than one matched org: {matched_orgs} for {self.uid} {self.normalisedname} {self.source}')
         return matches_here
 
 
@@ -476,15 +478,43 @@ class MainOrgList:
     def merge(self, orgs: list[SubSpineOrg]):
         # merge SubSpineOrgs onto MainOrgList (self): check for matches
 
+        def check_removal_dates(subspine_org, matched_orgs):
+            # if any matched orgs are from the same source as subspine_org, check for removal dates:
+            # the primary org is the one without a removal date, or with the most recent removal date.
+
+            def parse_date(date_str):
+                if date_str:
+                    return datetime.strptime(date_str, '%d/%m/%Y')
+                return None
+            
+
+            primary_org = matched_orgs[0][0]
+            for m,matchtype in matched_orgs:
+                if m.source == subspine_org.source:
+                    if (primary_org.removeddate and m.removeddate):
+                        if parse_date(m.removeddate) > parse_date(primary_org.removeddate):
+
+                            primary_org = m 
+                    
+                    if not primary_org.removeddate and not m.removeddate:
+                        primary_org = m
+                    if not primary_org.removeddate and m.removeddate:
+                        primary_org = m
+                    if not m.removeddate and primary_org.removeddate:
+                        primary_org = subspine_org
+#                    if m.removeddate > primary_org.removeddate:
+ #                       primary_org = m
+            return primary_org
+
+
         for this_subspine_org in orgs:
             # does this_subspine_org match anything already in the spine (MainList (self))?
             matched_org = this_subspine_org.matches(self.byname, self.bycompanyid, self.bysourceid, self._store)
-            #print(f'\n MATCHED_ORG = {matched_org}\n')
             if matched_org:
-                #print(f'\nFound matched org: {this_subspine_org.normalisedname} with match {matched_org[0][0].normalisedname} ')
+                primary_org_within_source = check_removal_dates(this_subspine_org, matched_org)
                 # check if this org should be primary rather than matched:
-                if this_subspine_org.uid in primary_ftc_orgs:
-                    print(f'Primary org found for {this_subspine_org.normalisedname}: {this_subspine_org.uid}')
+                if (this_subspine_org.uid in primary_ccew_orgs_ftc):# or (primary_org_within_source != this_subspine_org):
+                    print(f'Primary org found for {this_subspine_org.normalisedname}: {this_subspine_org.uid} (in source {this_subspine_org.source})')  
                     # this is the primary org in the match
                     new_coreorg = this_subspine_org.to_core_org()
 
@@ -497,6 +527,18 @@ class MainOrgList:
                         new_coreorg.matched_orgs.append((reverted_m,matchtype))
                         self.add_to_stores(new_coreorg)
                         #print(f'added new_coreorg to store: self._store[new_coreorg.uid] = {self._store[new_coreorg.uid]} ')
+
+                #  then check if the removal dates indicate a different primary org; since the ftc mapping take precedence.
+                # HERE - think about what's going on here and if we're doing the right thing!!
+                #elif primary_org_within_source != this_subspine_org:
+                #    new_coreorg = primary_org_within_source.to_core_org()
+                #    for m,matchtype in matched_org:
+                #        new_coreorg.matched_orgs.extend([i for i in m.matched_orgs if i not in new_coreorg.matched_orgs])
+                #        reverted_m = SubSpineOrg(**m.__dict__)  # need to downgrade matched coreorg to subspine, and put it as a match in new_coreorg.  
+                #        self.add_to_stores(reverted_m)
+                #        self.remove_from_stores(m)
+                #        new_coreorg.matched_orgs.append((reverted_m,matchtype))
+                #        self.add_to_stores(new_coreorg)      
 
                 else:
                     # add this_subspine_org to all matched this_subspine_org already in the spine:

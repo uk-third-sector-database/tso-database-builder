@@ -2,7 +2,7 @@ from .build_public_spine import *
 import pytest
 from copy import deepcopy
 from handler.base_definitions import public_spine_entry_creator, sub_spine_entry_creator, extra_csv_entry_creator, match_csv_entry_creator, MATCHES_CSV_FIELDS, SUB_SPINE_CSV_FIELDS, SPINE_CSV_FIELDS, EXTRA_DETAILS_CSV_FIELDS
-
+import tempfile
 
 def assert_files_basically_same(a,b,ignore=False):
     def filter_na_lines(line):
@@ -27,7 +27,7 @@ def write_csv(file_name, data, fieldnames):
             if any(field.strip() for field in row.values()):
                 filtered_row = {key: row[key] for key in fieldnames if key in row}
                 writer.writerow(filtered_row)
-    print(f'Data saved to {file_name}')
+    # print(f'Data saved to {file_name}')
     return file_name
 
 def write_expected_data_to_tmp_file(data, supplementarydata, matchesdata):
@@ -248,6 +248,8 @@ def test_oscr_merge_extras(setup_base_ccew_orgs,setup_base_oscr_orgs):
 
     # edit OSCR to create a link with additional data
     oscr_datarows[0]['city'] = 'Perth'
+    oscr_datarows[0]['postcode'] = 'PL1 1LL'
+    print(f'oscr_datarows = {oscr_datarows}')
     oscr_extras = [extra_csv_entry_creator({})]
     ccew_extras = [extra_csv_entry_creator({})]
     
@@ -334,7 +336,7 @@ def test_oscr_merge_extras(setup_base_ccew_orgs,setup_base_oscr_orgs):
     expected_extra_rows = [extra_csv_entry_creator({"uid" : "GB-SC-101",
                                                 "city" : "Perth",
                                                 "fulladdress" : "1 Trust Fund Lane",
-                                                "postcode" : "LL1 1LL",
+                                                "postcode" : "PL1 1LL",
                                                 "source" : "oscr",})]
     
     expected_match_row = [match_csv_entry_creator({"uid" : 'GB-CHC-1001',
@@ -358,6 +360,7 @@ def test_oscr_merge_extras(setup_base_ccew_orgs,setup_base_oscr_orgs):
     with open(expected_extra_csv) as csv_file:
         expected_extra_csv = csv_file.read()
 
+    print(' extra_csv = ', extra_csv)
     assert_files_basically_same(extra_csv, expected_extra_csv)
 
     
