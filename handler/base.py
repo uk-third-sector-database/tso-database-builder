@@ -2,6 +2,8 @@ import csv
 import string
 from datetime import datetime
 import re
+import pandas as pd
+import os
 
 from .base_definitions import SUB_SPINE_CSV_FIELDS,EXTRA_DETAILS_CSV_FIELDS,ORG_ID_MAPPING,sub_spine_entry_creator,extra_csv_entry_creator
 
@@ -215,6 +217,10 @@ class DataHandler:
         return new_sub_spine_row, new_extras_rows
 
 
+
+
+
+
 def iter_csv_rows(filename,DataHandler):
     encoding=DataHandler.fileencoding
     with open(filename, newline="", encoding=encoding) as csvfile:
@@ -328,3 +334,27 @@ def compress_org_details(csv_in,
                 spine_writer.writerow(uid_dict[uid][0])
 
     print(f'Completed handler.base.compress_org_details - output in {spine_csv_out} and {details_csv_out}')
+
+
+def sort_csv_by_field(filename,date_field):
+    '''sorts a csv file by a date field, with null values first, new values stored in same filename, old in filename.replace('.csv','.notsorted.csv')'''
+    
+    backupfilename = f'{filename}.old'
+    try:
+        os.rename(filename,backupfilename)
+        print(f'Original file renamed to {filename.replace(".csv",".notsorted.csv")}')
+    except FileNotFoundError:
+        print(f'Error renaming file {filename} to {filename.replace(".csv",".notsorted.csv")}: file not found')
+        return
+
+    print(f'Sorting file {backupfilename} by field {date_field}\n')
+    df = pd.read_csv(backupfilename)
+    df[date_field] = pd.to_datetime(df[date_field], errors='coerce', dayfirst=True)
+
+    # Sort the dataframe by the date column (null values first, then most recent)
+    df_sorted = df.sort_values(by=date_field, na_position='first', ascending=False)
+
+    # Save the sorted dataframe to a new CSV file, with input filename
+    ofile = filename#.replace('.csv', '.sorted.csv')
+    df_sorted.to_csv(ofile, index=False, date_format='%d/%m/%Y', encoding='UTF8')
+    print(f'Sorted file written to {ofile}\n')
