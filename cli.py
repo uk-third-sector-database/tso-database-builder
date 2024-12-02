@@ -1,6 +1,6 @@
 import click
 
-from handler.base import do_csv_processing,compress_org_details
+from handler.base import do_csv_processing,compress_org_details,sort_csv_by_field
 
 from handler.companies_house import CompaniesHouseDataHandler
 from handler.companies_house_2014 import CompaniesHouse2014DataHandler
@@ -53,11 +53,14 @@ def process_source(source, infile, outfile):
     Generate a SPINE format file using data pulled from a source
     """
     if 'CompaniesHouse' in source:
-        
         # companies house data preprocessed to concatenate prior to creating spine and supplementary tables (in all_companies_house.py)
         compress_org_details(infile,outfile,CompaniesHouseDataHandler())
     else:
         do_csv_processing(infile, outfile, handler_map[source]())
+
+    # create sorted csv file from spine.csv
+    sort_csv_by_field(outfile,'removeddate')
+
 
 
 

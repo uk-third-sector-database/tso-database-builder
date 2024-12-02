@@ -37,6 +37,7 @@ python3 cli.py process-source OSCR ../raw_data/oscr_spine_public.csv ../public_s
 ##-----------------------------
 
 python3 cli.py build-spine ../public_spine_data/ccew.spine.csv ../public_spine_data/oscr.spine.csv ../public_spine_data/ccni.spine.csv ../public_spine_data/CH_all.spine.csv ../public_spine_data/CoOps.spine.csv ../public_spine_data/mutuals.spine.csv ../public_spine_data/ScotHousingReg.spine.csv ../public_spine_data/SocialHousingEngland.spine.csv ../public_spine_data/CareInspectScot.spine.csv ../public_spine_data/CQC.spine.csv -o ../public_spine_data/public_spine &> build_spine.out
+python3 cli.py build-spine ../public_spine_data/ccew.spine.sorted.csv ../public_spine_data/oscr.spine.sorted.csv ../public_spine_data/ccni.spine.sorted.csv ../public_spine_data/CH_all.spine.sorted.csv ../public_spine_data/CoOps.spine.sorted.csv ../public_spine_data/mutuals.spine.sorted.csv ../public_spine_data/ScotHousingReg.spine.sorted.csv ../public_spine_data/SocialHousingEngland.spine.sorted.csv ../public_spine_data/CareInspectScot.spine.sorted.csv ../public_spine_data/CQC.spine.sorted.csv -o ../public_spine_data/public_spine_sorted &> build_spine.sorted.out
 
 
 ##-----------------------------
