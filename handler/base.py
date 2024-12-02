@@ -339,12 +339,12 @@ def compress_org_details(csv_in,
 def sort_csv_by_field(filename,date_field):
     '''sorts a csv file by a date field, with null values first, new values stored in same filename, old in filename.replace('.csv','.notsorted.csv')'''
     
-    backupfilename = f'{filename}.old'
+    backupfilename = filename.replace(".csv",".notsorted.csv")
     try:
         os.rename(filename,backupfilename)
-        print(f'Original file renamed to {filename.replace(".csv",".notsorted.csv")}')
+        print(f'Original file renamed to {backupfilename}')
     except FileNotFoundError:
-        print(f'Error renaming file {filename} to {filename.replace(".csv",".notsorted.csv")}: file not found')
+        print(f'Error renaming file {filename} to {backupfilename}: file not found')
         return
 
     print(f'Sorting file {backupfilename} by field {date_field}\n')
