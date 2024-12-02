@@ -487,33 +487,21 @@ class MainOrgList:
                     return datetime.strptime(date_str, '%d/%m/%Y')
                 return None
             
+            org_merging_on_remdate = parse_date(subspine_org.removeddate)
+
 
             # if any matched_orgs have a later removal date than subspine_org, output an error message
             for m,matchtype in matched_orgs:
-                if m.removeddate:
-                    if subspine_org.removeddate:
-                        if parse_date(m.removeddate) > parse_date(subspine_org.removeddate):
-                            print(f'ERROR: {m.normalisedname} has a later removal date than {subspine_org.normalisedname} in source {subspine_org.source}')
-                    else:
-                        print(f'ERROR: {m.normalisedname} has a removal date, but {subspine_org.normalisedname} does not in source {subspine_org.source}')
-
-            #primary_org = matched_orgs[0][0]
-            #for m,matchtype in matched_orgs:
-            #    if m.source == subspine_org.source:
-            #        if (primary_org.removeddate and m.removeddate):
-            #            if parse_date(m.removeddate) > parse_date(primary_org.removeddate):
-#
-            #                primary_org = m 
-            #        
-            #        if not primary_org.removeddate and not m.removeddate:
-            #            primary_org = m
-            #        if not primary_org.removeddate and m.removeddate:
-            #            primary_org = m
-            #        if not m.removeddate and primary_org.removeddate:
-            #            primary_org = subspine_org
-#           #         if m.removeddate > primary_org.removeddate:
- #          #             primary_org = m
-            ##return primary_org
+                matched_coreorg_remdate = parse_date(m.removeddate)
+                if m.source == subspine_org.source:
+                    # two cases which are problematic: 
+                    # 1. org_merging_on_remdate is later than matched_coreorg_remdate, and 
+                    # 2. null org_merging_on_remdate but not null matched_coreorg_remdate (meaning that the org merging on is still active while the matched org is not)
+                    if matched_coreorg_remdate:
+                        if not org_merging_on_remdate:
+                            print(f'ERROR: {subspine_org.normalisedname} ({subspine_org.uid}) has no removal date, but {m.normalisedname} ({m.uid}, {m.removeddate}) does in source {m.source}')
+                        elif org_merging_on_remdate and (org_merging_on_remdate > matched_coreorg_remdate):
+                            print(f'ERROR: {subspine_org.normalisedname} ({subspine_org.uid}) has a later removal date ({subspine_org.removeddate}) than {m.normalisedname} ({m.uid}, {m.removeddate}) in source {m.source}')
 
 
         for this_subspine_org in orgs:
@@ -523,7 +511,7 @@ class MainOrgList:
                 check_removal_dates(this_subspine_org, matched_org)
                 # check if this org should be primary rather than matched:
                 if (this_subspine_org.uid in primary_ccew_orgs_ftc):# or (primary_org_within_source != this_subspine_org):
-                    print(f'Primary org found for {this_subspine_org.normalisedname}: {this_subspine_org.uid} (in source {this_subspine_org.source})')  
+                    print(f'Primary org found for {this_subspine_org.normalisedname}: {this_subspine_org.uid} (in source {this_subspine_org.source}) (requires switch of primary org)')  
                     # this is the primary org in the match
                     new_coreorg = this_subspine_org.to_core_org()
 
@@ -687,3 +675,5 @@ def process_csvs_to_build_spine(csv_file_list_order):
 
 
 
+#ERROR: THE ROTARY CLUB OF ROMSEY TRUST FUND (GB-CHC-1177058) has a later removal date than 
+# THE ROTARY CLUB OF ROMSEY TRUST FUND (GB-CHC-1040846) in source CCEW

@@ -25,9 +25,10 @@ class OSCRDataHandler(DataHandler):
         if not datestr:
             return ''
         try:
-            d = datetime.strptime(datestr,'%d%b%Y')
+            d = datetime.strptime(datestr,'%d/%m/%Y') # previous version: '%d%b%Y')
         except:
             print('error with date',datestr)
+            return 
         return d.strftime('%d/%m/%Y')
     
 
