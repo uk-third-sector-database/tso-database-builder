@@ -1,8 +1,9 @@
 
 from datetime import datetime
 
-from .base import DataHandler
+from .base import DataHandler,sort_encoding_issue
 from .base_definitions import sub_spine_entry_creator,extra_csv_entry_creator
+
 
 exclude_filters = {
     "organisationname": ['N/A']
@@ -10,7 +11,7 @@ exclude_filters = {
 
 
 class CCEWDataHandler(DataHandler):
-    fileencoding='Latin-1'
+    fileencoding='utf-8' #'Latin-1'
     tmp_fields = ["primary_name","primary_address","cqc_reg"]
     
 
@@ -43,6 +44,7 @@ class CCEWDataHandler(DataHandler):
         new_row={}
         for field in row:
             row[field] = row[field].strip()
+            row[field] = sort_encoding_issue(row[field])
             
         new_row["uid"] =  'GB-CHC-'+ row['charitynumber']   
         new_row["organisationname"] = row[namefield]
@@ -221,3 +223,12 @@ city,localauthority,postcode,registerdate,removeddate,name_origin,primary_name,a
 #cqc_reg = should be registered in CQC too
 
 '''
+
+'''
+(.tso) fionack@Fionas-MacBook-Air tso-database-builder % grep 'Ã^ÃÂ' ../raw_data/ccew_spine_public.csv|wc -l
+     372
+(.tso) fionack@Fionas-MacBook-Air tso-database-builder % grep 'Ã^ÃÂ' ../public_spine_data/ccew.spine.csv|wc -l
+     146
+(.tso) fionack@Fionas-MacBook-Air tso-database-builder % grep 'Ã^ÃÂ' ../public_spine_data/ccew.spine.supplementary.csv|wc -l
+     227
+     '''

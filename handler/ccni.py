@@ -5,7 +5,7 @@ from datetime import datetime
 '''
 
 
-from .base import DataHandler
+from .base import DataHandler,sort_encoding_issue
 
 exclude_filters = {
     "organisationname": ['N/A']
@@ -13,7 +13,7 @@ exclude_filters = {
 
 
 class CCNIDataHandler(DataHandler):
-    fileencoding='Latin-1'
+    fileencoding='utf-8'
     tmp_fields = []
 
     def all_filters(self, row: dict) -> bool:
@@ -44,6 +44,7 @@ class CCNIDataHandler(DataHandler):
         new_row={}
         for field in row:
             row[field] = row[field].strip()
+            row[field] = sort_encoding_issue(row[field])
         
         new_row["uid"] =  'GB-NIC-'+ row['charitynumber']   
         new_row["organisationname"] = row[namefield]

@@ -399,7 +399,9 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
 
         if len(matches_here) > 1:
             matched_orgs = [(i[0].uid,i[1]) for i in matches_here]
-            print(f'more than one matched org: {matched_orgs} for {self.uid} {self.normalisedname} {self.source}')
+            distinct_matches = set([i[0] for i in matched_orgs])
+            if len(distinct_matches) > 1:
+                print(f'more than one matched org: {matched_orgs} for {self.uid} {self.normalisedname} {self.source}')
         return matches_here
 
 

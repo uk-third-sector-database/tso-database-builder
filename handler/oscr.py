@@ -1,7 +1,7 @@
 
 from datetime import datetime
 
-from .base import DataHandler
+from .base import DataHandler,sort_encoding_issue
 from .base_definitions import sub_spine_entry_creator,extra_csv_entry_creator
 
 exclude_filters = {
@@ -10,7 +10,7 @@ exclude_filters = {
 
 
 class OSCRDataHandler(DataHandler):
-    fileencoding='Latin-1'
+    fileencoding='utf-8'#'Latin-1'
     tmp_fields = ['crossborder','name_origin','iteration']
 
     def all_filters(self,row: dict) -> bool:
@@ -25,7 +25,7 @@ class OSCRDataHandler(DataHandler):
         if not datestr:
             return ''
         try:
-            d = datetime.strptime(datestr,'%d/%m/%Y') # previous version: '%d%b%Y')
+            d = datetime.strptime(datestr,'%d%b%Y')#'%d/%m/%Y')  previous version
         except:
             print('error with date',datestr)
             return 
@@ -43,6 +43,7 @@ class OSCRDataHandler(DataHandler):
         new_row={}
         for field in row:
             row[field] = row[field].strip()
+            row[field] = sort_encoding_issue(row[field])
 
 
         new_row["uid"] =  'GB-SC-'+ row['charitynumber']   

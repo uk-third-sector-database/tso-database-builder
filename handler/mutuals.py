@@ -1,5 +1,5 @@
 
-from .base import DataHandler
+from .base import DataHandler,sort_encoding_issue
 from datetime import datetime
 
 exclude_filters = {
@@ -8,7 +8,7 @@ exclude_filters = {
 
 
 class MutualsDataHandler(DataHandler):
-    fileencoding='Latin-1'
+    fileencoding='cp1252'#utf-8'#Latin-1'
     tmp_fields = ['iteration']
     
     def all_filters(self,row: dict) -> bool:
@@ -38,6 +38,7 @@ class MutualsDataHandler(DataHandler):
         new_row={}
         for field in row:
             row[field] = row[field].strip()
+            row[field] = sort_encoding_issue(row[field])
 
         fulladdress = row['Society Address']
 

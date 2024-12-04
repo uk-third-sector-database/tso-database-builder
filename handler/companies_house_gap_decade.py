@@ -8,7 +8,7 @@ the start of this project and the legacy data held by soton (2014)
 
 from datetime import datetime
 
-from .base import DataHandler
+from .base import DataHandler,sort_encoding_issue
 
 """ exclude_filters = {
     "company_type": [
@@ -93,6 +93,7 @@ class CompaniesHouseGapDataHandler(DataHandler):
         new_row={}
         for field in row:
             row[field] = row[field].strip()
+            row[field] = sort_encoding_issue(row[field])
 
         new_row["uid"] =  'GB-COH-'+ row['company_number']       
         new_row["organisationname"] = row[namefield]

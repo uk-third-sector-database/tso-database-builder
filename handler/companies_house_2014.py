@@ -2,7 +2,7 @@
 import re
 from datetime import datetime
 
-from .base import DataHandler
+from .base import DataHandler,sort_encoding_issue
 
 exclude_filters = {
     "companycategory": [
@@ -75,6 +75,7 @@ class CompaniesHouse2014DataHandler(DataHandler):
         new_row={}
         for field in row:
             row[field] = row[field].strip()
+            row[field] = sort_encoding_issue(row[field])
 
         new_row["uid"] =  'GB-COH-'+ row['companynumber']       
         new_row["organisationname"] = row[namefield]

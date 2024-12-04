@@ -1,7 +1,7 @@
 
 from datetime import datetime
 
-from .base import DataHandler
+from .base import DataHandler,sort_encoding_issue
 from .base_definitions import sub_spine_entry_creator,extra_csv_entry_creator
 
 include_filters = {
@@ -11,7 +11,7 @@ include_filters = {
 
 
 class CareInspScotDataHandler(DataHandler):
-    fileencoding='Latin-1'
+    fileencoding='latin-1'
     tmp_fields=['iteration']#,'namefield']#,'serviceprovider']
     
     def all_filters(self, row: dict) -> bool:
@@ -54,6 +54,7 @@ class CareInspScotDataHandler(DataHandler):
         new_row={}
         for field in row:
             row[field] = row[field].strip()
+            row[field] = sort_encoding_issue(row[field])
 
         id = self.find_id_name(row)
         if not id:
