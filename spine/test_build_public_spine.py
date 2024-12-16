@@ -536,6 +536,63 @@ def test_extras_no_change():
     
     assert_files_basically_same(extra_csv, expected_supp)
 
+def test_sort_extras_compressed(setup_base_ccew_orgs):
+    '''supplementary file should have data compressed, so that all data for a given uid is on one line, unless the course provided more than one entry for a given field'''
+    
+    # one organisation:
+    ccew_row = setup_base_ccew_orgs[0]
+    print(ccew_row)
+    # supplementary data:
+    ccew_extras = [extra_csv_entry_creator({"uid" : "GB-CHC-1001",
+                    "organisationname" : "1001 Trust Fund"}),
+                extra_csv_entry_creator({"uid" : "GB-CHC-1001",
+                    "fulladdress" : "An old address",
+                    "city" : "Dundee",
+                    "postcode" : "LL1 1LJ",}),
+                extra_csv_entry_creator({"uid" : "GB-CHC-1001",
+                    "registerdate" : "23/07/1961"}),
+                extra_csv_entry_creator({"uid" : "GB-CHC-1001",
+                    "removeddate" : "01/01/2019"})]
+    
+    # expected spine file:
+    expected_spine = public_spine_entry_creator({**ccew_row})
+    print(expected_spine)
+    # expected supplementary file:
+    expected_supp = extra_csv_entry_creator({"uid" : "GB-CHC-1001",
+                                            "organisationname" : "1001 Trust Fund",
+                                            "fulladdress" : "An old address",
+                                            "city" : "Dundee",
+                                            "postcode" : "LL1 1LLJ",
+                                            "registerdate" : "23/07/1961",
+                                            "removeddate" : "01/01/2019"})
+    
+    # write input data to files:
+    ccew_file = write_input_data_to_tmp_file([ccew_row],ccew_extras,SUB_SPINE_CSV_FIELDS)
+    supp_file = ccew_file.replace('.csv','.supplementary.csv')
+
+    # process:
+    main_orgs = process_csvs_to_build_spine([ccew_file])
+    print(main_orgs)
+    assert len(main_orgs._store["GB-CHC-1001"].extras) == len(ccew_extras)
+
+    # write expected data to files:
+    expected_main_csv, expected_extra_csv, _ = write_expected_data_to_tmp_file([expected_spine],[expected_supp],[])
+    print(f'expected_main_csv = {expected_main_csv}')
+    with open(expected_main_csv) as csv_file: expected_main_csv = csv_file.read()
+    with open(expected_extra_csv) as csv_file: expected_extra_csv = csv_file.read()
+
+    # do the write_out process - this is what we're testing
+    with tempfile.TemporaryDirectory() as temp_dir:
+        main_file = f"{temp_dir}/main.csv"
+        extra_file = f"{temp_dir}/extra.csv"
+        match_file = f"{temp_dir}/match.csv"
+        main_orgs.write_out(main_file, extra_file, match_file)
+        with open(main_file) as main_csv_file, open(extra_file) as extra_csv_file:
+            main_csv = main_csv_file.read()
+            extra_csv = extra_csv_file.read()
+
+    assert_files_basically_same(extra_csv, expected_extra_csv)
+
 
 
 def test_build_subspine_list(setup_base_oscr_orgs):
