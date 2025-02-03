@@ -41,7 +41,8 @@ def fix_care_inspectorate_files():
             date = os.path.basename(file).split('MDSF_data_')[-1].strip('.csv')
             with open(file, 'r', newline='', encoding='Latin-1') as infile:
                 csv_reader = csv.DictReader(infile)
-                #print(csv_reader.fieldnames)
+                print(f'reading file {file}; using {date} as iteration')
+
                 v = ['CSNumber', 'CaseNumber','ï»¿CSNumber']
                 for i in v:
                     if i in csv_reader.fieldnames:
@@ -106,7 +107,8 @@ def fix_coops_files():
         # Iterate over each raw file
         for file in raw_files:
             year,month = os.path.basename(file).strip('.csv').split('_')[-2:]
-            date = '%s/%s'%(month,year)
+            date = f'{month}/{year}'
+
             with open(file, 'r', newline='', encoding='UTF8') as infile:
                 csv_reader = csv.DictReader(infile)
 
@@ -158,11 +160,16 @@ def fix_mutuals_files():
         
         # Iterate over each raw file
         for file in raw_files:
-            print(file)
-            year,month = os.path.basename(file).strip('.csv').split('-')[-2:]
-            date = '%s/%s'%(month,year)
+            try:
+                year,month = os.path.basename(file).strip('.csv').split('-')[-2:]
+                date = f'{month}/{year}'
+            except ValueError:
+                date_obj = datetime.strptime(os.path.basename(file).split('.')[-2], "%b%Y")
+                date = date_obj.strftime("%m/%Y")
+
             with open(file, 'r', newline='', encoding=encoding) as infile:
                 csv_reader = csv.DictReader(infile)
+                print(f'reading file {file}; using {date} as iteration')
 
                 for row in csv_reader:
                     new_row = {}
@@ -210,10 +217,15 @@ def fix_ScotHousingReg_files():
         csv_writer = csv.DictWriter(outfile, fieldnames=ScHR_fields)  
         csv_writer.writeheader()  
         for file in raw_files:
-            print(file)
             date = os.path.basename(file).split('-')[-1].strip('.csv')
+            if not date.isdigit():
+                date = os.path.basename(file).split('.')[-2].strip('.csv')[-4:]
+                if not date.isdigit():
+                    print(f'Error finding date in filename for {file} - skipping')
+                    continue
             
             with open(file, 'r', newline='', encoding='Latin-1') as infile:
+                print(f'reading file {file}; using {date} as iteration')
                 csv_reader = csv.DictReader(infile)
 
                 for row in csv_reader:
@@ -239,7 +251,7 @@ CQC_fields = [
 ]
 def fix_CQC_files():
     # Pre-process the raw files to include the source date (found in filename) as a field
-    raw_files = glob.glob('../raw_data/CareQualityCommission/*__.csv')
+    raw_files = glob.glob('../raw_data/CareQualityCommission/*.csv')
     print(raw_files)
     output_file = '../raw_data/CareQualityCommission.all.csv'
     
@@ -254,6 +266,9 @@ def fix_CQC_files():
             date = date_object.strftime("%m/%Y")
 
             with open(file, 'r', newline='', encoding='UTF8',) as infile:
+                for _ in range(4):
+                    next(infile)
+                print(f'reading file {file}')
                 csv_reader = csv.DictReader(infile)
 
                 for row in csv_reader:
@@ -270,9 +285,16 @@ def fix_CQC_files():
 
 
 if __name__ == '__main__':
-    fix_coops_files()
-    fix_care_inspectorate_files()
-    fix_mutuals_files()
-    fix_ScotHousingReg_files()
-    fix_CQC_files()
+    fix_coops_files() # done Feb25
+    #fix_care_inspectorate_files() # done Feb25
+    #fix_mutuals_files() # done Feb25
+    #fix_ScotHousingReg_files() # done Feb25
+    #fix_CQC_files() # done Feb25
+
+
+
+
+
+
+
 
