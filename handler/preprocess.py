@@ -282,14 +282,60 @@ def fix_CQC_files():
                         
             print(f"iteration {date} added to file {output_file}")
 
+SHE_fields = [
+    'Organisation name',
+    'Registration number',
+    'Registration date',
+    'Designation',
+    'Corporate form',
+    'Iteration'
+    ]
+def fix_SocialHousingEng():
+    # Pre-process the raw files to include the source date (found in filename) as a field
+    raw_files = glob.glob('../raw_data/SocialHousingEngland/*.csv')
+    print(raw_files)
+    output_file = '../raw_data/SocialHousingEng.all.csv'
+    
+    with open(output_file, 'w+', newline='', encoding='UTF8') as outfile:
+        
+        csv_writer = csv.DictWriter(outfile, fieldnames=SHE_fields)  
+        csv_writer.writeheader()  
+        for file in raw_files:
+            print(file)
+            datestr = os.path.basename(file).split('_')[-1].strip('.csv')
+            try:
+                date_obj = datetime.strptime(datestr, '%Y%m%d')
+            except ValueError:
+                try:
+                    date_obj = datetime.strptime(datestr, '%b%Y')
+                except ValueError:
+                    print(f'Error finding date in filename for {file} - skipping')
+                    continue
+            
+            date = date_obj.strftime('%m/%Y')
 
+
+            with open(file, 'r', newline='', encoding='utf-8-sig',) as infile:
+                csv_reader = csv.DictReader(infile)
+                for row in csv_reader:
+                   
+                    row['Iteration'] = date
+                    for key in SHE_fields:
+                        row.setdefault(key, '') 
+                    row = {key: row[key]for key in SHE_fields}
+                        
+                    csv_writer.writerow(row)
+                        
+            print(f"iteration {date} added to file {output_file}")
 
 if __name__ == '__main__':
-    fix_coops_files() # done Feb25
-    #fix_care_inspectorate_files() # done Feb25
-    #fix_mutuals_files() # done Feb25
-    #fix_ScotHousingReg_files() # done Feb25
-    #fix_CQC_files() # done Feb25
+    # all updated for new data Feb 2025
+    fix_SocialHousingEng()
+    fix_coops_files() 
+    fix_care_inspectorate_files() 
+    fix_mutuals_files() 
+    fix_ScotHousingReg_files() 
+    fix_CQC_files() 
 
 
 

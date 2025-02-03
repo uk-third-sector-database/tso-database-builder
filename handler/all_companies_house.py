@@ -62,9 +62,9 @@ def main_process(ofilename):
         csv_writer = csv.DictWriter(outfile, fieldnames=fields)  # possibly change field list to a CH specific one?
         csv_writer.writeheader()  
 
-        api_scrape_file = '../raw_data/ch_adv_scrape.csv'
-        historic_data = '../raw_data/soton14reduced.csv'
-        bulk_downloads = glob.glob('../raw_data/BasicCompanyDataAsOneFile*csv')
+        api_scrape_file = '../raw_data/CompaniesHouse/ch_adv_scrape.csv'
+        historic_data = '../raw_data/CompaniesHouse/soton14reduced.csv'
+        bulk_downloads = glob.glob('../raw_data/CompaniesHouse/BasicCompanyDataAsOneFile*csv')
 
         process_api_scrape(api_scrape_file,csv_writer)
         process_2014_data(historic_data,csv_writer)

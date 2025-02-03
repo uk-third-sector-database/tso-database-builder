@@ -222,7 +222,6 @@ def sort_encoding_issue(st):
     while not st.isascii():
         try:
             st = st.encode('latin-1').decode('utf-8')
-            print(st)
         except (UnicodeEncodeError, UnicodeDecodeError) as e:
             break
     return st

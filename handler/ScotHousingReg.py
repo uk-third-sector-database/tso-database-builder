@@ -1,4 +1,6 @@
-
+# possible to add scrape for addresses from https://www.housingregulator.gov.scot/landlord-performance/landlords/
+# 
+# 
 from .base import DataHandler,sort_encoding_issue
 
 exclude_filters = {

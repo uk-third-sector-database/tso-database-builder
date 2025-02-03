@@ -3,9 +3,10 @@ import pandas as pd
 import os
 from  pydantic import BaseModel
 from datetime import datetime
+import copy
 
 
-from handler.base_definitions import EXTRA_DETAILS_CSV_FIELDS, SPINE_CSV_FIELDS, MATCHES_CSV_FIELDS, match_csv_entry_creator, ORG_ID_MAPPING
+from handler.base_definitions import EXTRA_DETAILS_CSV_FIELDS, SPINE_CSV_FIELDS, MATCHES_CSV_FIELDS, match_csv_entry_creator, ORG_ID_MAPPING, extra_csv_entry_creator
 
 def read_dkane_sameas(file):
     #print(os.getcwd())
@@ -53,7 +54,6 @@ def read_dkane_sameas(file):
 ftc_dict, primary_ccew_orgs_ftc = read_dkane_sameas('../raw_data/FTC_data/dkane_relationships_sameas.csv')
 
 
-
 class ExtraInfo(BaseModel):
     uid: str
     organisationname: str = ''
@@ -63,7 +63,7 @@ class ExtraInfo(BaseModel):
     postcode: str = ''
     registerdate: str = ''
     removeddate: str = ''
-    source: str = ""
+    source: str = ''
 
     def __eq__(self, value: "ExtraInfo") -> bool:
         return self.model_dump(exclude="source") == value.model_dump(exclude="source")
@@ -74,6 +74,7 @@ class ExtraInfo(BaseModel):
         fields.remove('source')
         return all(getattr(self, field) == '' for field in fields)
     
+
     
 class MatchInfo(BaseModel):
     uid: str
@@ -106,6 +107,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
 
     matched_orgs: list = [] # list of (SubSpineOrg,matchtype:str) tuples
     sorted_matches: list[MatchInfo] = []
+    sorted_extras: list[ExtraInfo] = []
 
 
     def to_extra_info(self) -> ExtraInfo:
@@ -117,7 +119,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
         return self.model_dump(exclude={"extras","matched_orgs","sorted_matches"})
         
     def to_extras_csv(self):
-        for x in self.extras:
+        for x in self.extras:#sorted_extras:
             if not x.isempty():
                 yield x.model_dump()
 
@@ -126,9 +128,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
         for m in self.sorted_matches:
             yield m.model_dump()
 
-
-  
-    def sort_matches(self):
+        #def sort_matches(self):
         # decide what goes in main spine and what's in extras
 
         # all matches considered to create single organisation other than matchtype = 'companyid - companyid' which occurs
@@ -184,13 +184,32 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                     orgB_uid = matched_org.uid,
                     match_type = matchtype))
 
-        
-                                
-
         return new_main_rows
+
+    def consolidate_extras(self):
+        names = set()
+        addresses = set()
+        remdates = set()
+        regdates = set()
+
+        for e in self.extras:
+            names.add((e.organisationname,e.normalisedname))
+            addresses.add((e.fulladdress,e.city,e.postcode))
+            remdates.add(e.removeddate)
+            regdates.add(e.registerdate)
+
+        for n in names:
+            for a in addresses:
+                for rem in remdates:
+                    for reg in regdates:
+                        self.sorted_extras.append(ExtraInfo(uid = self.uid, organisationname = n[0], normalisedname = n[1], fulladdress = a[0], city = a[1], postcode = a[2], removeddate = rem, registerdate = reg))   
 
 
     def sort_extras(self):
+        '''Multiple functions:
+        1. find the earliest registerdate and latest removeddate from all extras for main spine row
+        2. if any data is in extras AND main spine row, remove from extras
+        3. consolidate extras per uid so that supplementary.csv has as few rows as possible'''
 
         # Helper function to handle date parsing
         def parse_date(date_str):
@@ -209,6 +228,17 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                 return None
             return primary
         
+        def find_dates(orgs, registerdates, removeddates):
+            for o in orgs:
+                if type(o) == tuple:
+                    o = o[0]
+                reg_date = parse_date(o.registerdate)
+                rem_date = parse_date(o.removeddate)
+                if reg_date:
+                    registerdates.append(reg_date)
+                if rem_date:
+                    removeddates.append(rem_date)
+
 
         registerdates = []
         all_orgs_removed = True # assume all organisations in list have a remdate - if not, this will be set to False and remdate in spine will not be set
@@ -223,27 +253,11 @@ class CoreOrganisation(BaseModel): # orgs for public spine
             if not org.removed():
                 all_orgs_removed = False
 
-        
-        
-        for extra in self.matched_orgs:
-            e = extra[0]
-            reg_date = parse_date(e.registerdate)
-            rem_date = parse_date(e.removeddate)
-            if reg_date: #e.registerdate:
-                registerdates.append(reg_date) #parse_date(e.registerdate))
-            if rem_date:
-                removeddates.append(rem_date) #parse_date(e.removeddate))
-
-        for e in self.extras:
-            reg_date = parse_date(e.registerdate)
-            rem_date = parse_date(e.removeddate)
-            if reg_date: #e.registerdate:
-                registerdates.append(reg_date) #parse_date(e.registerdate))
-            if rem_date:
-                removeddates.append(rem_date) #parse_date(e.removeddate))
+        # find earliest register date and latest removed date from all extras for main spine row
+        find_dates(self.matched_orgs, registerdates, removeddates)
+        find_dates(self.extras, registerdates, removeddates)
 
         earliest_register = fix_dates_set(registerdates, 0)
-        
 
         if earliest_register:
             orgregdate = parse_date(self.registerdate)
@@ -270,8 +284,9 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                 self.extras.append(ExtraInfo(uid = self.uid, source=self.source, removeddate=self.removeddate))
                 self.removeddate = ''
 
-        # if address info missing in primary data, find in extras? Add here if so.
+        # Consider adding: if address info missing in primary data, find in extras? Add here if so.
 
+        # remove any fields in extras which are already represented in the main spine row
         for x in self.extras:       
             if (self.organisationname == x.organisationname) and (self.normalisedname == x.normalisedname):
                 x.normalisedname=''
@@ -287,7 +302,10 @@ class CoreOrganisation(BaseModel): # orgs for public spine
             if self.removeddate == x.removeddate:
                 x.removeddate=''
     
-        self.extras = [e for e in self.extras if not e.isempty()]
+        
+
+        # consolidate extras per uid so that supplementary.csv has as few rows as possible
+        self.consolidate_extras()
 
 
 
