@@ -33,7 +33,8 @@ def test_row_formatting():
 "Registration number" : '1234',
 "Registration date" : '',
 "Designation" : 'Non-profit',
-"Corporate form" : ''
+"Corporate form" : '',
+'Iteration':''
 })
     namefield = 'Organisation name'
     new_row = public_spine_entry_creator({
@@ -54,7 +55,8 @@ def test_row_formatting_regdate():
 "Registration number" : '1234',
 "Registration date" : '12/12/1980',
 "Designation" : 'Non-profit',
-"Corporate form" : ''
+"Corporate form" : '',
+'Iteration':''
 })
     namefield = 'Organisation name'
     new_row = public_spine_entry_creator({

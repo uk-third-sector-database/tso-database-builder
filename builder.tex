@@ -399,6 +399,8 @@ between 2012 and 2023. These files were used to compile a list of unique chariti
 extract   as   many   unique   names,   addresses,   registration   dates,   and   removal   dates   for   each
 organisation. These files are detailed below: 
 \begin{itemize}
+  \item CharityExport-05-Feb-2025.csv : Scottish Charity Register, February 2025
+  \item CharityExport-Removed-05-Feb-2025.csv : List of removed charities, February 2025
   \item CharityExport-12-Apr-2023.csv : Scottish Charity Register, April 2023
   \item CharityExport-Removed-12-Apr-2023.csv : List of removed charities, April 2023
   \item oscr\_20210909.xlsx : Scottish Charity Register and Annual Returns, September 2021
@@ -462,6 +464,7 @@ companyid1\_2012 & Alternative Companies House ID (originates in 2012 data) \\ \
 companyid2\_2012 & Alternative Companies House ID (originates in 2012 data) \\ \hline
 companyid3\_2012 & Alternative Companies House ID (originates in 2012 data) \\ \hline
 source & Variable to indicate the data source (in this case, OSCR) \\ \hline
+crossborder & Boolean variable, reflecting whether 'Regulatory Type' is 'Cross Border' for this organisation \\ \hline
 \end{tabularx}
 \caption{Fields in pre-processing of OSCR data}
 \label{tab:oscr_preprocess}

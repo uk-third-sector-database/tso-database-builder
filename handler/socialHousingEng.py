@@ -58,7 +58,7 @@ class SocialHousingEngDataHandler(DataHandler):
         new_row["removeddate"] = ''
         new_row["registerdate"] = self.map_date(row['Registration date'])   
         new_row['companyid'] = ''
-        new_row["iteration"] = ''
+        new_row["iteration"] = row['Iteration']
 
         super().sort_address_fields(new_row)
         return new_row

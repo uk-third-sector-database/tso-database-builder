@@ -52,7 +52,7 @@ def read_dkane_sameas(file):
     
 
 ftc_dict, primary_ccew_orgs_ftc = read_dkane_sameas('../raw_data/FTC_data/dkane_relationships_sameas.csv')
-
+oscr_linkage_lookup, _ = read_dkane_sameas('../raw_data/oscr.linkage.csv')
 
 class ExtraInfo(BaseModel):
     uid: str
@@ -128,7 +128,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
         for m in self.sorted_matches:
             yield m.model_dump()
 
-        #def sort_matches(self):
+    def sort_matches(self):
         # decide what goes in main spine and what's in extras
 
         # all matches considered to create single organisation other than matchtype = 'companyid - companyid' which occurs
@@ -137,7 +137,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
         # self.matches is a list of (CoreOrganisation,matchtype) tuples
         # matchtype is in ['companyid - companyid', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source', 'ftc']
 
-        matchtype_order = ['ftc', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source' , 'name - housing', 'name - care', 'companyid - companyid']
+        matchtype_order = ['ftc', 'oscr', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source' , 'name - housing', 'name - care', 'companyid - companyid']
 #   
         if len(self.matched_orgs)==0:
             return
@@ -393,7 +393,6 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
 #                print(f' --- coops and mutuals match (Y) found for {self.normalisedname}, {self.companyid}')
                 matches_here.extend([(i, 'companyid - coop mutual') for i in match])
 
-               
                 
         if self.id_in_source in bycompanyid:
             match = bycompanyid[self.id_in_source]
@@ -414,6 +413,12 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
 #                    print(f' --- FTC match found for {self.normalisedname}, {self.uid} with {spinelist[m].normalisedname}, {spinelist[m].uid}')
                     matches_here.append((spinelist[m],'ftc')) 
     
+        # find matches using historic oscr data
+        if self.uid in oscr_linkage_lookup:
+            matched_uids = oscr_linkage_lookup[self.uid]
+            for m in matched_uids:
+                if m in spinelist:
+                    matches_here.append((spinelist[m],'oscr')) 
 
         if len(matches_here) > 1:
             matched_orgs = [(i[0].uid,i[1]) for i in matches_here]
