@@ -33,6 +33,7 @@ class DataHandler:
 
     def transform_row(self, row: dict) -> list[dict]:
         spine_rows = []
+        #print(f'self.names = {self.names}')
         for name in self.names:
             #if row[name]:
             # Must allow for null names due to formatting of charity data - extra info on rows with no name
@@ -218,10 +219,11 @@ class DataHandler:
 
 
 
-def sort_encoding_issue(st):
+def sort_encoding_issue(st:str):
+    st = st.strip()
     while not st.isascii():
         try:
-            st = st.encode('latin-1').decode('utf-8')
+            st = st.encode('latin-1').decode('utf-8-sig')
         except (UnicodeEncodeError, UnicodeDecodeError) as e:
             break
     return st
@@ -232,8 +234,10 @@ def iter_csv_rows(filename,DataHandler):
     encoding=DataHandler.fileencoding
     with open(filename, newline="", encoding=encoding) as csvfile:
         reader = csv.DictReader(csvfile)
-        DataHandler.names = DataHandler.find_names(reader.fieldnames)
+        DataHandler.names = DataHandler.find_names([sort_encoding_issue(i) for i in reader.fieldnames])
+        print(f'names = {DataHandler.names}')
         for row in reader:
+            row = {sort_encoding_issue(k):sort_encoding_issue(v) for k,v in row.items()}
             yield row
 
 
@@ -282,11 +286,16 @@ def do_csv_processing(input_csv_filename,
             csvfile, fieldnames=SUB_SPINE_CSV_FIELDS+data_handler.tmp_fields, extrasaction="ignore"
         )
         writer.writeheader()
-        for new_row in filter(
-            data_handler.all_filters, iter_csv_rows(input_csv_filename,data_handler)):
-            processed_rows += 1
-
-            writer.writerows(data_handler.transform_row(new_row))
+        for new_row in filter(data_handler.all_filters, iter_csv_rows(input_csv_filename,data_handler)):
+            
+            
+            #print(new_row)
+            
+            transformed_row = data_handler.transform_row(new_row)
+            if transformed_row:
+                processed_rows += 1
+            #print(f'Processed row {processed_rows} - {transformed_row}')
+            writer.writerows(transformed_row)
     
     print(f"Intermediate process complete, {processed_rows} lines written to {intermediate_ofile}\n")
     

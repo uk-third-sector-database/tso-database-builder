@@ -3,6 +3,7 @@
 ## --------------- preprocess sources to include iteration -----------
 python3 handler/preprocess.py
 python3 cli.py preprocess-ch ../raw_data/CH.all.preprocess.csv
+python3 handler/preprocess_charity_regulators.py
 ##--------------- process sources --------------------------
 
 ## companies house files:
@@ -22,16 +23,16 @@ python3 cli.py process-source CoOps ../raw_data/co_ops.all.csv ../public_spine_d
 python3 cli.py process-source Mutuals ../raw_data/mutuals.all.csv ../public_spine_data/mutuals.spine.csv
 #
 ## Social Housing England:
-python3 cli.py process-source SocialHousingEng ../raw_data/SocialHousingEngland_202301016.csv ../public_spine_data/SocialHousingEngland.spine.csv
+python3 cli.py process-source SocialHousingEng ../raw_data/SocialHousingEng.all.csv ../public_spine_data/SocialHousingEngland.spine.csv
 #
 #
 ## Scottish Housing Regulator:
 python3 cli.py process-source ScotHousingReg ../raw_data/ScotHousingReg.all.csv ../public_spine_data/ScotHousingReg.spine.csv
 #
 ## Charity regulators:
-python3 cli.py process-source CCEW ../raw_data/ccew_spine_public.csv ../public_spine_data/ccew.spine.csv
-python3 cli.py process-source CCNI ../raw_data/ccni_spine.csv ../public_spine_data/ccni.spine.csv
-python3 cli.py process-source OSCR ../raw_data/oscr_spine_public.csv ../public_spine_data/oscr.spine.csv
+python3 cli.py process-source CCEW ../raw_data/ccew.all.csv ../public_spine_data/ccew.spine.csv
+python3 cli.py process-source CCNI ../raw_data/ccni.all.csv ../public_spine_data/ccni.spine.csv
+python3 cli.py process-source OSCR ../raw_data/oscr.all.csv ../public_spine_data/oscr.spine.csv
 
 
 ##-----------------------------

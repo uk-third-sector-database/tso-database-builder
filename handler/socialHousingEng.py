@@ -36,16 +36,13 @@ class SocialHousingEngDataHandler(DataHandler):
     
     def find_names(self, fieldnames) -> list:
 
-        v = ['Organisation name','ï»¿Organisation name','\ufeffOrganisation name']
+        v = ['Organisation name']
                 
         return [item for item in v if item in fieldnames]
 
     def format_row(self,namefield,row) -> dict:
         '''format a row into Spine format, for given namefield'''
         new_row={}
-        for field in row:
-            row[field] = row[field].strip()
-            row[field] = sort_encoding_issue(row[field])
 
         new_row["uid"] =  'GB-SHPE-'+ row['Registration number']   
         new_row["organisationname"] = row[namefield]
@@ -61,6 +58,7 @@ class SocialHousingEngDataHandler(DataHandler):
         new_row["iteration"] = row['Iteration']
 
         super().sort_address_fields(new_row)
+        print(new_row)
         return new_row
         
     def find_primary_info(self, details_list):

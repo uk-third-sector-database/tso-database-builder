@@ -2,7 +2,7 @@
 import re
 import datetime
 
-from .base import DataHandler,sort_encoding_issue
+from .base import DataHandler
 
 exclude_filters = {
     "CompanyCategory": [
@@ -78,24 +78,20 @@ class CompaniesHouseDataHandler(DataHandler):
 
     def format_row(self,namefield,row) -> dict:
         '''format a row into Spine format, for given namefield'''
-        new_row={}
-        for field in row:
-            row[field] = row[field].strip()
-            row[field] = sort_encoding_issue(row[field])
-        
+        new_row={}        
 
-        new_row["uid"] =  'GB-COH-'+ row[' CompanyNumber']       
+        new_row["uid"] =  'GB-COH-'+ row['CompanyNumber']       
         new_row["organisationname"] = row[namefield]
         new_row["normalisedname"] = ''
-        new_row["id_in_source"] = row[' CompanyNumber']
+        new_row["id_in_source"] = row['CompanyNumber']
 
         if row['RegAddress.POBox']:
             new_row["addressline1"] = row['RegAddress.POBox']
             new_row["addressline2"] = row['RegAddress.AddressLine1']
-            new_row["addressline3"] = row[' RegAddress.AddressLine2']
+            new_row["addressline3"] = row['RegAddress.AddressLine2']
         else:
             new_row["addressline1"] = row['RegAddress.AddressLine1']
-            new_row["addressline2"] = row[' RegAddress.AddressLine2']
+            new_row["addressline2"] = row['RegAddress.AddressLine2']
             new_row["addressline3"] = ''
         new_row["city"] = row['RegAddress.PostTown']
         new_row["postcode"] = row['RegAddress.PostCode']

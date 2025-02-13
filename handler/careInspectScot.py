@@ -42,7 +42,7 @@ class CareInspScotDataHandler(DataHandler):
         #    return ['ServiceName']
 
     def find_id_name(self,row:dict) -> str:
-        v = ['CSNumber', 'CaseNumber','ï»¿CSNumber']
+        v = ['CSNumber', 'CaseNumber']#,'ï»¿CSNumber']
         for i in v:
             if i in row.keys():
                 return i
@@ -52,10 +52,7 @@ class CareInspScotDataHandler(DataHandler):
     def format_row(self,namefield,row) -> dict:
         '''format a row into Spine format, for given namefield'''
         new_row={}
-        for field in row:
-            row[field] = row[field].strip()
-            row[field] = sort_encoding_issue(row[field])
-
+                        
         id = self.find_id_name(row)
         if not id:
             print(row.keys())

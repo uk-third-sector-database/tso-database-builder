@@ -3,6 +3,9 @@ import csv
 from datetime import datetime
 import os
 import pandas as pd
+import re
+
+from .base import sort_encoding_issue
 
 # create sub-spine level input files for charity regulators. Include iteration',
 #  created from filename for new data.
@@ -119,10 +122,98 @@ def process_oscr():
 
             print(f"iteration {iteration_date} added to file {output_file}")
 
+ccni_fields = [
+    'uid',
+    'charitynumber',
+    'organisationname',
+    'normalisedname',
+    'companyid',
+    'housenumber',
+    'address',
+    'city',
+    'localauthority',
+    'postcode',
+    'registerdate',
+    'source',
+    'iteration'
+]
+
+def find_postcode(address_string:str,name_str:str):
+    #remove name from address string:
+    address_string = address_string.replace(name_str,'')
+    '''find postcode in address string'''
+    postcode  = address_string.split(',')[-1].strip()
+
+    # check if these are of the form 'XX?99? 9XX'
+    postcode_regex = re.compile(r"^(GIR 0AA|[A-Z]{1,2}[0-9][0-9A-Z]? ?[0-9][A-Z]{2})$", re.IGNORECASE)
+
+    if not postcode_regex.match(postcode):
+        postcode = ''       
+    else:
+        postcode = postcode.strip()
+        address_string = address_string.replace(postcode,'')
+
+    address_string = ', '.join([a.strip() for a in address_string.strip(', ').split(',') if a])
+    return address_string,postcode
+
+
+
+
+def process_ccni():
+    raw_files = glob.glob('../raw_data/ccni/ccni-charitydetails_*.csv')
+    base_file = '../raw_data/ccni/ccni_spine.csv'
+    output_file = '../raw_data/ccni.all.csv'
+
+
+    with open(output_file, 'w+', newline='', encoding='UTF8') as outfile:
+        csv_writer = csv.DictWriter(outfile, fieldnames=ccni_fields)
+        csv_writer.writeheader()
+# file date format: 2025_01_29_14_23_47
+        
+        with open(base_file, 'r', newline='', encoding='utf-8-sig') as basefile:
+            csv_reader = csv.DictReader(basefile)
+
+            lc = 0
+            for row in csv_reader:
+                new_row = {key:row[key] for key in ccni_fields if key in row}
+                address,postcode = find_postcode(row['address'],row['organisationname'])
+                new_row['address'] = address
+                new_row['postcode'] = postcode
+                new_row['iteration'] = '2024'
+                csv_writer.writerow(new_row)
+                lc +=1
+                
+            print(f'copied {lc} lines from {base_file} to {output_file}')
+
+        for file in raw_files:
+            lc = 0
+            date = os.path.basename(file).split('-charitydetails_')[1].strip('.csv')
+            date_obj = datetime.strptime(date, '%Y_%m_%d_%H_%M_%S')
+            iteration_date = date_obj.strftime('%m/%Y')
+
+            with open(file, 'r', newline='', encoding='Latin-1') as infile:
+                csv_reader = csv.DictReader(infile)
+                for row in csv_reader:
+                    row = {sort_encoding_issue(k):sort_encoding_issue(v) for k,v in row.items()}
+                    address,postcode = find_postcode(row['Public address'],row['Charity name'])
+                    new_row = {key:'' for key in ccni_fields}
+                    new_row['iteration'] = iteration_date
+                    new_row['charitynumber'] = row['Reg charity number']
+                    new_row['organisationname'] = row['Charity name']
+                    new_row['address'] = address
+                    new_row['postcode'] = postcode
+                    new_row['registerdate'] = row['Date registered']
+                    new_row['iteration'] = iteration_date
+                    new_row['source'] = 'CCNI'
+                    csv_writer.writerow(new_row)
+                    lc +=1
+
+
+                print(f'copied {lc} lines from {file} to {output_file}')
 
 if __name__ == '__main__':
-    process_oscr()
-
+#    process_oscr()
+    process_ccni()
 
 '''
 OSCR download fields:
@@ -163,4 +254,46 @@ OSCR download fields:
 'Parent charity country of registration',
 'Designated religious body',
 'Regulatory Type'
+'''
+
+'''
+CCNI download fields:
+Reg charity number
+Charity name
+Date registered
+Status
+Date for financial year ending
+Total income
+Total spending
+Charitable spending
+Income generation and governance
+Public address
+Website
+Email
+Telephone
+Company number
+What the charity does
+Who the charity helps
+How the charity works
+Charitable purposes
+Other name
+Type of governing document
+Financial period start
+Financial period end
+Total income. Previous financial period.
+Employed staff
+UK and Ireland volunteers
+Income from donations and legacies
+Income from charitable activities
+Income from other trading activities
+Income from investments
+Income from other
+Total income and endowments
+Expenditure on Raising funds
+Expenditure on Charitable activities
+Expenditure on Governance
+Expenditure on Other
+Total expenditure
+Assets and liabilities - Total fixed assets
+Total net assets and liabilities
 '''

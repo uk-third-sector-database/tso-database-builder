@@ -765,3 +765,12 @@ def test_degreg_date(setup_base_ccew_orgs,setup_base_oscr_orgs,ccew_remdate,oscr
 def test_empty_extras():
     e = ExtraInfo(uid='1')
     assert e.isempty() == True
+
+
+    
+	
+	
+	
+	
+	
+	

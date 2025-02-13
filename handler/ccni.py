@@ -42,9 +42,6 @@ class CCNIDataHandler(DataHandler):
     def format_row(self,namefield,row) -> dict:
         '''format a row into Spine format, for given namefield'''
         new_row={}
-        for field in row:
-            row[field] = row[field].strip()
-            row[field] = sort_encoding_issue(row[field])
         
         new_row["uid"] =  'GB-NIC-'+ row['charitynumber']   
         new_row["organisationname"] = row[namefield]
