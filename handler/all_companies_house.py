@@ -48,29 +48,52 @@ def process_bulk_download(file,ofile,datahandler):
     
         ofile.writerows(filtered_rows)
 
+def find_CIC_uids(file,companytype_field,cic_search,encode):
+    print(f'Opening {file} to find CICs, using encoding {encode}')
+    with open(file, 'r', newline='', encoding=encode) as infile:
+        reader = csv.DictReader(infile)
+        CIC_uids = []
+        for row in reader:
+            if row[companytype_field] == cic_search:
+                if companytype_field == 'companycategory':
+                    CIC_uids.append('GB-COH-'+ row['companynumber'])
+                elif companytype_field == 'company_subtype':
+                    CIC_uids.append('GB-COH-'+ row['company_number'])
+                else:
+                    try:
+                        CIC_uids.append('GB-COH-'+ row['CompanyNumber'])
+                    except:
+                        CIC_uids.append('GB-COH-'+ row[' CompanyNumber'])
 
-
+    return CIC_uids
 
 def main_process(ofilename):
+    api_scrape_file = '../raw_data/CompaniesHouse/ch_adv_scrape.csv'
+    historic_data = '../raw_data/CompaniesHouse/soton14reduced.csv'
+    bulk_downloads = glob.glob('../raw_data/CompaniesHouse/BasicCompanyDataAsOneFile*csv')
     # open outputfile 'w+ as csvwriter
-    with open(ofilename, 'w+', newline='', encoding='UTF8') as outfile:
+    #with open(ofilename, 'w+', newline='', encoding='UTF8') as outfile:
+#
+    #    datahandler =  CompaniesHouseDataHandler
+    #    fields = SUB_SPINE_CSV_FIELDS + ['iteration'] + ['companytype']
+    #    
+    #    csv_writer = csv.DictWriter(outfile, fieldnames=fields)  # possibly change field list to a CH specific one?
+    #    csv_writer.writeheader()  
+    #    process_api_scrape(api_scrape_file,csv_writer)
+    #    process_2014_data(historic_data,csv_writer)
+    #    for file in bulk_downloads:
+    #        process_bulk_download(file,csv_writer,datahandler)
 
+    all_CICs = set()
+    for file, type_field, cic_search, encode in [(historic_data,'companycategory','Community Interest Company','Latin-1'),
+                                         (api_scrape_file,'company_subtype','community-interest-company','Latin-1')] + \
+                                        [(i,'CompanyCategory','Community Interest Company','utf8') for i in bulk_downloads]:
+        CIC_uids = find_CIC_uids(file,type_field,cic_search,encode)
+        all_CICs.update(CIC_uids)
+        print(f'found {len(CIC_uids)} CICs in {file}')
+        print(CIC_uids[:5])
 
-        datahandler =  CompaniesHouseDataHandler
-        fields = SUB_SPINE_CSV_FIELDS + ['iteration'] + ['companytype']
-        
-        csv_writer = csv.DictWriter(outfile, fieldnames=fields)  # possibly change field list to a CH specific one?
-        csv_writer.writeheader()  
-
-        api_scrape_file = '../raw_data/CompaniesHouse/ch_adv_scrape.csv'
-        historic_data = '../raw_data/CompaniesHouse/soton14reduced.csv'
-        bulk_downloads = glob.glob('../raw_data/CompaniesHouse/BasicCompanyDataAsOneFile*csv')
-
-        process_api_scrape(api_scrape_file,csv_writer)
-        process_2014_data(historic_data,csv_writer)
-
-
-        for file in bulk_downloads:
-            process_bulk_download(file,csv_writer,datahandler)
-
+    with open('all_CICs.txt','w') as f:
+        f.write(f"# CICs found in files {','.join([api_scrape_file,historic_data] + bulk_downloads)}\n\n")
+        f.write('\n'.join(all_CICs))
 

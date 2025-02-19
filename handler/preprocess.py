@@ -4,6 +4,18 @@ import csv
 import glob
 import os
 from datetime import datetime
+import pandas as pd
+
+
+def drop_duplicates(filename):
+    print(f"dropping duplicates in {filename}")
+    df = pd.read_csv(filename,encoding = 'utf-8-sig')
+    print(f' -- {df.shape[0]} rows before dropping duplicates')
+    cols = list(df.columns)
+    cols.remove('Iteration')
+    df.drop_duplicates(inplace=True, subset=cols)
+    print(f' -- {df.shape[0]} rows after dropping duplicates')
+    df.to_csv(filename, index=False)
 
 CIS_fields = ["CSNumber",
         "ServiceName",
@@ -32,7 +44,7 @@ def fix_care_inspectorate_files():
     print(raw_files)
     output_file = '../raw_data/CareInspectScot.all.csv'
     
-    with open(output_file, 'w+', newline='', encoding='Latin-1') as outfile:
+    with open(output_file, 'w+', newline='', encoding='utf8') as outfile:
         
         csv_writer = csv.DictWriter(outfile, fieldnames=CIS_fields)  
         csv_writer.writeheader()  
@@ -75,7 +87,7 @@ def fix_care_inspectorate_files():
                         
             print(f"iteration {date} added to file {output_file}")
 
-
+    drop_duplicates(output_file)
 
 co_op_fields = [
 'CUK Organisation ID',
@@ -122,7 +134,7 @@ def fix_coops_files():
                     csv_writer.writerow(row)
                         
             print(f"iteration {date} added to file {output_file}")
-
+    drop_duplicates(output_file)
 
 mutuals_fields_1 = [
 'societynumber',
@@ -153,7 +165,7 @@ def fix_mutuals_files():
     output_file = '../raw_data/mutuals.all.csv'
     encoding = 'Latin-1'
     
-    with open(output_file, 'w+', newline='', encoding=encoding) as outfile:
+    with open(output_file, 'w+', newline='', encoding='utf8') as outfile:
         
         csv_writer = csv.DictWriter(outfile, fieldnames=mutuals_fields_2)  # Create DictWriter object
         csv_writer.writeheader()  # Write header to output file
@@ -192,7 +204,7 @@ def fix_mutuals_files():
                     csv_writer.writerow(new_row)
                         
             print(f"iteration {date} added to file {output_file}")
-
+    drop_duplicates(output_file)
 
 ScHR_fields = [
 'Financial Year',
@@ -212,7 +224,7 @@ def fix_ScotHousingReg_files():
     print(raw_files)
     output_file = '../raw_data/ScotHousingReg.all.csv'
     
-    with open(output_file, 'w+', newline='', encoding='Latin-1') as outfile:
+    with open(output_file, 'w+', newline='', encoding='utf8') as outfile:
         
         csv_writer = csv.DictWriter(outfile, fieldnames=ScHR_fields)  
         csv_writer.writeheader()  
@@ -238,6 +250,7 @@ def fix_ScotHousingReg_files():
                     csv_writer.writerow(row)
                         
             print(f"iteration {date} added to file {output_file}")
+    drop_duplicates(output_file)
 
 CQC_fields = [
 'Name',
@@ -281,6 +294,7 @@ def fix_CQC_files():
                     csv_writer.writerow(row)
                         
             print(f"iteration {date} added to file {output_file}")
+    drop_duplicates(output_file)
 
 SHE_fields = [
     'Organisation name',
@@ -327,6 +341,8 @@ def fix_SocialHousingEng():
                     csv_writer.writerow(row)
                         
             print(f"iteration {date} added to file {output_file}")
+
+    drop_duplicates(output_file)
 
 if __name__ == '__main__':
     # all updated for new data Feb 2025

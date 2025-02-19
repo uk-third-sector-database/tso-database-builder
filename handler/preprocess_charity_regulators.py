@@ -4,6 +4,7 @@ from datetime import datetime
 import os
 import pandas as pd
 import re
+from datetime import datetime
 
 from .base import sort_encoding_issue
 
@@ -211,9 +212,77 @@ def process_ccni():
 
                 print(f'copied {lc} lines from {file} to {output_file}')
 
+
+ccew_fields = ['uid', 'charitynumber', 'organisationname', 'normalisedname',
+       'companyid', 'housenumber', 'addressline1', 'addressline2',
+       'addressline3', 'addressline4', 'addressline5', 'city',
+       'localauthority', 'postcode', 'registerdate', 'removeddate',
+       'name_origin', 'primary_name', 'address_origin', 'primary_address',
+       'regdate_origin', 'remdate_origin', 'iteration', 'source', 'cqc_reg',
+       ]#'dummy', 'dummy2']
+
+def process_ccew():
+    
+    def formatdate(datestr):
+        try:
+            d = datetime.strptime(datestr,'%Y-%m-%dT%H:%M:%S')
+            return d.strftime('%d%b%Y')
+        except ValueError:
+            return ''
+
+
+    raw_files = glob.glob('../raw_data/ccew/ccew-publicextract.*.csv')
+    base_file = '../raw_data/ccew/ccew_spine_public.csv'
+    output_file = '../raw_data/ccew.all.csv'
+
+    with open(output_file,'w+', newline='', encoding='UTF8') as outfile:
+        csv_writer = csv.DictWriter(outfile, fieldnames=ccew_fields)
+        csv_writer.writeheader()
+
+        with open(base_file, 'r', newline='', encoding='utf-8-sig') as basefile:
+            csv_reader = csv.DictReader(basefile)
+            lc=0
+            for row in csv_reader:
+                new_row = {key:row[key] for key in ccew_fields}
+                csv_writer.writerow(new_row)
+                lc +=1
+            print(f'copied {lc} lines from {base_file} to {output_file}')
+        
+        for file in raw_files:
+            lc=0
+            date = os.path.basename(file).split('ccew-publicextract.')[1].strip('.csv')
+            date_obj = datetime.strptime(date, '%b%Y')
+            iteration_date = date_obj.strftime('%m/%Y')
+
+            with open(file,'r', newline='', encoding='UTF8') as infile:
+                csv_reader = csv.DictReader(infile)
+                for row in csv_reader:
+                    new_row = {key:'' for key in ccew_fields}
+                    new_row['iteration'] = iteration_date
+                    new_row['charitynumber'] = row['registered_charity_number']
+                    new_row['organisationname'] = row['charity_name']
+                    new_row['companyid'] = row['charity_company_registration_number']
+                    new_row['addressline1'] = row['charity_contact_address1']
+                    new_row['addressline2'] = row['charity_contact_address2']
+                    new_row['addressline3'] = row['charity_contact_address3']
+                    new_row['addressline4'] = row['charity_contact_address4']
+                    new_row['addressline5'] = row['charity_contact_address5']
+                    new_row['city'] = ''
+                    new_row['postcode'] = row['charity_contact_postcode']
+                    new_row['registerdate'] = formatdate(row['date_of_registration'])
+                    new_row['removeddate'] = formatdate(row['date_of_removal'])
+                    new_row['source'] = 'CCEW'
+                    new_row['regdate_origin'] = iteration_date
+                    new_row['remdate_origin'] = iteration_date
+
+                    csv_writer.writerow(new_row)
+                    lc +=1
+                print(f'copied {lc} lines from {file} to {output_file}, iteration date = {iteration_date}')
+
 if __name__ == '__main__':
 #    process_oscr()
-    process_ccni()
+   # process_ccni()
+   process_ccew()
 
 '''
 OSCR download fields:
@@ -296,4 +365,32 @@ Expenditure on Other
 Total expenditure
 Assets and liabilities - Total fixed assets
 Total net assets and liabilities
+'''
+
+'''
+CCEW download fields:
+['date_of_extract', 'organisation_number', 'registered_charity_number',
+'linked_charity_number', 'charity_name', 'charity_type',
+'charity_registration_status', 'date_of_registration',
+'date_of_removal', 'charity_reporting_status',
+'latest_acc_fin_period_start_date', 'latest_acc_fin_period_end_date',
+'latest_income', 'latest_expenditure', 'charity_contact_address1',
+'charity_contact_address2', 'charity_contact_address3',
+'charity_contact_address4', 'charity_contact_address5',
+'charity_contact_postcode', 'charity_contact_phone',
+'charity_contact_email', 'charity_contact_web',
+'charity_company_registration_number', 'charity_insolvent',
+'charity_in_administration', 'charity_previously_excepted',
+'charity_is_cdf_or_cif', 'charity_is_cio', 'cio_is_dissolved',
+'date_cio_dissolution_notice', 'charity_activities', 'charity_gift_aid',
+'charity_has_land']
+'''
+'''
+NOTE: code used to convert json files to csv:
+for file in ['../../raw_data/ccew/ccew-publicextract.aug2024.json','../../raw_data/ccew/ccew-publicextract.feb2025.json','../../raw_data/ccew/ccew-publicextract.jan2025.json']:
+    with open(file, 'r', encoding='utf-8-sig') as f:
+        data = json.load(f)  # Load the JSON data
+        df = pd.DataFrame(data)  # Convert to DataFrame
+
+    df.to_csv(file.replace('.json','.csv'), index=False)
 '''

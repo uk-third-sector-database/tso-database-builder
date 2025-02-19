@@ -4,7 +4,9 @@ import os
 from  pydantic import BaseModel
 from datetime import datetime
 import copy
-
+from memory_profiler import profile
+from tqdm import tqdm  
+from itertools import product
 
 from handler.base_definitions import EXTRA_DETAILS_CSV_FIELDS, SPINE_CSV_FIELDS, MATCHES_CSV_FIELDS, match_csv_entry_creator, ORG_ID_MAPPING, extra_csv_entry_creator
 
@@ -128,6 +130,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
         for m in self.sorted_matches:
             yield m.model_dump()
 
+#    @profile
     def sort_matches(self):
         # decide what goes in main spine and what's in extras
 
@@ -186,7 +189,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
 
         return new_main_rows
 
-    def consolidate_extras(self):
+    def __consolidate_extras(self):
         names = set()
         addresses = set()
         remdates = set()
@@ -205,107 +208,113 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                         self.sorted_extras.append(ExtraInfo(uid = self.uid, organisationname = n[0], normalisedname = n[1], fulladdress = a[0], city = a[1], postcode = a[2], removeddate = rem, registerdate = reg))   
 
 
+    
+
+    def consolidate_extras(self):
+        unique_extras = set()
+
+        for e in self.extras:
+            unique_extras.add((
+                e.organisationname, e.normalisedname,
+                e.fulladdress, e.city, e.postcode,
+                e.removeddate, e.registerdate
+            ))
+
+        self.sorted_extras = [
+            ExtraInfo(
+                uid=self.uid,
+                organisationname=n, normalisedname=nn,
+                fulladdress=a, city=c, postcode=p,
+                removeddate=rem, registerdate=reg
+            )
+            for (n, nn, a, c, p, rem, reg) in unique_extras
+        ]
+
+
+
+
+
+#
     def sort_extras(self):
-        '''Multiple functions:
-        1. find the earliest registerdate and latest removeddate from all extras for main spine row
-        2. if any data is in extras AND main spine row, remove from extras
-        3. consolidate extras per uid so that supplementary.csv has as few rows as possible'''
+        """ 
+        1. Find earliest register date & latest removed date 
+        2. Remove duplicates 
+        3. Consolidate extras 
+        """
 
-        # Helper function to handle date parsing
         def parse_date(date_str):
-            if date_str:
-                return datetime.strptime(date_str, '%d/%m/%Y')
-            return None
-
-        # Processing of self.extras to find the most recent removeddate, and the earliest registerdate
-        def fix_dates_set(dates_set, order):
-            ret = list(dates_set)
-            ret = [i for i in ret if i is not None]
-            ret.sort()
-            if ret:
-                primary = ret[order]
-            else:
+            """ Convert date string to datetime object (if valid). """
+            try:
+                return datetime.strptime(date_str, '%d/%m/%Y') if date_str else None
+            except ValueError:
                 return None
-            return primary
-        
-        def find_dates(orgs, registerdates, removeddates):
+
+        def fix_dates_set(dates, order):
+            """ Get earliest (order=0) or latest (order=-1) date from a set. """
+            valid_dates = sorted(filter(None, dates))
+            return valid_dates[order] if valid_dates else None
+
+        def find_dates(orgs, reg_dates, rem_dates):
+            """ Collect all valid register & removal dates. """
             for o in orgs:
                 if type(o) == tuple:
                     o = o[0]
                 reg_date = parse_date(o.registerdate)
                 rem_date = parse_date(o.removeddate)
-                if reg_date:
-                    registerdates.append(reg_date)
-                if rem_date:
-                    removeddates.append(rem_date)
+                if reg_date: reg_dates.add(reg_date)
+                if rem_date: rem_dates.add(rem_date)
 
+        # Track dates
+        registerdates, removeddates = set(), set()
+        all_orgs_removed = bool(self.removeddate)
 
-        registerdates = []
-        all_orgs_removed = True # assume all organisations in list have a remdate - if not, this will be set to False and remdate in spine will not be set
-        removeddates = []
-
-        if not self.removeddate:
-            all_orgs_removed = False
-
-        # we look through matched orgs to find out if all matched orgs have been dissolved or not
+        # Check if all matched orgs are removed
         for m in self.matched_orgs:
-            org = m[0]
-            if not org.removed():
+            if not m[0].removed():
                 all_orgs_removed = False
 
-        # find earliest register date and latest removed date from all extras for main spine row
+        # Collect dates from matched orgs and extras
         find_dates(self.matched_orgs, registerdates, removeddates)
         find_dates(self.extras, registerdates, removeddates)
 
+        # Update register date
         earliest_register = fix_dates_set(registerdates, 0)
+        orgregdate = parse_date(self.registerdate)
 
-        if earliest_register:
-            orgregdate = parse_date(self.registerdate)
-            if not orgregdate:
-                self.registerdate = earliest_register.strftime('%d/%m/%Y')
-            elif earliest_register < orgregdate:
-                self.extras.append(ExtraInfo(uid = self.uid, source=self.source, registerdate=self.registerdate))
-                self.registerdate = earliest_register.strftime('%d/%m/%Y')
+        if earliest_register and (not orgregdate or earliest_register < orgregdate):
+            if orgregdate:
+                self.extras.append(ExtraInfo(uid=self.uid, source=self.source, registerdate=self.registerdate))
+            self.registerdate = earliest_register.strftime('%d/%m/%Y')
 
-
+        # Update removed date
         if all_orgs_removed:
             latest_removed = fix_dates_set(removeddates, -1)
+            orgremdate = parse_date(self.removeddate)
 
-            if latest_removed:
-                orgremdate = parse_date(self.removeddate)
-                if not orgremdate:
-                    self.removeddate = latest_removed.strftime('%d/%m/%Y')
-                elif latest_removed > orgremdate:
-                    self.extras.append(ExtraInfo(uid = self.uid, source=self.source, removeddate=self.removeddate))
-                    self.removeddate = latest_removed.strftime('%d/%m/%Y')
+            if latest_removed and (not orgremdate or latest_removed > orgremdate):
+                if orgremdate:
+                    self.extras.append(ExtraInfo(uid=self.uid, source=self.source, removeddate=self.removeddate))
+                self.removeddate = latest_removed.strftime('%d/%m/%Y')
         else:
-            # need to put self.removeddate as a supplementary info, as not all matched orgs have been dissolved
             if self.removeddate:
-                self.extras.append(ExtraInfo(uid = self.uid, source=self.source, removeddate=self.removeddate))
+                self.extras.append(ExtraInfo(uid=self.uid, source=self.source, removeddate=self.removeddate))
                 self.removeddate = ''
 
-        # Consider adding: if address info missing in primary data, find in extras? Add here if so.
-
-        # remove any fields in extras which are already represented in the main spine row
-        for x in self.extras:       
-            if (self.organisationname == x.organisationname) and (self.normalisedname == x.normalisedname):
-                x.normalisedname=''
-                x.organisationname=''
-            if (self.fulladdress == x.fulladdress) and (self.postcode == x.postcode) and (self.city == x.city):
-                x.fulladdress = ''
-                x.postcode=''
-                x.city=''
-            if (self.postcode == x.postcode):
+        # Remove redundant fields from extras
+        for x in self.extras:
+            if (self.organisationname, self.normalisedname) == (x.organisationname, x.normalisedname):
+                x.organisationname = x.normalisedname = ''
+            if (self.fulladdress, self.city, self.postcode) == (x.fulladdress, x.city, x.postcode):
+                x.fulladdress = x.city = x.postcode = ''
+            if self.postcode == x.postcode:
                 x.postcode = ''
             if self.registerdate == x.registerdate:
-                x.registerdate=''
+                x.registerdate = ''
             if self.removeddate == x.removeddate:
-                x.removeddate=''
-    
-        
+                x.removeddate = ''
 
         # consolidate extras per uid so that supplementary.csv has as few rows as possible
-        self.consolidate_extras()
+        #self.consolidate_extras()
 
 
 
@@ -344,7 +353,7 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
         return removed
 
 
-
+#    @profile
     def matches(self, byname:dict, bycompanyid:dict, bysourceid:dict, spinelist:dict):
         ##print('in SubSpineOrg.matches')
 
@@ -423,8 +432,8 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
         if len(matches_here) > 1:
             matched_orgs = [(i[0].uid,i[1]) for i in matches_here]
             distinct_matches = set([i[0] for i in matched_orgs])
-            if len(distinct_matches) > 1:
-                print(f'more than one matched org: {matched_orgs} for {self.uid} {self.normalisedname} {self.source}')
+            #if len(distinct_matches) > 1:
+            #    print(f'more than one matched org: {matched_orgs} for {self.uid} {self.normalisedname} {self.source}')
         return matches_here
 
 
@@ -440,7 +449,8 @@ class MainOrgList:
 
     def __iter__(self):
         return iter(self._store)
-    
+
+#    @profile
     def report(self):
         sourcedict = {}
         matchdict = {}
@@ -499,7 +509,7 @@ class MainOrgList:
         remove_from_dict(self._store, org.uid)
 
 
-
+#    @profile
     def merge(self, orgs: list[SubSpineOrg]):
         # merge SubSpineOrgs onto MainOrgList (self): check for matches
 
@@ -528,15 +538,16 @@ class MainOrgList:
                         elif org_merging_on_remdate and (org_merging_on_remdate > matched_coreorg_remdate):
                             print(f'ERROR: {subspine_org.normalisedname} ({subspine_org.uid}) has a later removal date ({subspine_org.removeddate}) than {m.normalisedname} ({m.uid}, {m.removeddate}) in source {m.source}')
 
-
-        for this_subspine_org in orgs:
+        # add progress bar here
+        
+        for this_subspine_org in tqdm(orgs, desc='Processing orgs'):
             # does this_subspine_org match anything already in the spine (MainList (self))?
             matched_org = this_subspine_org.matches(self.byname, self.bycompanyid, self.bysourceid, self._store)
             if matched_org:
                 check_removal_dates(this_subspine_org, matched_org)
                 # check if this org should be primary rather than matched:
                 if (this_subspine_org.uid in primary_ccew_orgs_ftc):# or (primary_org_within_source != this_subspine_org):
-                    print(f'Primary org found for {this_subspine_org.normalisedname}: {this_subspine_org.uid} (in source {this_subspine_org.source}) (requires switch of primary org)')  
+                    #print(f'Primary org found for {this_subspine_org.normalisedname}: {this_subspine_org.uid} (in source {this_subspine_org.source}) (requires switch of primary org)')  
                     # this is the primary org in the match
                     new_coreorg = this_subspine_org.to_core_org()
 
@@ -581,7 +592,7 @@ class MainOrgList:
 
     def sort_matches(self):
         new_store_items = []
-        for org in self._store.values():
+        for org in tqdm(self._store.values(), desc='Sorting matches'):
             for_store = org.sort_matches()
             if for_store:
                 new_store_items.extend(for_store)
@@ -590,17 +601,17 @@ class MainOrgList:
             self.add_to_stores(s)
 
     def sort_extras(self):
-        for org in self._store.values():
+        for org in tqdm(self._store.values(), desc='Sorting extras'):
             org.sort_extras()
 
 
     def write_out(self, filename_main: str, filename_extras: str, filename_matches: str):
 
         self.sort_matches()
-        #print('\n\nsort_matches complete.')
+        print('\n\nsort_matches complete.')
 
         self.sort_extras()
-        #print('\n\nsort_extras complete.')
+        print('\n\nsort_extras complete.')
 
 
         with open(filename_main, "w+") as out_main:
@@ -614,7 +625,8 @@ class MainOrgList:
                     for csv_x in [main_csv,extras_csv,matches_csv]:
                         csv_x.writeheader()
 
-                    for org in self._store.values():
+                    for org in tqdm(self._store.values(), desc='Writing to files'):
+
                         if not org.source.lower() in ['careinspectoratescot','carequalitycommission']:
                             
                         
@@ -628,6 +640,11 @@ class MainOrgList:
 
                             for row in org.to_match_csv():
                                 matches_csv.writerow(row)
+        
+        # remove duplicates from supplementary.csv
+        df = pd.read_csv(filename_extras)
+        df.drop_duplicates(inplace=True)
+        df.to_csv(filename_extras, index=False) 
 
 
 
@@ -691,6 +708,7 @@ def process_csvs_to_build_spine(csv_file_list_order):
     for t in progress:
         print(f'{t},')
     print(']')
+
     return main_orgs
 
 

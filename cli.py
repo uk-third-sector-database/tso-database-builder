@@ -80,14 +80,12 @@ def build_spine(infiles, outfile_base):
     Generate organisational spine, plus matches, plus supplementary files, for all given inputs (in format {source}.spine.csv with {source}.supplementary.csv in the same folder)
     """
     MainOrgs = process_csvs_to_build_spine(infiles)
+    print('PROGRESS: process_csvs_to_build_spine complete. Now to write to files...\n')
     MainOrgs.write_out(outfile_base+'.spine.csv', 
                        outfile_base+'.supplementary.csv', 
                        outfile_base+'.matches.csv')
     
 
-    
-    # create doc and zip 
-    #subprocess.run('./prepare_zip.sh')
 
 @cli.command()
 @click.argument("infiles", nargs =-1)

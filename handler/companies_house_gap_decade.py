@@ -36,7 +36,9 @@ from .base import DataHandler,sort_encoding_issue
     ]
 } """
 
-exclude_filters = {
+exclude_filters = {}
+# removing these filters, as a filter was already applied when the API scrape was carried out.
+'''
     "company_type": [
         'private limited company',
         'limited partnership',
@@ -60,7 +62,7 @@ exclude_filters = {
         'royal charter company',
         'further education and sixth form college corps',
         'other company type']
-}
+}'''
 
 
 class CompaniesHouseGapDataHandler(DataHandler):
@@ -91,7 +93,7 @@ class CompaniesHouseGapDataHandler(DataHandler):
     def format_row(self,namefield,row) -> dict:
         '''format a row into Spine format, for given namefield'''
         new_row={}
-
+        
         new_row["uid"] =  'GB-COH-'+ row['company_number']       
         new_row["organisationname"] = row[namefield]
         new_row["normalisedname"] = ''
