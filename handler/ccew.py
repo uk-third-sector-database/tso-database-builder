@@ -12,7 +12,7 @@ exclude_filters = {
 
 class CCEWDataHandler(DataHandler):
     fileencoding='utf-8' #'Latin-1'
-    tmp_fields = ["primary_name","primary_address","cqc_reg"]
+    tmp_fields = ["primary_name","primary_address","cqc_reg",'iteration']
     
 
     def all_filters(self, row: dict) -> bool:
@@ -63,6 +63,7 @@ class CCEWDataHandler(DataHandler):
         new_row["primary_name"] = row["primary_name"].replace('other','0')
         new_row["primary_address"] = row["primary_address"].replace('other','0')
         new_row["cqc_reg"] = row["cqc_reg"]
+        new_row["iteration"] = row['iteration']
 
         super().sort_address_fields(new_row)
         return new_row

@@ -58,7 +58,6 @@ class SocialHousingEngDataHandler(DataHandler):
         new_row["iteration"] = row['Iteration']
 
         super().sort_address_fields(new_row)
-        print(new_row)
         return new_row
         
     def find_primary_info(self, details_list):

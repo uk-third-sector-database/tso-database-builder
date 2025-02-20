@@ -22,14 +22,19 @@ class OSCRDataHandler(DataHandler):
     
 
     def map_date(self, datestr):
-        if not datestr:
+        if not datestr or '########' in datestr:
             return ''
         try:
             d = datetime.strptime(datestr,'%d%b%Y')#'%d/%m/%Y')  previous version
+            return d.strftime('%d/%m/%Y')
         except:
-            print('error with date',datestr)
-            return 
-        return d.strftime('%d/%m/%Y')
+            try:
+                d = datetime.strptime(datestr,'%d/%m/%Y')
+                return d.strftime('%d/%m/%Y')
+            except: 
+                print('error with date',datestr)
+                return 
+        
     
 
     def find_names(self, row) -> list:
@@ -63,12 +68,12 @@ class OSCRDataHandler(DataHandler):
         new_row["localauthority"] = row['localauthority']
         new_row["postcode"] = row['postcode']
         new_row["source"] = row['source']
-        new_row["registerdate"] = self.map_date(row['registerdate'])
+        new_row["registerdate"] = ''#self.map_date(row['registerdate'])
         new_row["removeddate"] = self.map_date(row['removeddate'])
 
-        new_row['name_origin'] = row['name_origin'].replace('Sept 2021','2021').replace('Feb 2021','2020')
+        new_row['name_origin'] = row['name_origin']#.replace('Sept 2021','2021').replace('Feb 2021','2020')
 
-        new_row['iteration'] = row['iteration'].replace('Sept 2021','2021').replace('Feb 2021','2020')
+        new_row['iteration'] = row['iteration']#.replace('Sept 2021','2021').replace('Feb 2021','2020')
         new_row['crossborder'] = row['crossborder']
         
         super().sort_address_fields(new_row)
@@ -79,14 +84,14 @@ class OSCRDataHandler(DataHandler):
         '''names_list is list of tuples (orgname,normname,name_origin)'''
         primary=('','')
         extra_names = set()
-        date = 2000
+        date = datetime(2000,1,1)
         for name in names_list:
             name_tuple = name[:-1]
             name_origin = name[-1]
             #print(f'name_origin = {name_origin}')
             #print(f'name_tuple = {name_tuple}')
             if 'NAME' in name_origin.upper():
-                d = int(name_origin.split(' ')[0])
+                d = datetime.strptime((name_origin.split(' ')[0]),'%m/%Y')
                 if d > date:
                     date = d
                     extra_names.add(primary)
@@ -105,17 +110,18 @@ class OSCRDataHandler(DataHandler):
         '''address_list is list of tuples (fulladdress,city,postcode,iteration)
         and primary address is that found in most recent iteration'''
         primary = ('','','')
-        date = 2000
+        date = datetime(2000,1,1)
         extra_addresses = []
 
         for item in address_list:
             address_tuple = item[:-1]
             iteration = item[-1]
             if iteration:
-                iteration = int(iteration)
+                iteration = datetime.strptime(iteration,'%m/%Y')
                 if iteration > date:
                     date = iteration
                     primary = address_tuple
+
             extra_addresses.append(address_tuple)
             
         extra_addresses = [i for i in extra_addresses if i != primary and i != ('','','')]

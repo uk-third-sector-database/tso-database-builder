@@ -95,7 +95,7 @@ class DataHandler:
         and primary details are that found in most recent iteration'''
         details_list = list(details_list) 
         primary = tuple('' for _ in range(len(details_list[0])-1))
-        date = datetime.strptime('01/01/1900','%d/%m/%Y')
+        date = datetime(1900,1,1)
         extra_details = set()
         #print(f'\n\n in find_primary_info. input = {details_list}')
         for item in details_list:

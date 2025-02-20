@@ -1,5 +1,7 @@
 
 from datetime import datetime
+from .base import DataHandler
+from .base_definitions import sub_spine_entry_creator,extra_csv_entry_creator
 '''
 
 '''
@@ -14,7 +16,7 @@ exclude_filters = {
 
 class CCNIDataHandler(DataHandler):
     fileencoding='utf-8'
-    tmp_fields = []
+    tmp_fields = ['iteration']
 
     def all_filters(self, row: dict) -> bool:
         # other filters?
@@ -29,13 +31,17 @@ class CCNIDataHandler(DataHandler):
             return ''
         try:
             d = datetime.strptime(datestr,'%d%b%Y')
+            return d.strftime('%d/%m/%Y')
         except:
-            print('error with date',datestr)
-        return d.strftime('%d/%m/%Y')
+            try:
+                d = datetime.strptime(datestr,'%d/%m/%Y')
+                return d.strftime('%d/%m/%Y')
+            except:
+                print('error with date',datestr)
+        return ''
     
 
     def find_names(self, row) -> list:
-       
         return ['organisationname']
 
 
@@ -49,12 +55,7 @@ class CCNIDataHandler(DataHandler):
         new_row["companyid"] = row['companyid']   
         new_row["charitynumber"] = row['charitynumber']
         new_row["housenumber"] = row['housenumber']
-        
         new_row["addressline1"] = row["address"]
-        #new_row["addressline2"] = ''
-        #new_row["addressline3"] = ''
-        #new_row["addressline4"] = ''
-        #new_row["addressline5"] = ''
         new_row["city"] = row['city']
         new_row["localauthority"] = row['localauthority']
         new_row["postcode"] = row['postcode']
@@ -62,19 +63,24 @@ class CCNIDataHandler(DataHandler):
         new_row["id_in_source"] = row['charitynumber']
         new_row["registerdate"] = self.map_date(row['registerdate'])
         new_row["removeddate"] = ''
+        new_row['iteration'] = row['iteration']
         
         super().sort_address_fields(new_row)
         return new_row
     
+
+
+    def find_primary_info(self, details_list):
+        return super().find_primary_info(details_list)
+    
+
     def combine_org_details_per_source(self, rows: list):
-        '''This will need to be amended (refer to oscr function) if/when ccni gets more
-        data to differentiate between primary and supplementary
-        data - currently one row per org in raw data.
-        Currently shouldn't be called as uid_dict (in handler.base) will have one
-        item per uid'''
-        print(f"unexpectedly in ccni.combine_org_details_per_source : {rows}")
-        return '',''
-        
+        return super().combine_org_details_per_source(rows)
+
+
+
+
+
 '''
 ccni data fields
 

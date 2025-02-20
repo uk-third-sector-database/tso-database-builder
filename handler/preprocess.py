@@ -69,21 +69,24 @@ def fix_care_inspectorate_files():
                 for i in v:
                     if i in csv_reader.fieldnames:
                         provider = i
-                    
-
+                print(f' for file {file} found id_field = {id_field}, servicetype = {servicetype}, provider = {provider}')
+                lc=0
                 for row in csv_reader:
                     
                     row['CSNumber'] = row[id_field]
                     row['ServiceType'] = row[servicetype]
-                    row['Iteration'] = date
                     row['ServiceProvider'] = row[provider]
                     for key in CIS_fields:
                         row.setdefault(key, '') 
                     row = {key: row[key] for key in CIS_fields}
-        
-        
-                    
+                    if all(value is None or value == '' for value in row.values()):
+                        # lots of empty rows in the raw data
+                        continue
+
+                    lc +=1
+                    row['Iteration'] = date
                     csv_writer.writerow(row)
+                print(f' -- {lc} rows added for iteration {date} ')
                         
             print(f"iteration {date} added to file {output_file}")
 
@@ -346,12 +349,12 @@ def fix_SocialHousingEng():
 
 if __name__ == '__main__':
     # all updated for new data Feb 2025
-    fix_SocialHousingEng()
-    fix_coops_files() 
+    #fix_SocialHousingEng()
+    #fix_coops_files() 
     fix_care_inspectorate_files() 
-    fix_mutuals_files() 
-    fix_ScotHousingReg_files() 
-    fix_CQC_files() 
+    #fix_mutuals_files() 
+    #fix_ScotHousingReg_files() 
+    #fix_CQC_files() 
 
 
 

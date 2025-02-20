@@ -5,6 +5,7 @@ import os
 import pandas as pd
 import re
 from datetime import datetime
+from tqdm import tqdm
 
 from .base import sort_encoding_issue
 
@@ -42,7 +43,58 @@ oscr_fields = [
     'crossborder'
 ]
 
-def process_oscr():
+
+
+def format_date_strings(s):
+    """
+    Converts various date formats from name_origin field into 'mm/yyyy' and retains the associated text.
+    """
+    month_mapping = {
+        "Jan": "01", "Feb": "02", "Mar": "03", "Apr": "04", "May": "05", "Jun": "06",
+        "Jul": "07", "Aug": "08", "Sept": "09", "Sep": "09", "Sept":"09", "Oct": "10", "Nov": "11", "Dec": "12"
+    }
+    s = s.strip()
+    # Case 1: MM/YYYY format
+    match = re.match(r"(\d{2})/(\d{4})", s)
+    if match:
+        month, year = match.groups()
+        return f"{month}/{year}"
+    # Case 2: Named month YYYY (e.g., 'Sept 2021')
+    match = re.match(r"([A-Za-z]+)[\s-]+(\d{4})", s)
+    if match:
+        month_text, year = match.groups()
+        month = month_mapping.get(month_text[:3], "01")  # Default to January if unknown
+        return f"{month}/{year}"    
+    
+    # Case 3: Full MM/YYYY format
+    match = re.match(r"(\d{2})/(\d{4})\s+(.*)", s)
+    if match:
+        month, year, text = match.groups()
+        return f"{month}/{year} {text}"
+    # Case 4: Named month + year (e.g., "Sept 2021")
+    match = re.match(r"([A-Za-z]+)\s+(\d{4})\s+(.*)", s)
+    if match:
+        month_text, year, text = match.groups()
+        month = month_mapping.get(month_text[:3], "01")  # Default to January if unknown
+        return f"{month}/{year} {text}"
+    # Case 5: Only year (e.g., "2012 Name"), assume January
+    match = re.match(r"(\d{4})\s+(.*)", s)
+    if match:
+        year, text = match.groups()
+        return f"01/{year} {text}"
+    
+    # Case 6: Only year (e.g., "2012"), assume January
+    match = re.match(r"(\d{4})", s)
+    if match:
+        year = match.groups()[0]
+        return f"01/{year}"
+        
+    # If no date found, keep the string as is
+    return s
+
+
+def process_oscr():   
+    
     raw_files = glob.glob('../raw_data/oscr/CharityExport-*.csv')
     base_file = '../raw_data/oscr/oscr_spine_public.csv'
     output_file = '../raw_data/oscr.all.csv'
@@ -61,8 +113,11 @@ def process_oscr():
             csv_reader = csv.DictReader(basefile)
 
             lc = 0
-            for row in csv_reader:
+            for row in tqdm(csv_reader,desc='Processing oscr base file'):
                 new_row = {key:row[key] for key in oscr_fields}
+                if row['name_origin']:
+                    new_row['name_origin'] = format_date_strings(row['name_origin'])
+                new_row['iteration'] = format_date_strings(row['iteration'])
                 csv_writer.writerow(new_row)
                 lc +=1
                 link_row = {key:'' for key in ['org_id_a','org_id_b']}
@@ -93,7 +148,7 @@ def process_oscr():
             
             with open(file, 'r', newline='', encoding='UTF8') as infile:
                 csv_reader = csv.DictReader(infile)
-                for row in csv_reader:
+                for row in tqdm(csv_reader, desc=f'Processing {file}'):
                     new_row = {key:'' for key in oscr_fields}
                     new_row['iteration'] = iteration_date
                     new_row['charitynumber'] = row['Charity Number']
@@ -180,7 +235,7 @@ def process_ccni():
                 address,postcode = find_postcode(row['address'],row['organisationname'])
                 new_row['address'] = address
                 new_row['postcode'] = postcode
-                new_row['iteration'] = '2024'
+                new_row['iteration'] = '01/2024'
                 csv_writer.writerow(new_row)
                 lc +=1
                 
@@ -222,7 +277,7 @@ ccew_fields = ['uid', 'charitynumber', 'organisationname', 'normalisedname',
        ]#'dummy', 'dummy2']
 
 def process_ccew():
-    
+
     def formatdate(datestr):
         try:
             d = datetime.strptime(datestr,'%Y-%m-%dT%H:%M:%S')
@@ -281,8 +336,8 @@ def process_ccew():
 
 if __name__ == '__main__':
 #    process_oscr()
-   # process_ccni()
-   process_ccew()
+    process_ccni()
+#   process_ccew()
 
 '''
 OSCR download fields:
