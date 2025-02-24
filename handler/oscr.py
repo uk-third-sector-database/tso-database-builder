@@ -68,7 +68,7 @@ class OSCRDataHandler(DataHandler):
         new_row["localauthority"] = row['localauthority']
         new_row["postcode"] = row['postcode']
         new_row["source"] = row['source']
-        new_row["registerdate"] = ''#self.map_date(row['registerdate'])
+        new_row["registerdate"] = self.map_date(row['registerdate'])
         new_row["removeddate"] = self.map_date(row['removeddate'])
 
         new_row['name_origin'] = row['name_origin']#.replace('Sept 2021','2021').replace('Feb 2021','2020')

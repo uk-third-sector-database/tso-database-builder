@@ -18,7 +18,7 @@ oscr_fields = [
     'organisationname',
     'normalisedname',
     'companyid',
-    'address',
+  #  'address',
     'housenumber',
     'addressline1',
     'addressline2',
@@ -153,7 +153,7 @@ def process_oscr():
                     new_row['iteration'] = iteration_date
                     new_row['charitynumber'] = row['Charity Number']
                     new_row['organisationname'] = row['Charity Name']
-                    new_row['address'] = row['Principal Office/Trustees Address']
+                    new_row['addressline1'] = row['Principal Office/Trustees Address']
                     new_row['postcode'] = row['Postcode']
                     new_row['registerdate'] = row['Registered Date']
                     new_row['name_origin'] = f'{iteration_date} Name'
@@ -335,9 +335,15 @@ def process_ccew():
                 print(f'copied {lc} lines from {file} to {output_file}, iteration date = {iteration_date}')
 
 if __name__ == '__main__':
-#    process_oscr()
-    process_ccni()
-#   process_ccew()
+    import sys
+    for regulator in sys.argv[1:]:
+        print(f'Processing {regulator}')
+        if regulator == 'oscr':
+            process_oscr()
+        if regulator == 'ccni':
+            process_ccni()
+        if regulator == 'ccew':
+            process_ccew()
 
 '''
 OSCR download fields:
