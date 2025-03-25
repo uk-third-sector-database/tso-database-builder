@@ -96,9 +96,10 @@ class CompaniesHouseDataHandler(DataHandler):
         new_row["city"] = row['RegAddress.PostTown']
         new_row["postcode"] = row['RegAddress.PostCode']
         new_row["source"] = 'CH'
-        #new_row["companytype"] = row['CompanyCategory']#'CompaniesHouse'#'CH'
+        new_row["companytype"] = row['CompanyCategory']#'CompaniesHouse'#'CH'
         new_row["removeddate"] = row['DissolutionDate']
         new_row["registerdate"] = row['IncorporationDate']
+        new_row['is_cic'] = bool(row['CompanyCategory'] == 'Community Interest Company')
         if 'PreviousName' in namefield:
             new_row['extraname'] = 1
         else:
@@ -194,6 +195,5 @@ Included company types:
  "Industrial and Provident Society "
 
 '''
-
 
 

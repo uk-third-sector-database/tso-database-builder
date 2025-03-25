@@ -145,6 +145,8 @@ class DataHandler:
         addresses = set()
         regdates = set()
         remdates = set()
+        cic_flag = False
+
         for r in rows:
             for field in self.tmp_fields:
                 if not field in r.keys(): r[field] = ''
@@ -153,6 +155,7 @@ class DataHandler:
                 a = (r['fulladdress'],r['city'],r['postcode'],r['iteration'])
                 reg = r['registerdate']
                 dis = r['removeddate']
+                c= r['is_cic']
             except KeyError as e:
                 print(f'KeyError searching for names, addresses and/or dates in row {r} : {e}\n')
                 return []
@@ -160,6 +163,9 @@ class DataHandler:
 
             for var in [(n,names),(a,addresses),(reg,regdates),(dis,remdates)]:
                 var[1].add(var[0])
+            if c == 'True': 
+                cic_flag = True
+
 
         primary_name, extra_names = self.find_primary_info(names)
         primary_address, extra_addresses = self.find_primary_info(addresses)
@@ -170,7 +176,8 @@ class DataHandler:
             {'uid' : r['uid'],
             "id_in_source" : r['id_in_source'],
             "companyid" : r['companyid'],
-            "source" : r['source'],})
+            "source" : r['source'],
+            'is_cic' : cic_flag})
 
         if primary_name:
             new_sub_spine_row["organisationname"] =  primary_name[0]

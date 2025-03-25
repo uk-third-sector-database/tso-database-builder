@@ -536,7 +536,7 @@ def test_extras_no_change():
     
     assert_files_basically_same(extra_csv, expected_supp)
 
-@pytest.mark.xfail(reason='This test is failing because the sort_extras method is not yet working')
+#@pytest.mark.xfail(reason='This test is failing because the sort_extras method is not yet working')
 def test_sort_extras_compressed(setup_base_ccew_orgs):
     '''supplementary file should have data compressed, so that all data for a given uid is on one line, unless the course provided more than one entry for a given field'''
     

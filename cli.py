@@ -3,8 +3,8 @@ import click
 from handler.base import do_csv_processing,compress_org_details,sort_csv_by_field
 
 from handler.companies_house import CompaniesHouseDataHandler
-from handler.companies_house_2014 import CompaniesHouse2014DataHandler
-from handler.companies_house_gap_decade import CompaniesHouseGapDataHandler
+#from handler.companies_house_2014 import CompaniesHouse2014DataHandler
+from handler.companies_house_API_scrape import CH_APIScrape_DataHandler
 from handler.co_ops import CoOpsDataHandler
 from handler.careInspectScot import CareInspScotDataHandler
 from handler.careQC import CQCDataHandler
@@ -27,8 +27,8 @@ import subprocess
 # Add entries here of handler name to handler type for use by the command line
 handler_map = {"CompaniesHouse": CompaniesHouseDataHandler,
                "CoOps": CoOpsDataHandler,
-               "CompaniesHouse2014":CompaniesHouse2014DataHandler,
-               "CompaniesHouseGapDecade":CompaniesHouseGapDataHandler,
+#               "CompaniesHouse2014":CompaniesHouse2014DataHandler,
+               "CompaniesHouseGapDecade":CH_APIScrape_DataHandler,
                "CareInspScot":CareInspScotDataHandler,
                "CQC":CQCDataHandler,
                "SocialHousingEng":SocialHousingEngDataHandler,

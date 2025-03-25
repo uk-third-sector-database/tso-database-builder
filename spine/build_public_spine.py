@@ -1,14 +1,12 @@
 import csv
 import pandas as pd
 import os
-from  pydantic import BaseModel
+from  pydantic import BaseModel, Field, field_validator
 from datetime import datetime
-import copy
 from memory_profiler import profile
 from tqdm import tqdm  
-from itertools import product
 
-from handler.base_definitions import EXTRA_DETAILS_CSV_FIELDS, SPINE_CSV_FIELDS, MATCHES_CSV_FIELDS, match_csv_entry_creator, ORG_ID_MAPPING, extra_csv_entry_creator
+from handler.base_definitions import EXTRA_DETAILS_CSV_FIELDS, SPINE_CSV_FIELDS, MATCHES_CSV_FIELDS, ORG_ID_MAPPING
 
 def read_dkane_sameas(file):
     #print(os.getcwd())
@@ -56,6 +54,8 @@ def read_dkane_sameas(file):
 ftc_dict, primary_ccew_orgs_ftc = read_dkane_sameas('../raw_data/FTC_data/dkane_relationships_sameas.csv')
 oscr_linkage_lookup, _ = read_dkane_sameas('../raw_data/oscr.linkage.csv')
 
+
+
 class ExtraInfo(BaseModel):
     uid: str
     organisationname: str = ''
@@ -75,6 +75,66 @@ class ExtraInfo(BaseModel):
         fields.remove('uid')
         fields.remove('source')
         return all(getattr(self, field) == '' for field in fields)
+    
+    def __hash__(self):
+        return hash(self.model_dump(exclude="source"))
+    
+    def hash_addr(self):
+        return hash((self.fulladdress, self.city, self.postcode))
+    
+    def hash_names(self):
+        return hash((self.organisationname, self.normalisedname))
+    
+    def hash_reg(self):
+        return hash(self.registerdate)
+    
+    def hash_rem(self):
+        return hash(self.removeddate)
+    
+def consolidate_extras(values):
+    # before adding anything to extras, check extras lists for duplicates
+    seen_names = set()
+    seen_adresses = set()
+    seen_reg_dates = set()
+    seen_rem_dates = set()
+    processed_extras = []
+    for item in values:
+        if isinstance(item, dict):
+            item_obj = ExtraInfo(**item)
+        else:
+            item_obj = item
+        
+        
+        
+        
+        addr_hash = item_obj.hash_addr()
+        names_hash = item_obj.hash_names()
+        reg_hash = item_obj.hash_reg()
+        rem_hash = item_obj.hash_rem()
+        
+        updates={}
+        if addr_hash in seen_adresses:
+            updates.update({'fulladdress':'' , 'city':'', 'postcode':''})
+        else:
+            seen_adresses.add(addr_hash)
+        if names_hash in seen_names:
+            updates.update({'organisationname':'', 'normalisedname':''})
+        else:   
+            seen_names.add(names_hash)
+        if reg_hash in seen_reg_dates:
+            updates.update({'registerdate':''})
+        else:
+            seen_reg_dates.add(reg_hash)
+        if rem_hash in seen_rem_dates:
+            updates.update({'removeddate':''})
+        else:
+            seen_rem_dates.add(rem_hash)
+        new_item = item_obj.model_copy(update=updates)
+        if not new_item.isempty():
+            processed_extras.append(new_item)
+        #if not new_item == item_obj:
+        #    print(f'Consolidated extra: {item_obj.model_dump()} to {new_item.model_dump()}')
+    return processed_extras
     
 
     
@@ -104,20 +164,33 @@ class CoreOrganisation(BaseModel): # orgs for public spine
     id_in_source: str
     cqc_reg: str = ""
     crossborder: str = ""
+    is_cic: str = "False"
 
-    extras: list[ExtraInfo] = []
+    extras: list[ExtraInfo] =  Field(default_factory=list)
 
-    matched_orgs: list = [] # list of (SubSpineOrg,matchtype:str) tuples
-    sorted_matches: list[MatchInfo] = []
-    sorted_extras: list[ExtraInfo] = []
+    matched_orgs: list =  Field(default_factory=list) # list of (SubSpineOrg,matchtype:str) tuples
+    sorted_matches: list[MatchInfo] =  Field(default_factory=list)
+    sorted_extras: list[ExtraInfo] =  Field(default_factory=list)
+
+    @field_validator('extras', mode='before')
+    def validate_extras(cls,values):
+        return consolidate_extras(values)
 
 
     def to_extra_info(self) -> ExtraInfo:
-        
         return ExtraInfo(**self.model_dump())
+    
+    # if an org is added to matched_orgs, check if it is_cic, and if so, set is_cic flag for this org
+    @field_validator('matched_orgs', mode='before')
+    def validate_matched_orgs(cls,values):
+        for m,matchtype in values:
+            if m.is_cic == 'True':
+                cls.is_cic = 'True'
+        return values
 
     
     def to_main_csv(self):
+        self.is_cic = self.is_cic if self.is_cic else 'False'
         return self.model_dump(exclude={"extras","matched_orgs","sorted_matches"})
         
     def to_extras_csv(self):
@@ -156,6 +229,11 @@ class CoreOrganisation(BaseModel): # orgs for public spine
 
 
             for matched_org in matched_orgs:
+                # if matched_org has is_cic flag set to True, set is_cic flag for this org:
+                if matched_org.is_cic == 'True':
+                    print(f'matched org is cic: {self.uid} matched to {matched_org.uid}')
+                    self.is_cic = 'True'
+
                 if not matchtype == 'companyid - companyid':
                     assured_matched_orgs.append(matched_org)
                     e = matched_org.to_extra_info()
@@ -188,50 +266,6 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                     match_type = matchtype))
 
         return new_main_rows
-
-    def __consolidate_extras(self):
-        names = set()
-        addresses = set()
-        remdates = set()
-        regdates = set()
-
-        for e in self.extras:
-            names.add((e.organisationname,e.normalisedname))
-            addresses.add((e.fulladdress,e.city,e.postcode))
-            remdates.add(e.removeddate)
-            regdates.add(e.registerdate)
-
-        for n in names:
-            for a in addresses:
-                for rem in remdates:
-                    for reg in regdates:
-                        self.sorted_extras.append(ExtraInfo(uid = self.uid, organisationname = n[0], normalisedname = n[1], fulladdress = a[0], city = a[1], postcode = a[2], removeddate = rem, registerdate = reg))   
-
-
-    
-
-    def consolidate_extras(self):
-        unique_extras = set()
-
-        for e in self.extras:
-            unique_extras.add((
-                e.organisationname, e.normalisedname,
-                e.fulladdress, e.city, e.postcode,
-                e.removeddate, e.registerdate
-            ))
-
-        self.sorted_extras = [
-            ExtraInfo(
-                uid=self.uid,
-                organisationname=n, normalisedname=nn,
-                fulladdress=a, city=c, postcode=p,
-                removeddate=rem, registerdate=reg
-            )
-            for (n, nn, a, c, p, rem, reg) in unique_extras
-        ]
-
-
-
 
 
 #
@@ -314,7 +348,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                 x.removeddate = ''
 
         # consolidate extras per uid so that supplementary.csv has as few rows as possible
-        #self.consolidate_extras()
+        consolidate_extras(self.extras)
 
 
 
@@ -332,12 +366,17 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
     id_in_source: str
     crossborder: str = ""
     cqc_reg: str = ""
+    is_cic: str = ""
 
-    extras: list[ExtraInfo] = []
+    extras: list[ExtraInfo] = Field(default_factory=list)
+
 
     def to_extra_info(self) -> ExtraInfo:
         return ExtraInfo(**self.model_dump())
 
+    @field_validator('extras', mode='before')
+    def validate_extras(cls,values):
+        return consolidate_extras(values)
 
     def to_core_org(self) -> CoreOrganisation:
         kwargs = self.model_dump()
@@ -538,7 +577,6 @@ class MainOrgList:
                         elif org_merging_on_remdate and (org_merging_on_remdate > matched_coreorg_remdate):
                             print(f'ERROR: {subspine_org.normalisedname} ({subspine_org.uid}) has a later removal date ({subspine_org.removeddate}) than {m.normalisedname} ({m.uid}, {m.removeddate}) in source {m.source}')
 
-        # add progress bar here
         
         for this_subspine_org in tqdm(orgs, desc='Processing orgs'):
             # does this_subspine_org match anything already in the spine (MainList (self))?

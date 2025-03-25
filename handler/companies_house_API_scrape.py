@@ -65,7 +65,7 @@ exclude_filters = {}
 }'''
 
 
-class CompaniesHouseGapDataHandler(DataHandler):
+class CH_APIScrape_DataHandler(DataHandler):
     fileencoding='UTF8'
     def all_filters(self,row: dict) -> bool:
 
@@ -107,10 +107,11 @@ class CompaniesHouseGapDataHandler(DataHandler):
         new_row["postcode"] = row['postal_code']
         
         new_row["source"] = 'CH' #' '.join([row['company_type'],row['company_subtype']]).strip()
-        #new_row["companytype"] = ' '.join([row['company_type'],row['company_subtype']]).strip()
+        new_row["companytype"] = ' '.join([row['company_type'],row['company_subtype']]).strip()
         new_row["removeddate"] = self.map_date(row['date_of_cessation'])
         new_row["registerdate"] = self.map_date(row['date_of_creation'])
         new_row["iteration"] = '2022'
+        new_row['is_cic'] = bool(row['company_subtype'] == 'community-interest-company')
         #new_row['SIC'] = row['sic_codes'].strip('[').strip(']').replace("'",'')
         
 

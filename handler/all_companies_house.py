@@ -6,26 +6,26 @@ import os
 import csv
 import glob
 from .companies_house import CompaniesHouseDataHandler
-from .companies_house_gap_decade import CompaniesHouseGapDataHandler
-from .companies_house_2014 import CompaniesHouse2014DataHandler
+from .companies_house_API_scrape import CH_APIScrape_DataHandler
+#from .companies_house_2014 import CompaniesHouse2014DataHandler
 
 
 from .base import iter_csv_rows
 
 def process_api_scrape(file,ofile):
     print(file)
-    data_handler = CompaniesHouseGapDataHandler()
+    data_handler = CH_APIScrape_DataHandler()
     for new_row in filter(
         data_handler.all_filters, iter_csv_rows(file,data_handler)):
         ofile.writerows(data_handler.transform_row(new_row))
 
 
-def process_2014_data(file,ofile):
-    print(file)
-    data_handler = CompaniesHouse2014DataHandler()
-    for new_row in filter(
-        data_handler.all_filters, iter_csv_rows(file,data_handler)):
-        ofile.writerows(data_handler.transform_row(new_row))
+#def process_2014_data(file,ofile):
+#    print(file)
+#    data_handler = CompaniesHouse2014DataHandler()
+#    for new_row in filter(
+#        data_handler.all_filters, iter_csv_rows(file,data_handler)):
+#        ofile.writerows(data_handler.transform_row(new_row))
 
 def process_bulk_download(file,ofile,datahandler):
     # extract date from filename, eg. BasicCompanyDataAsOneFile-2023-06-01.csv
@@ -69,31 +69,30 @@ def find_CIC_uids(file,companytype_field,cic_search,encode):
 
 def main_process(ofilename):
     api_scrape_file = '../raw_data/CompaniesHouse/ch_adv_scrape.csv'
-    historic_data = '../raw_data/CompaniesHouse/soton14reduced.csv'
+    #historic_data = '../raw_data/CompaniesHouse/soton14reduced.csv'
     bulk_downloads = glob.glob('../raw_data/CompaniesHouse/BasicCompanyDataAsOneFile*csv')
-    # open outputfile 'w+ as csvwriter
-    #with open(ofilename, 'w+', newline='', encoding='UTF8') as outfile:
-#
-    #    datahandler =  CompaniesHouseDataHandler
-    #    fields = SUB_SPINE_CSV_FIELDS + ['iteration'] + ['companytype']
-    #    
-    #    csv_writer = csv.DictWriter(outfile, fieldnames=fields)  # possibly change field list to a CH specific one?
-    #    csv_writer.writeheader()  
-    #    process_api_scrape(api_scrape_file,csv_writer)
-    #    process_2014_data(historic_data,csv_writer)
-    #    for file in bulk_downloads:
-    #        process_bulk_download(file,csv_writer,datahandler)
+
+    with open(ofilename, 'w+', newline='', encoding='UTF8') as outfile:
+        datahandler =  CompaniesHouseDataHandler
+        fields = SUB_SPINE_CSV_FIELDS + ['iteration']  + ['is_cic'] + ['companytype']
+
+        csv_writer = csv.DictWriter(outfile, fieldnames=fields)  # possibly change field list to a CH specific one?
+        csv_writer.writeheader()  
+        process_api_scrape(api_scrape_file,csv_writer)
+        #process_2014_data(historic_data,csv_writer)
+        for file in bulk_downloads:
+            process_bulk_download(file,csv_writer,datahandler)
 
     all_CICs = set()
-    for file, type_field, cic_search, encode in [(historic_data,'companycategory','Community Interest Company','Latin-1'),
+    for file, type_field, cic_search, encode in [#(historic_data,'companycategory','Community Interest Company','Latin-1'),
                                          (api_scrape_file,'company_subtype','community-interest-company','Latin-1')] + \
                                         [(i,'CompanyCategory','Community Interest Company','utf8') for i in bulk_downloads]:
         CIC_uids = find_CIC_uids(file,type_field,cic_search,encode)
         all_CICs.update(CIC_uids)
         print(f'found {len(CIC_uids)} CICs in {file}')
-        print(CIC_uids[:5])
+        #print(CIC_uids[:5])
 
     with open('all_CICs.txt','w') as f:
-        f.write(f"# CICs found in files {','.join([api_scrape_file,historic_data] + bulk_downloads)}\n\n")
+        f.write(f"# CICs found in files {','.join([api_scrape_file] + bulk_downloads)}\n\n") #{','.join([api_scrape_file,historic_data] + bulk_downloads)}\n\n")
         f.write('\n'.join(all_CICs))
 

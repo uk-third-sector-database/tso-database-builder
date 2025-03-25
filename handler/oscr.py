@@ -67,7 +67,7 @@ class OSCRDataHandler(DataHandler):
         new_row["city"] = row['city']
         new_row["localauthority"] = row['localauthority']
         new_row["postcode"] = row['postcode']
-        new_row["source"] = row['source']
+        new_row["source"] = 'OSCR'
         new_row["registerdate"] = self.map_date(row['registerdate'])
         new_row["removeddate"] = self.map_date(row['removeddate'])
 

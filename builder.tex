@@ -34,10 +34,12 @@
 \section{Introduction}
 This document is a guide to the UK Third Sector and Civil Society Database, a ‘spine’ of all 
 registered organisations comprising the third sector and civil society in the United Kingdom, along with 
-linkages between organisations which appear in more than one register.
+linkages between organisations which appear in more than one register. The dataset is available at the project website\footnote{\url{https://uk-third-sector-database.io/}}.
 
-Ten data sources are combined in order to build the organisational spine. This document briefly introduces the processes of data collection, pre-processing of 
-data per source, and combining all sources to create one master list. 
+Ten data sources are combined in order to build the organisational spine, listed in Table \ref{tab:order}, and further detailed in appendices. 
+This document briefly introduces the processes of data collection, pre-processing of 
+data per source, and combining all sources to create one master list.  The spine files are first introduced, followed by a description of the process of matching organisations between sources. 
+Preprocessing of each source is detailed in the appendix. The project source code is available on GitHub\footnote{\url{https://github.com/uk-third-sector-database/tso-database-builder}}.
 
 \section{Building the organisational spine}
 
@@ -46,11 +48,11 @@ data per source, and combining all sources to create one master list.
 The organisational spine consists of three csv files: 
 \begin{itemize}
 \item public\_spine.spine.csv contains a row for each organisation considered to make up the UK's third sector, with name, address and date details. The data dictionary
-is found in table \ref{tab:spine_fields}.
+is found in Table \ref{tab:spine_fields}.
 \item public\_spine.supplementary.csv contains any name, address and date information associated with an organsiation which is additional to what is in the spine, 
-such as 'Also Known As' names, previous addresses. See table \ref{tab:supplementary_fields} for data dictionary
+such as 'Also Known As' names, previous addresses. See Table \ref{tab:supplementary_fields} for data dictionary
 \item public\_spine.matches.csv lists the organisations which are linked or matched according to our searches (see \ref{sec:match}), along with the type of match. Data dictionary
-in table \ref{tab:match_fields}
+in Table \ref{tab:match_fields}
 \end{itemize}
 
 
@@ -68,6 +70,7 @@ in table \ref{tab:match_fields}
     postcode &	Postcode matching full address as defined above\\    \hline
     registerdate &	Earliest registration date found in records for this organisation across all sources\\    \hline
     removeddate &	Latest dissolution date found in records for this organisation across all sources\\    \hline
+    is\_cic & Boolean indicating if organisation is a Community Interest Company\\    \hline
 \end{tabularx}
 \caption{Public spine csv fields}
 \label{tab:spine_fields}
@@ -96,7 +99,7 @@ removeddate & Alternative removed / dissolved date \\ \hline
   \begin{tabularx}{\textwidth}{|l|X|}
     \hline
 Fieldname &	Notes \\ \hline \hline
-uid &	UID created for each source, matches table \ref{tab:spine_fields} - if match is unambiguous; blank otherwise\\ \hline
+uid &	UID created for each source, matches Table \ref{tab:spine_fields} - if match is unambiguous; blank otherwise\\ \hline
 
 orgA\_id\_in\_source &  ID in original source, for matched organisation A\\ \hline
 orgA\_source & original source of organisation A\\ \hline
@@ -130,6 +133,9 @@ If two charities share the same companyid they match the same companies house re
 
 This same company id is used to generate matches between CCEW and Companies House directly.
 
+Our historic data from Scotland's charity regulator, OSCR, contains a company identifier for some organisations. This is used
+for a deterministic match between OSCR and Companies House.
+
 Organisations in the Cooperatives register may have an additional id, 'Registered Number', which represents its linkage to 
 the Mutuals Public Register. Matches are thus sought between CoOps and Mutuals using this id.
 
@@ -153,14 +159,15 @@ Any of the following being true will create a match:
 
 \item Matching using work by Find That Charity:
 
-A lookup table provided by David Kane\footnote{\url{https://raw.githubusercontent.com/drkane/charity-lookups/master/relationships/_sameas.csv}} is also used to generate matches. These links include historic reregistrations, allowing
+A lookup table provided by David Kane\footnote{\url{https://raw.githubusercontent.com/drkane/charity-lookups/master/relationships/_sameas.csv}} is also used to generate matches. 
+These links include historic reregistrations, allowing
 this dataset to be further deduplicated.
 \end{itemize}
 
 
 
-The  order in table \ref{tab:order} shows the precendence given to sources where matches occur: the higher precendence
-source will provide the data and uid in the main spine table. Matches will be found in the matches table, and any data
+The  order in Table \ref{tab:order} shows the precendence given to sources where matches occur: the higher precendence
+source will provide the data and unique identifier (uid) in the main spine table. Matches will be found in the matches table, and any data
 found in addition to the primary fields will be in the supplementary table, indexed by the uid given at source. The first eight sources are processed such that any organisations not already present 
 in the dataset are added to it. Sources CIS and CQC are only noted in the matches table where they link to a source present.
 
@@ -185,8 +192,6 @@ Order &	Source & Code \\ \hline \hline
 \caption{Precedence order of sources for matched organisations}
 \label{tab:order}
 \end{table}
-
-Where matched organisations occur from within the same source, the primary organisation is given to be the one that is still active, or was active most recently.
 
 \clearpage
 \subsection{Match types visualised}
@@ -237,22 +242,7 @@ More information about the processes for each source are found in the appendix, 
 
   \begin{table}[h]
     \centering
-  \begin{tabularx}{0.8\textwidth}{|X|r|r|r|}
-    \hline
-    source & count in spine & count of matches & count of matches not in spine \\
-    \hline
-    CHC & 337858 & 73308 & 4132 \\\hline
-    SC & 49306 & 10172 & 1346 \\\hline
-    NIC & 7746 & 659 & 0 \\\hline
-    COH & 362311 & 87023 & 74229 \\\hline
-    COOP & 9239 & 9978 & 1323 \\\hline
-    MPR & 18649 & 13036 & 13024 \\\hline
-    SHR & 158 & 15 & 0 \\\hline
-    SHPE & 9 & 1311 & 1311 \\\hline
-    CIS & 0 & 1882 & 1882 \\\hline
-    CQC & 0 & 975 & 975 \\\hline
-    \hline
-\end{tabularx}
+    \input{../public_spine_data/public_spine.all_orgs.spine_match.tab.tex}
     \caption{Counts of organisations in the spine, and matched to the spine, from each source register}
     \label{tab:counts_per_source}
     \end{table}
@@ -263,23 +253,14 @@ More information about the processes for each source are found in the appendix, 
 \section*{Appendix: Data Sources}
 
 All data in the spine comes from publicly available sources. The number of organisations in the database (whether in the list of 
-core organisation or via matching) are shown in Figure \ref{fig:all_used_orgs}, with counts shown in Table \ref{tab:all_used_orgs}.
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.8\textwidth]{../public_spine_data/public_spine.all.sources.png}
-  \caption{Sources contributing to the database}
-  \label{fig:all_used_orgs}
-  \end{figure}
-
-\input{../public_spine_data/public_spine.all_used_orgs.tab.tex}
-
+core organisation or via matching) are shown in  Table \ref{tab:counts_per_source}.
 
 Details for each source are given in the sections below.
 
 \clearpage
 \subsection{Charity Commission for England and Wales (CCEW)}
 \url{https://www.gov.uk/government/organisations/charity-commission}
+
 \url{https://register-of-charities.charitycommission.gov.uk/en/register/full-register-download}
 
 This section outlines the use of CCEW regulatory data in the construction of the third sector
@@ -394,8 +375,8 @@ This section outlines the use of OSCR regulatory data in the construction of the
 organisational spine\footnote{ For further detail on how this data was used, please see the accompanying
 oscr\_publicspine\_prep.do file.}.
 
-The OSCR data used in this project comprised six individual data files that were obtained
-between 2012 and 2023. These files were used to compile a list of unique charities, and to
+The OSCR data used in this project comprised eight individual data files that were obtained
+between 2012 and 2025. These files were used to compile a list of unique charities, and to
 extract   as   many   unique   names,   addresses,   registration   dates,   and   removal   dates   for   each
 organisation. These files are detailed below: 
 \begin{itemize}
@@ -495,36 +476,36 @@ or removal dates. As such, many of the names in our data file are first observed
 the earliest point of observation for the other key pieces of information is 2019.
 
 \clearpage
-\subsection{Charity Commission for Northern Island (CCNI)}
+\subsection{Charity Commission for Northern Ireland (CCNI)}
 \url{https://www.charitycommissionni.org.uk/}
 
 This section outlines the use of CCNI regulatory data in the construction of the third sector
 organisational spine\footnote{For further detail on how this data was used, please see the accompanying
 ccni\_publicspine\_prep.do file.}.
 
-The CCNI data used in this project comprised one open data file obtained in April 
-2023\footnote{ccni-charity-register-2023-04-19.xlsx [CCNI charity register - 19 April 2023]}. This
-file was used to compile a list of unique charities with accompanying names, addresses, and
+The CCNI data used in this project comprised of open data files obtained in 
+\begin{itemize}
+  \item April 2023 (ccni-charity-register-2023-04-19.csv [CCNI charity register - 19 April 2023])
+  \item January 2025 (ccni-charitydetails\_2025\_01\_29\_14\_23\_47.csv [CCNI charity details - 29 January 2025])
+\end{itemize}
+These files were used to compile a list of unique charities with accompanying names, addresses, and
 registration dates for each organisation. 
 
 Unlike the preceding sections on CCEW and OSCR data, the research team did not have
 historical files to supplement the open date provided by the CCNI. Additionally, the CCNI data
 provide only one organisation name, address, and registration date per CCNI charity number
-(e.g., S\'{o}l\'{a}s in Belfast operates under the charity number 100114). As such, we did not need to
-de-duplicate the CCNI data. This dataset is later merged with data from all other data sources.
+(e.g., S\'{o}l\'{a}s in Belfast operates under the charity number 100114). For organisations whose details differed
+between the two files, the most recent data was prioritised for the spine, and older data retained in the 
+'supplementary' table. This dataset is later merged with data from all other data sources.
 
 The codebook of variables is found in Table \ref{tab:ccni_preprocess}.
 
 \subsubsection{Limitations}
-Unlike the other charity regulator data sources, our data for CCNI does not provide multiple
-unique names, addresses, or registration dates. This information can be gathered going forward
-by updating the data periodically with the most recent CCNI open data download. However, at
-this point in time, the CCNI data is less comprehensive than its counterparts in England, Wales,
+Unlike the other charity regulator data sources, our data for CCNI does not alternative or historic
+unique names, addresses, or registration dates. 
+At this point in time, the CCNI data is less comprehensive than its counterparts in England, Wales,
 and Scotland. Additionally, the CCNI does not provide information on the date that a charity is
 removed from the charity register. This further limits the CCNI data at this time.
-Finally, there are 17 CCNI organisations for which the data does not provide valid postcodes.
-These observations are kept in the final dataset because we do have information on charity
-names, registrations dates, and street addresses. 
 
 
 \begin{table}[h]
@@ -550,24 +531,6 @@ source & Variable to indicate the data source (in this case - CCNI) \\ \hline
 \label{tab:ccni_preprocess}
 \end{table}
 
-\clearpage
-\subsection{Overview of charity regulator data}
-\begin{table}[h]
-  \centering
-  \begin{tabularx}{\textwidth}{|X|l|l|l|l|}
-    \hline
-&CCEW&OSCR&CCNI&Total \\ \hline \hline
-Unique organisations & 341,990 & 50,652 & 7,746 & 400,388\\ \hline
-Unique names & 545,091 & 61,124 & 7,746 & 613,966\\ \hline
-Unique addresses & 668,888 & 53,612 & 7,746 & 730,517\\ \hline
-Unique registration dates & 357,631 & 50,655 & 7,746 & 416,032\\ \hline
-Unique removal dates & 182,703 & 25,262 & 0 & 207,965\\ \hline
-\end{tabularx}
-\caption{Overview of charity regulator data}
-\label{tab:char_regulator_inputs}
-\end{table}
-
-\clearpage
 
 \clearpage
 \subsection{Companies House}
@@ -575,17 +538,17 @@ Unique removal dates & 182,703 & 25,262 & 0 & 207,965\\ \hline
 
 
 
-Companies House release a bulk download every quarter of all currently live companies\footnote{\url{https://download.companieshouse.gov.uk/en_output.html}}. The Beta public 
-spine encorporates these downloads for June 2023, October 2023, March 2024 and May 2024. Beta release \#3 additionally includes the September 2024 download.
+Companies House release a bulk download every quarter of all currently live companies\footnote{\url{https://download.companieshouse.gov.uk/en_output.html}}. The Alpha public 
+spine encorporates these downloads for April, June and October 2023, March, May and September 2024, and January 2025. 
+
 
 Using bulk downloads alone would mean organisations that were dissolved earlier than 2023 would 
 not be present in the database. Using the Companies House API
-we found all companies registered and dissolved which fit our inclusion criteria (see table \ref{tab:CH_companytypes} for included
+we found all companies registered and dissolved which fit our inclusion criteria (see Table \ref{tab:CH_companytypes} for included
 company types). 
 The code used to search the API is found in our 
 github repository 
-\url{https://github.com/uk-third-sector-database/ch_adv_scraper}. Previous work by members of our team 
-identified charitible organisations in companies house data during a period up to 2014, which was used alongside these Companies House sources. 
+\url{https://github.com/uk-third-sector-database/ch_adv_scraper}. 
 
 % inlcuded company types from CH
 
@@ -607,6 +570,7 @@ full list of these, indicating which have been included in the public spine data
     PRI/LTD BY GUAR/NSC (Private, limited by guarantee, no share capital) & Included \\ \hline
     Registered Society & Included \\ \hline
     Scottish Charitable Incorporated Organisation & Included \\ \hline
+    Converted/Closed & Included \\ \hline
     \hline
     Private Limited Company & Excluded \\ \hline
     Limited Partnership & Excluded \\ \hline
@@ -623,7 +587,6 @@ full list of these, indicating which have been included in the public spine data
     United Kingdom Economic Interest Grouping & Excluded \\ \hline
     Old Public Company & Excluded \\ \hline
     United Kingdom Societas & Excluded \\ \hline
-    Converted/Closed & Excluded \\ \hline
     Other Company Type & Excluded \\ \hline
     Protected Cell Company & Excluded \\ \hline
     Royal Charter Company & Excluded \\ \hline
@@ -642,77 +605,44 @@ also combined, since there is significant overlap between them, and the most rec
 per organsiation was included in the companies house spine data, to be used for matching with other 
 registries to form the public spine.
 
-Counts of organisations ingested from each source, along with the overlaps in UIDS, are shown in 
-Figure \ref{fig:ch_source_venn}.
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.8\textwidth]{CH_venn.builder.png}
-  \caption{Companies house organisations - intersections of UIDs across the three sources.}
-  \label{fig:ch_source_venn}
-\end{figure}
-
-This process led to a total of 436,540 organisations from companies house, of which 197,517 
-had supplementary/additional information. 
-
-The distribution across company categories is seen in Table \ref{tab:CH_types_dist}. There are different abbreviations used, depending on 
-source of the data. Additionally there are numbers of cases where the company type includes Community Interest Company along with another type. 
+%Counts of organisations ingested from each source, along with the overlaps in UIDS, are shown in 
+%Figure \ref{fig:ch_source_venn}.
+%
+%\begin{figure}[h]
+%  \centering
+%  \includegraphics[width=0.8\textwidth]{CH_venn.builder.png}
+%  \caption{Companies house organisations - intersections of UIDs across the three sources.}
+%  \label{fig:ch_source_venn}
+%\end{figure}
+%
+%The distribution across company categories is seen in Table \ref{tab:CH_types_dist}. There are different abbreviations used, depending on 
+%source of the data. Additionally there are numbers of cases where the company type includes Community Interest Company along with another type. 
 
 
-\begin{table}[h]
-  \begin{tabularx}{\textwidth}{|X|r|}
-    \hline
-    Company Type (alphabeticalised) & Count of organisations \\ \hline
-    \hline
-    CLG                                                                                        &  189348 \\ \hline
-    Charitable Incorporated Organisation                                                       &  346682 \\ \hline
-    Community Interest Company                                                                 &  358012 \\ \hline
-    Industrial and Provident Society                                                           &   15366 \\ \hline
-    PRI/LBG/NSC (Private, Limited by guarantee, no share capital, use of 'Limited' exemption)  &  436013 \\ \hline
-    PRI/LTD BY GUAR/NSC (Private, limited by guarantee, no share capital)                      & 1212152 \\ \hline
-    Registered Society                                                                         &  105512 \\ \hline
-    Scottish Charitable Incorporated Organisation                                              &   63394 \\ \hline
-    ltd community-interest-company                                                             &    9343 \\ \hline
-    plc community-interest-company                                                             &       2 \\ \hline
-    private-limited-guarant-nsc                                                                &  193501 \\ \hline
-    private-limited-guarant-nsc community-interest-company                                     &   82326 \\ \hline
-    private-limited-guarant-nsc-limited-exemption                                              &   67796 \\ \hline
-    private-limited-guarant-nsc-limited-exemption community-interest-company                   &     102 \\ \hline
+%\begin{table}
+%\input{CH.companytype.tab.tex}
+%\caption{Companies house organisations by company type.}
+%\label{tab:CH_companytypes}
+%\end{table}
 
-\hline
-  \end{tabularx}
-  \caption{Distribution of company types in dataset.}
-  \label{tab:CH_types_dist}
-\end{table}
-
-Compressing these categories such that all Community Interest Companies are grouped, and all remaining companies which are
+Compressing the company type categories such that all Community Interest Companies are grouped, and all remaining companies which are
 limited by guarantee (with or without 'limited exemption', with or without 'private'),
- gives the counts shown in Table \ref{tab:CH_types_compressed}, and in Figure \ref{fig:CH_types_compressed}.
+ gives the counts shown in Table \ref{tab:CH_types_compressed}.%, and in Figure \ref{fig:CH_types_compressed}.
 
 \begin{table}[h]
   \centering
-  \begin{tabularx}{0.8\textwidth}{|X|r|}
-    \hline
-    Company Type (alphabeticalised) & Count of organisations \\ \hline
-    \hline
-Charitable Incorporated Organisation          &    346682\\ \hline
-Community Interest Company                    &    449785\\ \hline
-Company Limited by Guarantee                  &   2098810\\ \hline
-Industrial and Provident Society              &     15366\\ \hline
-Registered Society                            &    105512\\ \hline
-Scottish Charitable Incorporated Organisation &     63394\\ \hline
-\end{tabularx}
+  \input{CH_dist.tab.tex}
 \caption{Distribution of company types in dataset (compressed company types).}
 \label{tab:CH_types_compressed}
 \end{table}
 
 
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.8\textwidth]{CH_dist.png}
-  \caption{Companies house organisations by company type (compressed).}
-  \label{fig:CH_types_compressed}
-\end{figure}
+%\begin{figure}[h]
+%  \centering
+%  \includegraphics[width=0.8\textwidth]{CH_dist.png}
+%  \caption{Companies house organisations by company type (compressed).}
+%  \label{fig:CH_types_compressed}
+%\end{figure}
 
 
 \clearpage
@@ -755,8 +685,6 @@ organisationname & \textbf{Trading Name} \\
 Where an organisation has multiple options for name and address, the most recent
 is used in the primary data, and alternatives are stored in supplementary data.
 
-This process yeilds 10562 unique organisations, of which 8675 had additional
- information in the supplementary csv.
 
 \clearpage
 \subsection{Mutuals Public Register }
@@ -764,7 +692,7 @@ This process yeilds 10562 unique organisations, of which 8675 had additional
 
 The Mutuals Public Register is a public record of mutual societies registered by the Financial Conduct Authority. 
 Openly available register data has information for societies currently registered, and those no longer registered.
-For this project, downloads from June 2023 and April 2024 are used. The field mapping is shown in table 
+For this project, downloads from June 2023 and April 2024 are used. The field mapping is shown in Table 
 \ref{tab:mpr_preprocess}. 
 
 \begin{table}[h]
@@ -792,7 +720,6 @@ source & Variable to indicate the data source (in this case - MPR) \\ \hline
   
 \end{table}
 
-This process yeilds 31673 unique organisations, of which 475 had additional information in the supplementary csv.
 
 \clearpage
 \subsection{Scottish Housing Register }
@@ -823,7 +750,6 @@ source & Variable to indicate the data source (in this case - SHR) \\ \hline
 \end{table}
 
 
-This process yeilds 158 unique organisations.
 
 
 \clearpage
@@ -855,8 +781,6 @@ source & Variable to indicate the data source (in this case - SHPE) \\ \hline
 \end{table}
 
 
-
-This process yeilds 1320 unique organisations.
 
 \clearpage
 \subsection{Care Inspectorate Scotland }
@@ -901,8 +825,6 @@ organisationname & \textbf{ServiceName} \\
 
 
 
-This process yeilds 3464 unique organisations, of which 3146 had additional information in the supplementary csv
-
 \clearpage
 \subsection{Care Quality Commission }
 \url{https://www.cqc.org.uk/about-us/transparency/using-cqc-data}
@@ -936,8 +858,6 @@ organisationname & \textbf{Also known as} \\
   \label{tab:cqc_preprocess}
 
 \end{table}
-
-This process yeilds 36629 unique organisations, of which 27406 had additional information in the supplementary csv
 
 
 \end{document}

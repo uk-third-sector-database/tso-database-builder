@@ -7,7 +7,7 @@ python3 -m handler.preprocess_charity_regulators
 ##--------------- process sources --------------------------
 
 ## companies house files:
-python3 cli.py process-source CompaniesHouse ../raw_data/CH.all.preprocess.csv ../public_spine_data/CH_all.spine.csv
+python3 cli.py process-source CompaniesHouse ../raw_data/CH.all.csv ../public_spine_data/CH_all.spine.csv
 #
 #
 ## Care Inspectorate Scotland files: 
