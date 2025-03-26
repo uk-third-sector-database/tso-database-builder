@@ -36,13 +36,35 @@ This document is a guide to the UK Third Sector and Civil Society Database, a â€
 registered organisations comprising the third sector and civil society in the United Kingdom, along with 
 linkages between organisations which appear in more than one register. The dataset is available at the project website\footnote{\url{https://uk-third-sector-database.io/}}.
 
-Ten data sources are combined in order to build the organisational spine, listed in Table \ref{tab:order}, and further detailed in appendices. 
+Ten data sources are combined in order to build the organisational spine, listed in Table \ref{tab:sources}, and further detailed in appendices. 
 This document briefly introduces the processes of data collection, pre-processing of 
 data per source, and combining all sources to create one master list.  The spine files are first introduced, followed by a description of the process of matching organisations between sources. 
 Preprocessing of each source is detailed in the appendix. The project source code is available on GitHub\footnote{\url{https://github.com/uk-third-sector-database/tso-database-builder}}.
 
 \section{Building the organisational spine}
 
+Ten data sources are combined to create the organisational spine. All data in the spine is open and publicly available. The sources and 
+their online location are listed in Table \ref{tab:sources}. 
+
+\begin{table}[h]
+\centering
+\begin{tabularx}{\textwidth}{|l|X|}
+\hline
+Data Source & URL \\ \ hline
+Charity Commission, England and Wales	& \url{www.gov.uk/government/organisations/charity-commission}\\ \hline
+Scottish Charity Register	& \url{www.oscr.org.uk/}\\ \hline
+Charity Commission, Northern Ireland	& \url{www.charitycommissionni.org.uk/} \\ \hline
+Companies House 	& \url{www.gov.uk/government/organisations/companies-house} \\ \hline
+Co-operatives 	& \url{www.uk.coop/} \\ \hline
+Mutuals Public Register 	& \url{mutuals.fca.org.uk} \\ \hline
+Scottish Housing Register 	& \url{www.housingregulator.gov.scot/} \\ \hline
+Social Housing England 	& \url{www.gov.uk/government/publications/registered-providers-of-social-housing} \\ \hline
+Care Inspectorate Scotland 	& \url{www.careinspectorate.com} \\ \hline
+Care Quality Commission 	& \url{www.cqc.org.uk}\\ \hline
+\end{tabularx}
+\caption{Data sources for the organisational spine}
+\label{tab:sources}
+\end{table}
 
 
 The organisational spine consists of three csv files: 
@@ -197,13 +219,34 @@ Order &	Source & Code \\ \hline \hline
 \subsection{Match types visualised}
 \label{sec:match_vis}
 
+The plots in Figures \ref{fig:Matches1}, \ref{fig:Matches2} and \ref{fig:Matches3} 
+show the number of matches between sources in the public spine. 
+Figure \ref{fig:Matches1} is an UpSetPlot, which is representation of intersection between all registers (like a venn
+ diagram), shows how many matches are made
+between the different registers. Figure \ref{fig:Matches2} is the same plot, without organisations which did not match 
+with any other organisation, allowing for greater visualisation of the size of the matches on each axis. 
+The bar chart in Figure \ref{fig:Matches3} shows the number of matches by match type, 
+showing the distribution of the types of linkages.
+
 \begin{figure}[h]
 \centering
 \includegraphics[width=1.2\textwidth,center]{../public_spine_data/public_spine.all_orgs.upsetplot.png}
+\caption{Sources each organisation is registered with}
+\label{fig:Matches1}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
 \includegraphics[width=1.2\textwidth,center]{../public_spine_data/public_spine.matched_orgs.upsetplot.png}
+\caption{Sources each organisation is registered with, for all organisations in at least 2 registers}
+\label{fig:Matches2}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
 \includegraphics[width=0.6\textwidth,center]{../public_spine_data/public_spine.matchtypes.png}
-\caption{Matches between sources in public spine}
-\label{fig:Matches}
+\caption{Distrubution of match types used to deduplicate the spine}
+\label{fig:Matches3}
 \end{figure}
 
 
@@ -257,7 +300,7 @@ core organisation or via matching) are shown in  Table \ref{tab:counts_per_sourc
 
 Details for each source are given in the sections below.
 
-\clearpage
+
 \subsection{Charity Commission for England and Wales (CCEW)}
 \url{https://www.gov.uk/government/organisations/charity-commission}
 
@@ -310,7 +353,7 @@ majority of these organisations were removed from the CCEW register before 1997.
 three of these charity numbers do not have an organisation name in any of the data iterations
 used. 
 \subsubsection{Notes}
-For   a   subset   of   charity   numbers,   these   data   contain   multiple   dates   of   registration   and/or
+For   a   subset   of   charity   numbers,   the 2001-2023  data   contain   multiple   dates   of   registration   and/or
 removal. The data contains 341,990 unique charity numbers with 12,148 (3.55\%) having more
 than one registration date. Of the 177,706 charity numbers that have a removal date, 4,074
 (2.29\%) have more than one. 
@@ -599,8 +642,8 @@ full list of these, indicating which have been included in the public spine data
 \label{tab:CH_companytypes}
 \end{table}
 
-Each of the three companies house data sources were pre-processed to identify primary name and address for each 
-included organisation, with any alternative names and addresses also stored. The three sources were then 
+Each of the  companies house data sources were pre-processed to identify primary name and address for each 
+included organisation, with any alternative names and addresses also stored. The sources were then 
 also combined, since there is significant overlap between them, and the most recent name and address
 per organsiation was included in the companies house spine data, to be used for matching with other 
 registries to form the public spine.
