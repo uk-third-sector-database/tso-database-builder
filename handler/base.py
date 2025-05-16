@@ -177,6 +177,7 @@ class DataHandler:
             "id_in_source" : r['id_in_source'],
             "companyid" : r['companyid'],
             "source" : r['source'],
+            "source_register" : r['source_register'],
             'is_cic' : cic_flag})
 
         if primary_name:
@@ -221,6 +222,7 @@ class DataHandler:
 
         for entry in new_extras_rows:
             entry['source'] = r['source']
+            entry["source_register"] = r['source_register']
             
         return new_sub_spine_row, new_extras_rows
 

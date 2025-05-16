@@ -190,6 +190,7 @@ ccni_fields = [
     'localauthority',
     'postcode',
     'registerdate',
+    'removeddate',
     'source',
     'iteration'
 ]
@@ -217,6 +218,7 @@ def find_postcode(address_string:str,name_str:str):
 
 def process_ccni():
     raw_files = glob.glob('../raw_data/ccni/ccni-charitydetails_*.csv')
+    dissolution_files = glob.glob('../raw_data/ccni/ni-removals-*.csv')
     base_file = '../raw_data/ccni/ccni_spine.csv'
     output_file = '../raw_data/ccni.all.csv'
 
@@ -231,6 +233,7 @@ def process_ccni():
 
             lc = 0
             for row in csv_reader:
+                new_row = {key:'' for key in ccni_fields}
                 new_row = {key:row[key] for key in ccni_fields if key in row}
                 address,postcode = find_postcode(row['address'],row['organisationname'])
                 new_row['address'] = address
@@ -266,6 +269,26 @@ def process_ccni():
 
 
                 print(f'copied {lc} lines from {file} to {output_file}')
+        
+        for file in dissolution_files:
+            lc = 0
+            date = os.path.basename(file).split('ni-removals-')[1].strip('.csv')
+            date_obj = datetime.strptime(date, '%Y-%m-%d')
+            iteration_date = date_obj.strftime('%m/%Y')
+
+            with open(file, 'r', newline='', encoding='utf-8-sig') as infile:
+                csv_reader = csv.DictReader(infile)
+                for row in csv_reader:
+                    if row['removed_date']:
+                        new_row = {key:'' for key in ccni_fields}
+                        new_row['iteration'] = iteration_date
+                        new_row['charitynumber'] = row['regid']
+                        new_row['removeddate'] = row['removed_date']
+                        new_row['source'] = 'CCNI'
+                        csv_writer.writerow(new_row)
+                        lc +=1
+
+                print(f'copied {lc} lines from {file} to {output_file}')
 
 
 ccew_fields = ['uid', 'charitynumber', 'organisationname', 'normalisedname',
@@ -273,8 +296,7 @@ ccew_fields = ['uid', 'charitynumber', 'organisationname', 'normalisedname',
        'addressline3', 'addressline4', 'addressline5', 'city',
        'localauthority', 'postcode', 'registerdate', 'removeddate',
        'name_origin', 'primary_name', 'address_origin', 'primary_address',
-       'regdate_origin', 'remdate_origin', 'iteration', 'source', 'cqc_reg',
-       ]#'dummy', 'dummy2']
+       'regdate_origin', 'remdate_origin', 'iteration', 'source', 'cqc_reg']
 
 def process_ccew():
 

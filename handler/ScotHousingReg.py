@@ -37,7 +37,8 @@ class ScotHousingRegDataHandler(DataHandler):
         new_row["fulladdress"] = ''
         new_row["city"] = ''
         new_row["postcode"] = ''
-        new_row["source"] = 'ScottishHousingRegulator'
+        new_row["source"] = 'scottishhousingregulator'
+        new_row['source_register'] = 'Scottish Housing Regulator'
         new_row["id_in_source"] = row['Reg No']
         new_row["registerdate"] = ''
         new_row["removeddate"] = ''

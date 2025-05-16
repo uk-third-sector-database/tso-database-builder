@@ -51,6 +51,7 @@ class MutualsDataHandler(DataHandler):
         new_row["fulladdress"] = fulladdress
         new_row["postcode"] = postcode
         new_row["source"] = 'mutuals'
+        new_row['source_register'] = 'Mutuals Public Register'
         new_row["id_in_source"] = row['Full Registration Number'] 
         new_row["registerdate"] = self.map_date(row['Registration Date'])
         new_row["removeddate"] = self.map_date(row['Deregistration Date'])

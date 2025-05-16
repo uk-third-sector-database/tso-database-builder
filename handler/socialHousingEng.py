@@ -51,7 +51,8 @@ class SocialHousingEngDataHandler(DataHandler):
         new_row["fulladdress"] = ''
         new_row["city"] = ''
         new_row["postcode"] = ''
-        new_row["source"] = 'SocialHousingEngland'
+        new_row["source"] = 'socialhousingengland'
+        new_row['source_register'] = 'Social Housing England'
         new_row["removeddate"] = ''
         new_row["registerdate"] = self.map_date(row['Registration date'])   
         new_row['companyid'] = ''

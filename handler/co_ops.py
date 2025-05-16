@@ -60,6 +60,7 @@ class CoOpsDataHandler(DataHandler):
         new_row["city"] = row['Registered City']
         new_row["postcode"] = row['Registered Postcode']
         new_row["source"] = 'CoOps'
+        new_row['source_register'] = 'Co-operatives'
         new_row["id_in_source"] = row[orgid]   
         new_row["registerdate"] = self.map_date(row['Incorporation Date'])
         new_row["removeddate"] = self.map_date(row['Dissolved Date'])

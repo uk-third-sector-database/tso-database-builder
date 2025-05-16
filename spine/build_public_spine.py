@@ -66,6 +66,7 @@ class ExtraInfo(BaseModel):
     registerdate: str = ''
     removeddate: str = ''
     source: str = ''
+    source_register: str = ''
 
     def __eq__(self, value: "ExtraInfo") -> bool:
         return self.model_dump(exclude="source") == value.model_dump(exclude="source")
@@ -161,6 +162,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
     registerdate: str
     removeddate: str
     source: str
+    source_register: str
     id_in_source: str
     cqc_reg: str = ""
     crossborder: str = ""
@@ -257,13 +259,13 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                             new_main_rows.append(matched_org)
 
                     self.sorted_matches.append(MatchInfo(uid = '', 
-                    orgA_id_in_source = self.id_in_source,
-                    orgA_source = self.source,
-                    orgA_uid = self.uid,
-                    orgB_id_in_source = matched_org.id_in_source,
-                    orgB_source = matched_org.source,
-                    orgB_uid = matched_org.uid,
-                    match_type = matchtype))
+                        orgA_id_in_source = self.id_in_source,
+                        orgA_source = self.source,
+                        orgA_uid = self.uid,
+                        orgB_id_in_source = matched_org.id_in_source,
+                        orgB_source = matched_org.source,
+                        orgB_uid = matched_org.uid,
+                        match_type = matchtype))
 
         return new_main_rows
 
@@ -363,6 +365,7 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
     registerdate: str
     removeddate: str
     source: str
+    source_register: str
     id_in_source: str
     crossborder: str = ""
     cqc_reg: str = ""

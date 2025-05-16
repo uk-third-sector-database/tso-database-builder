@@ -38,7 +38,8 @@ class CQCDataHandler(DataHandler):
         new_row["fulladdress"] = row['Address']
         new_row["city"] = ''
         new_row["postcode"] = row['Postcode']
-        new_row["source"] = 'CareQualityCommission'
+        new_row["source"] = 'carequalitycommission'
+        new_row['source_register'] = 'Care Quality Commission'
         new_row["id_in_source"] = row['CQC Provider ID (for office use only)'] 
         new_row["registerdate"] = ''
         new_row["removeddate"] = ''

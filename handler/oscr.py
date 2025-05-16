@@ -67,6 +67,7 @@ class OSCRDataHandler(DataHandler):
         new_row["city"] = row['city']
         new_row["localauthority"] = row['localauthority']
         new_row["postcode"] = row['postcode']
+        new_row["source_register"] = 'Scottish Charity Register'
         new_row["source"] = 'OSCR'
         new_row["registerdate"] = self.map_date(row['registerdate'])
         new_row["removeddate"] = self.map_date(row['removeddate'])
@@ -112,7 +113,6 @@ class OSCRDataHandler(DataHandler):
         primary = ('','','')
         date = datetime(2000,1,1)
         extra_addresses = []
-
         for item in address_list:
             address_tuple = item[:-1]
             iteration = item[-1]
@@ -225,6 +225,7 @@ class OSCRDataHandler(DataHandler):
             }))
         for entry in new_extras_rows:
             entry['source'] = r['source']
+            entry['source_register'] = r['source_register']
         
         return new_sub_spine_row, new_extras_rows
 

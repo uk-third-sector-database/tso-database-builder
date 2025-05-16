@@ -92,6 +92,7 @@ in Table \ref{tab:match_fields}
     postcode &	Postcode matching full address as defined above\\    \hline
     registerdate &	Earliest registration date found in records for this organisation across all sources\\    \hline
     removeddate &	Latest dissolution date found in records for this organisation across all sources\\    \hline
+    source\_register & Source of the data, e.g. Charity Commission for England and Wales \\    \hline
     is\_cic & Boolean indicating if organisation is a Community Interest Company\\    \hline
 \end{tabularx}
 \caption{Public spine csv fields}
@@ -111,6 +112,7 @@ city &	 Alternative address\\
 postcode &	Alternative address\\ \hline
 registerdate &	 Alternative registration date \\ \hline
 removeddate & Alternative removed / dissolved date \\ \hline
+source\_register & Source of the data, e.g. 'Companies House', 'Charity Commission for England and Wales' \\    \hline
 \end{tabularx}
 \caption{Supplementary csv fields}
 \label{tab:supplementary_fields}
@@ -670,7 +672,7 @@ registries to form the public spine.
 
 Compressing the company type categories such that all Community Interest Companies are grouped, and all remaining companies which are
 limited by guarantee (with or without 'limited exemption', with or without 'private'),
- gives the counts shown in Table \ref{tab:CH_types_compressed}.%, and in Figure \ref{fig:CH_types_compressed}.
+ gives the counts shown in Table \ref{tab:CH_types_compressed}, and in Figure \ref{fig:CH_types_compressed}.
 
 \begin{table}[h]
   \centering
@@ -680,12 +682,12 @@ limited by guarantee (with or without 'limited exemption', with or without 'priv
 \end{table}
 
 
-%\begin{figure}[h]
-%  \centering
-%  \includegraphics[width=0.8\textwidth]{CH_dist.png}
-%  \caption{Companies house organisations by company type (compressed).}
-%  \label{fig:CH_types_compressed}
-%\end{figure}
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{CH_dist.png}
+  \caption{Companies house organisations by company type (compressed).}
+  \label{fig:CH_types_compressed}
+\end{figure}
 
 
 \clearpage

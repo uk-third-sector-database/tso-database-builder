@@ -66,7 +66,8 @@ class CareInspScotDataHandler(DataHandler):
         new_row["addressline3"] = row['Address_line_3']
         new_row["addressline4"] = row['Address_line_4']
         new_row["postcode"] = row['Service_Postcode']
-        new_row["source"] = 'CareInspectorateScot'
+        new_row["source"] = 'careinspectoratescot'
+        new_row['source_register'] = 'Care Inspectorate Scotland'
         new_row["id_in_source"] = row[id]
         new_row["registerdate"] = self.map_date(row['DateReg'])
         new_row["removeddate"] = ''

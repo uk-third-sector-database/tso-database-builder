@@ -32,6 +32,7 @@ def sub_spine_entry_creator(overrides):
         "registerdate" : "",
         "removeddate" : "",
         "source" : "",
+        "source_register" : "",
         "id_in_source" : "",
         "is_cic" : "",
     }
@@ -49,6 +50,7 @@ def public_spine_entry_creator(overrides):
         "postcode" : "",
         "registerdate" : "",
         "removeddate" : "",
+        "source_register" : "",
         "is_cic" : "",
     }
     entry.update(**overrides)
@@ -66,7 +68,8 @@ def extra_csv_entry_creator(overrides):
         "postcode" : "",
         "registerdate" : "",
         "removeddate" : "",
-        "source" : ""
+        "source" : "",
+        'source_register' : "",
         }
     entry.update(**overrides)
     return entry
@@ -99,6 +102,7 @@ SUB_SPINE_CSV_FIELDS = [
     "registerdate",
     "removeddate",
     "source",
+    "source_register",
     "id_in_source",
     "is_cic"]
 
@@ -112,6 +116,7 @@ SPINE_CSV_FIELDS = [
     "postcode", 
     "registerdate",
     "removeddate", 
+    "source_register",
     "is_cic",  ]    
 
 
@@ -124,7 +129,7 @@ EXTRA_DETAILS_CSV_FIELDS = [
     "postcode",
     "registerdate",
     "removeddate",
-    "source",
+    "source_register",
     ]
 
 MATCHES_CSV_FIELDS = [

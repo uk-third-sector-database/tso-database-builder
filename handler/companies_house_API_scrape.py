@@ -106,7 +106,8 @@ class CH_APIScrape_DataHandler(DataHandler):
         new_row["city"] = row['locality']
         new_row["postcode"] = row['postal_code']
         
-        new_row["source"] = 'CH' #' '.join([row['company_type'],row['company_subtype']]).strip()
+        new_row["source"] = 'CH'
+        new_row['source_register'] = 'Companies House' #' '.join([row['company_type'],row['company_subtype']]).strip()
         new_row["companytype"] = ' '.join([row['company_type'],row['company_subtype']]).strip()
         new_row["removeddate"] = self.map_date(row['date_of_cessation'])
         new_row["registerdate"] = self.map_date(row['date_of_creation'])

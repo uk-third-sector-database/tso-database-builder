@@ -37,7 +37,11 @@ class CCNIDataHandler(DataHandler):
                 d = datetime.strptime(datestr,'%d/%m/%Y')
                 return d.strftime('%d/%m/%Y')
             except:
-                print('error with date',datestr)
+                try:
+                    d = datetime.strptime(datestr,'%Y-%m-%d')
+                    return d.strftime('%d/%m/%Y')
+                except:
+                    print('error with date',datestr)
         return ''
     
 
@@ -59,10 +63,11 @@ class CCNIDataHandler(DataHandler):
         new_row["city"] = row['city']
         new_row["localauthority"] = row['localauthority']
         new_row["postcode"] = row['postcode']
-        new_row["source"] = row['source']
+        new_row["source"] = 'ccni'
+        new_row['source_register'] = 'Charity Commission for Northern Ireland'
         new_row["id_in_source"] = row['charitynumber']
         new_row["registerdate"] = self.map_date(row['registerdate'])
-        new_row["removeddate"] = ''
+        new_row["removeddate"] = self.map_date(row['removeddate'])
         new_row['iteration'] = row['iteration']
         
         super().sort_address_fields(new_row)

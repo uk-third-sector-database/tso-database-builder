@@ -14,7 +14,7 @@ from handler.mutuals import MutualsDataHandler
 from handler.ccew import CCEWDataHandler
 from handler.ccni import CCNIDataHandler
 from handler.oscr import OSCRDataHandler
-
+from handler.preprocess_charity_regulators import process_ccew,process_ccni,process_oscr
 from spine.build_public_spine import process_csvs_to_build_spine
 from spine.verify_build import verify_representation,create_tex_table
 
@@ -62,7 +62,18 @@ def process_source(source, infile, outfile):
     sort_csv_by_field(outfile,'removeddate')
 
 
-
+@cli.command()
+@click.argument("charity_source", type=click.Choice(['ccew','oscr','ccni']))
+def process_charity_source(charity_source):
+    """
+    Generate a SPINE format file using data pulled from a charity source
+    """
+    if charity_source == 'ccew':
+        process_ccew()
+    elif charity_source == 'oscr':
+        process_oscr()
+    elif charity_source == 'ccni':
+        process_ccni()
 
 @cli.command()
 @click.argument('ofile',default = 'CH.all.preprocess.csv',nargs=1)

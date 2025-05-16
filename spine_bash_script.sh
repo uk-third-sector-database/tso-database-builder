@@ -3,7 +3,10 @@
 ## --------------- preprocess sources to include iteration -----------
 python3 handler/preprocess.py
 python3 cli.py preprocess-ch ../raw_data/CH.all.csv
-python3 -m handler.preprocess_charity_regulators
+python3 cli.py process-charity-source ccni
+python3 cli.py process-charity-source oscr
+python3 cli.py process-charity-source ccew
+
 ##--------------- process sources --------------------------
 
 ## companies house files:

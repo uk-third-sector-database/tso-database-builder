@@ -57,7 +57,8 @@ class CCEWDataHandler(DataHandler):
         new_row["addressline5"] = row["addressline5"]
         new_row["city"] = row['city']
         new_row["postcode"] = row['postcode']
-        new_row["source"] = row['source']
+        new_row["source"] = 'ccew'
+        new_row['source_register'] = 'Charity Commission for England and Wales'
         new_row["registerdate"] = self.map_date(row['registerdate'])
         new_row["removeddate"]  = self.map_date(row['removeddate'])
         new_row["primary_name"] = row["primary_name"].replace('other','0')
@@ -69,7 +70,7 @@ class CCEWDataHandler(DataHandler):
         return new_row
         
 
-    def find_primary_info(self,s):
+    def _find_primary_info(self,s):
         '''input is a set generated in combine_org_details_per_source.
         Find primary details and return as list, where list[0] is primary'''
         s = list(s)
@@ -94,6 +95,65 @@ class CCEWDataHandler(DataHandler):
         extra_rows = [i for i in new_s if (i != primary) and 
                       not all(f == '' for f in i)]
 
+        return primary, extra_rows
+
+
+
+
+    def find_primary_info(self, s):
+        """
+        Input: a set of tuples ending with (primary_flag, iteration),
+               where iteration is a string like '03/2022'.
+
+        Returns:
+            - primary: the selected primary record (tuple without flag/iteration)
+            - extra_rows: other non-empty rows that are not the primary
+        """
+        s = list(s)
+        new_s = set()
+        primary = None
+        fallback_candidates = []
+
+        for item in s:
+            *item_data, primary_flag, iteration_str = item
+            item_data = tuple(item_data)
+            if all(f == '' for f in item_data):
+                continue
+
+            if iteration_str:
+                try:
+                    if len(iteration_str)==4:
+                        iteration = datetime.strptime(iteration_str, "%Y")
+                    else:
+                        iteration = datetime.strptime(iteration_str, "%m/%Y")
+                except ValueError:
+                    if iteration_str=='Other':
+                        iteration = datetime(2000, 1, 1)
+                    else:
+                        print(f"Invalid date format: {iteration_str}")
+                        return None, None
+
+
+            fallback_candidates.append((iteration, item_data))
+
+            if primary_flag == '1':
+                if primary is None and any(f != '' for f in item_data):
+                    primary = item_data
+                else:
+                    new_s.add(item_data)  # demote previous or bad primary
+            else:
+                new_s.add(item_data)
+
+        # Fallback to most recent iteration if needed
+        if primary is None or all(f == '' for f in primary):
+            if fallback_candidates:
+                # Sort by latest iteration first
+                fallback_candidates.sort(reverse=True)
+                primary = fallback_candidates[0][1]
+            else:
+                primary = tuple('' for _ in item_data)
+        # Build list supplementary data
+        extra_rows = [i for i in new_s if i != primary and any(f != '' for f in i)]
         return primary, extra_rows
 
 
@@ -125,8 +185,8 @@ class CCEWDataHandler(DataHandler):
             for field in self.tmp_fields:
                 if not field in r.keys(): r[field] = ''
             try:
-                n = (r['organisationname'],r['normalisedname'],r['primary_name'])
-                a = (r['fulladdress'],r['city'],r['postcode'],r['primary_address'])
+                n = (r['organisationname'],r['normalisedname'],r['primary_name'], r['iteration'])
+                a = (r['fulladdress'],r['city'],r['postcode'],r['primary_address'], r['iteration'])
                 reg = r['registerdate']
                 dis = r['removeddate']
                 if r['cqc_reg']:
@@ -141,7 +201,12 @@ class CCEWDataHandler(DataHandler):
                 
 
         primary_name,    extra_names = self.find_primary_info(names)
-        primary_address, extra_addresses = self.find_primary_info(addresses)
+        try:
+            primary_address, extra_addresses = self.find_primary_info(addresses)
+        except Exception as e:
+            print(f'Error in find_primary_info for addresses: {e} for addresses = {addresses}')
+
+
         primary_regdate, extra_regdates = fix_dates_set(regdates,0) # use earliest registration date
         primary_remdate, extra_remdates = fix_dates_set(remdates,-1) # use latest removal date
 
@@ -150,6 +215,7 @@ class CCEWDataHandler(DataHandler):
             {'uid' : uid,
             "id_in_source" : r['id_in_source'],
             "companyid" : r['companyid'],
+            "source_register" : r['source_register'],
             "source" : r['source'],})
         
 
@@ -204,6 +270,7 @@ class CCEWDataHandler(DataHandler):
 
         for entry in new_extras_rows:
             entry['source'] = r['source']
+            entry['source_register'] = r['source_register']
 
         return new_sub_spine_row,new_extras_rows
         
