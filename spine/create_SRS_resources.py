@@ -5,6 +5,10 @@
 import os
 import sys
 import csv
+import pandas as pd
+from datetime import datetime
+
+POSTCODE_TO_LA_FILE = '../tso-analysis/postcode_to_la_lookup.csv'
 
 def create_lookup(input_file, output_file):
     # check if the input file exists
@@ -68,8 +72,36 @@ def map_row_id_from_lookup(input_file, lookup_file, output_file):
 
 
 
+def gen_reduced_spine(input_file, output_file):
+    """Generate a reduced version of the SPINE file with only uid, LA_code, regyear, remyear."""
+    pc_to_la = pd.read_csv(POSTCODE_TO_LA_FILE,usecols=['postcode','LA_code'])
+    pc_to_la['postcode'] = pc_to_la['postcode'].str.replace(' ', '').str.upper()
+    pc_to_la = dict(zip(pc_to_la['postcode'], pc_to_la['LA_code']))
+
+    spine_df = pd.read_csv(input_file)
+    spine_df['postcode'] = spine_df['postcode'].str.replace(' ', '').str.upper()
+
+    spine_df['registeryear'] = pd.to_datetime(spine_df['registerdate'], errors='coerce').dt.year
+    spine_df['removedyear'] = pd.to_datetime(spine_df['removeddate'], errors='coerce').dt.year
+    spine_df['LA_code'] = spine_df['postcode'].apply(lambda x: pc_to_la.get(x, None))
+
+    # reduced_spine stats
+    reduced_spine_df = spine_df[['uid', 'LA_code', 'registeryear', 'removedyear']]
+    reduced_spine_df = reduced_spine_df.drop_duplicates()
+    print(reduced_spine_df.describe())
+    print(reduced_spine_df.info())
+    print(reduced_spine_df.head(10))
+    print(f"Reduced SPINE file created with {len(reduced_spine_df)} unique rows. {len(reduced_spine_df[reduced_spine_df['LA_code'].isna()]['uid'])} have no LA_code")
+
+    pc_without_la = list(spine_df[spine_df["LA_code"].isna()]["postcode"].unique())
+    pc_without_la.sort()
+    print(f'{len(pc_without_la)} postcodes with no LA_code: {pc_without_la}')
+    reduced_spine_df.to_csv(output_file, index=False)
+    print(f"Reduced SPINE file saved to {output_file}")
+
 if __name__ == '__main__':
     print('Running as script')
+    print(os.getcwd())
     import click
     @click.group()
     def cli():
@@ -94,4 +126,16 @@ if __name__ == '__main__':
         """
         map_row_id_from_lookup(infile,lookupfile,outfile)
 
+
+    @cli.command()
+    @click.argument("infile")
+    @click.argument("outfile")
+    def reduce_spine(infile, outfile):
+        """
+        Generate a reduced version of the SPINE file with only uid, LA_code, regyear, remyear.
+        """
+        gen_reduced_spine(infile,outfile)
+
     cli()
+
+
