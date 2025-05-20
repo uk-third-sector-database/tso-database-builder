@@ -47,6 +47,23 @@ class DataHandler:
         raise NotImplementedError()
     
     def sort_address_fields(self,row:dict):
+        '''sort address fields into fulladdress field, and sort postcode formatting'''
+
+        def normalise_postcode(postcode):
+            '''normalise postcode to upper case, remove spaces and hyphens'''
+            postcode = postcode.replace('-',' ').strip()
+            postcode = re.sub(r'\s+', ' ', postcode)
+            postcode = postcode.upper()
+            
+            postcode_regex = re.compile(r"^(GIR 0AA|[A-Z]{1,2}[0-9][0-9A-Z]? ?[0-9][A-Z]{2})$", re.IGNORECASE)
+            partial_pc_regex = re.compile(r"^([A-Z]{1,2}[0-9][0-9A-Z]? ?[0-9]?[A-Z]?)$", re.IGNORECASE)
+            if not postcode_regex.match(postcode):
+                if partial_pc_regex.match(postcode):
+                    postcode = postcode
+                else:
+                    postcode = ''
+            return postcode                    
+                    
         address_fields = ["housenumber","addressline1",
         "addressline2","addressline3","addressline4","addressline5",
         "addressline6","addressline7","addressline8"]
@@ -87,6 +104,8 @@ class DataHandler:
         except ValueError: pass
 
         row['fulladdress'] = row['fulladdress'].replace(' ,',',').strip(', ').strip('.')
+
+        row['postcode'] = normalise_postcode(row['postcode'])
 
 
 
