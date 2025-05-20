@@ -95,7 +95,6 @@ def gen_reduced_spine(input_file, output_file):
     print(f"Spine has {len(spine_df[spine_df['postcode'].isna()])} rows with no postcode")
 
     pc_without_la = list(spine_df[spine_df["LA_code"].isna()]["postcode"].unique())
-    pc_without_la.sort()
     print(f'{len(pc_without_la)} postcodes with no LA_code: {pc_without_la}')
     reduced_spine_df.to_csv(output_file, index=False)
     print(f"Reduced SPINE file saved to {output_file}")
