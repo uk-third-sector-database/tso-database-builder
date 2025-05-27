@@ -76,6 +76,7 @@ def gen_reduced_spine(input_file, output_file):
     """Generate a reduced version of the SPINE file with only uid, LA_code, regyear, remyear."""
     pc_to_la = pd.read_csv(POSTCODE_TO_LA_FILE,usecols=['postcode','LA_code'])
     pc_to_la['postcode'] = pc_to_la['postcode'].str.replace(' ', '').str.upper()
+    pc_to_la['postcode'] = pc_to_la['postcode'].str.replace('-', '')
     pc_to_la = dict(zip(pc_to_la['postcode'], pc_to_la['LA_code']))
 
     spine_df = pd.read_csv(input_file)
@@ -95,7 +96,7 @@ def gen_reduced_spine(input_file, output_file):
     print(f"Spine has {len(spine_df[spine_df['postcode'].isna()])} rows with no postcode")
 
     pc_without_la = list(spine_df[spine_df["LA_code"].isna()]["postcode"].unique())
-    print(f'{len(pc_without_la)} postcodes with no LA_code: {pc_without_la}')
+    print(f'{len(pc_without_la)} postcodes with no LA_code')#: {pc_without_la}')
     reduced_spine_df.to_csv(output_file, index=False)
     print(f"Reduced SPINE file saved to {output_file}")
 
