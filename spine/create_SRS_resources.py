@@ -100,6 +100,41 @@ def gen_reduced_spine(input_file, output_file):
     reduced_spine_df.to_csv(output_file, index=False)
     print(f"Reduced SPINE file saved to {output_file}")
 
+def gen_reduced_procurement_data(input_file, matches_file, output_file):
+    """Generate a reduced version of the procurement data with only uid (from field 'verifmatch')
+    year, paytot, paycount, orgflag"""
+    procurement_df = pd.read_csv(input_file)
+    matches_df = pd.read_csv(matches_file)
+
+
+    procurement_df['uid'] = procurement_df['verifmatch']
+
+    # map uids to spine via matches.csv
+    match_dict = matches_df.groupby('orgB_uid')['uid'].first().to_dict()
+
+
+    procurement_df['matched_uid'] = procurement_df['uid'].map(match_dict)
+    # if matched_uid is not null, replace procurement_df['uid'] with procurement_df['matched_uid']
+    procurement_df['uid'] = procurement_df.apply(lambda x: x['matched_uid'] if pd.notnull(x['matched_uid']) else x['uid'], axis=1)
+    # drop matched_uid column
+    procurement_df.drop(columns=['matched_uid'], inplace=True)
+    procurement_df.to_csv(output_file.split('.csv')[0] + '.all.csv', index=False)
+    # drop rows with no uid starting 'GB-'
+    procurement_df.dropna(subset=['uid'], inplace=True)
+    procurement_df = procurement_df[procurement_df['uid'].str.startswith('GB-')]
+
+    # reduced_procurement stats
+    reduced_procurement_df = procurement_df[['uid', 'date', 'paytot', 'paycount', 'orgflag']]
+    reduced_procurement_df = reduced_procurement_df.drop_duplicates()
+    print(reduced_procurement_df.describe())
+    print(reduced_procurement_df.info())
+    print(reduced_procurement_df.head(10))
+    print(f"Reduced Procurement file created with {len(reduced_procurement_df)} unique rows.")
+
+    reduced_procurement_df.to_csv(output_file, index=False)
+    print(f"Reduced Procurement file saved to {output_file}")
+
+
 if __name__ == '__main__':
     print('Running as script')
     print(os.getcwd())
@@ -136,6 +171,17 @@ if __name__ == '__main__':
         Generate a reduced version of the SPINE file with only uid, LA_code, regyear, remyear.
         """
         gen_reduced_spine(infile,outfile)
+
+    @cli.command()
+    @click.argument("infile")
+    @click.argument("matchesfile")
+    @click.argument("outfile")
+    def reduce_procurement(infile, matchesfile, outfile):
+        """
+        Generate a reduced version of the procurement data with only uid (from field 'verifmatch')
+        year, paytot, paycount, orgflag
+        """
+        gen_reduced_procurement_data(infile, matchesfile, outfile)
 
     cli()
 
