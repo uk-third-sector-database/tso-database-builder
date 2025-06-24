@@ -19,7 +19,7 @@ from spine.build_public_spine import process_csvs_to_build_spine
 from spine.verify_build import verify_representation,create_tex_table
 
 
-from handler.all_companies_house import main_process
+from handler.all_companies_house import main_process, sic_codes_lookup
 
 import subprocess
 
@@ -109,6 +109,14 @@ def check_spine(infiles, outfile_base):
 @click.argument("outfile_base", default="public_spine", nargs = 1)
 def tex_table_spine(outfile_base):
     create_tex_table(outfile_base)
+
+
+@cli.command()
+@click.argument('ch_prepared_file')
+@click.argument('spine_matches_file')
+@click.argument('ofile')
+def build_sic_codes_list(ch_prepared_file,spine_matches_file,ofile):
+    sic_codes_lookup(ch_prepared_file,spine_matches_file,ofile)
 
 if __name__ == "__main__":
     cli()

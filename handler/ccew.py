@@ -276,6 +276,7 @@ class CCEWDataHandler(DataHandler):
         
 
 '''
+
 ccew data fields
 [for public spine]
 uid,charitynumber,organisationname,normalisedname,companyid,housenumber,addressline1,addressline2,addressline3,addressline4,addressline5,
@@ -288,12 +289,3 @@ city,localauthority,postcode,registerdate,removeddate,name_origin,primary_name,a
 #cqc_reg = should be registered in CQC too
 
 '''
-
-'''
-(.tso) fionack@Fionas-MacBook-Air tso-database-builder % grep 'Ã^ÃÂ' ../raw_data/ccew_spine_public.csv|wc -l
-     372
-(.tso) fionack@Fionas-MacBook-Air tso-database-builder % grep 'Ã^ÃÂ' ../public_spine_data/ccew.spine.csv|wc -l
-     146
-(.tso) fionack@Fionas-MacBook-Air tso-database-builder % grep 'Ã^ÃÂ' ../public_spine_data/ccew.spine.supplementary.csv|wc -l
-     227
-     '''

@@ -8,6 +8,7 @@ import glob
 from .companies_house import CompaniesHouseDataHandler
 from .companies_house_API_scrape import CH_APIScrape_DataHandler
 #from .companies_house_2014 import CompaniesHouse2014DataHandler
+import pandas as pd
 
 
 from .base import iter_csv_rows
@@ -74,7 +75,7 @@ def main_process(ofilename):
 
     with open(ofilename, 'w+', newline='', encoding='UTF8') as outfile:
         datahandler =  CompaniesHouseDataHandler
-        fields = SUB_SPINE_CSV_FIELDS + ['iteration']  + ['is_cic'] + ['companytype']
+        fields = SUB_SPINE_CSV_FIELDS + ['iteration'] + ['companytype'] + ['SIC']
 
         csv_writer = csv.DictWriter(outfile, fieldnames=fields)  # possibly change field list to a CH specific one?
         csv_writer.writeheader()  
@@ -96,3 +97,22 @@ def main_process(ofilename):
         f.write(f"# CICs found in files {','.join([api_scrape_file] + bulk_downloads)}\n\n") #{','.join([api_scrape_file,historic_data] + bulk_downloads)}\n\n")
         f.write('\n'.join(all_CICs))
 
+
+def sic_codes_lookup(ch_file,matches_file,ofile):
+    """Create a lookup file of uid:sic_codes. Map uids to spine using matches.csv """
+    try:
+        matches_df = pd.read_csv(matches_file,usecols=['uid','orgB_uid'])
+    except ValueError as e:
+        print(f'Error loading matches data from {matches_file} : {e}')
+    match_dict = matches_df.groupby('orgB_uid')['uid'].first().to_dict()
+
+    try:
+        ch_data = pd.read_csv(ch_file,usecols=['uid','SIC'])
+    except ValueError as e:
+        print(f'Error loading companies house data from {ch_file} : {e}')
+        return
+    ch_data['matched_uid'] = ch_data['uid'].map(match_dict)
+
+    ch_data['uid'] = ch_data.apply(lambda x: x['matched_uid'] if pd.notnull(x['matched_uid']) else x['uid'], axis=1)
+
+    ch_data[['uid','SIC']].to_csv(ofile,index=False)

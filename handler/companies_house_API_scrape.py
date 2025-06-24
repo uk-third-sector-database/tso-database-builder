@@ -67,6 +67,8 @@ exclude_filters = {}
 
 class CH_APIScrape_DataHandler(DataHandler):
     fileencoding='UTF8'
+    tmp_fields = ['SIC']
+    
     def all_filters(self,row: dict) -> bool:
 
         # exclude row if in exclude_filters
@@ -113,7 +115,7 @@ class CH_APIScrape_DataHandler(DataHandler):
         new_row["registerdate"] = self.map_date(row['date_of_creation'])
         new_row["iteration"] = '2022'
         new_row['is_cic'] = bool(row['company_subtype'] == 'community-interest-company')
-        #new_row['SIC'] = row['sic_codes'].strip('[').strip(']').replace("'",'')
+        new_row['SIC'] = row['sic_codes'].strip('[').strip(']').replace("'",'')
         
 
         super().sort_address_fields(new_row)
