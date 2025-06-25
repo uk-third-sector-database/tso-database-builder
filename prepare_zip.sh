@@ -12,7 +12,7 @@ git push origin new-build-spine
 
 # prepare zipped financial history files:
 
-zip finhist_files.zip ../processed_data/public_spine.finhist.csv -j
+zip finhist_files.zip ../processed_data/payload_data/public_spine.finhist.csv -j
 git add finhist_files.zip
 git commit -m 'updated finhist zip for downloads'
 git push origin new-build-spine
