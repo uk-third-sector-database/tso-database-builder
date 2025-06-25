@@ -1,6 +1,8 @@
 # create lookup table for uid:rowid mapping for the version of the spine shared with the ONS Nov23
+# create spine version with just uids, dates and Local Authority IDS for use in SRS
+# create financial history file from multiple files, mapping uids to spine and summing financial data for matched orgs
+# create procurement data file
 
-# use this lookup to create versions of spine and payload data with original rowid in place of uid
 
 import os
 import sys
@@ -134,6 +136,50 @@ def gen_reduced_procurement_data(input_file, matches_file, output_file):
     reduced_procurement_df.to_csv(output_file, index=False)
     print(f"Reduced Procurement file saved to {output_file}")
 
+def gen_finhist_data(inputfilelist, matches_file, output_file):
+    # Create a dictionary mapping orgB_uid to uid (first match only)
+    matches_df = pd.read_csv(matches_file,usecols=['uid','orgA_uid','orgB_uid'])
+    match_dict = matches_df.groupby('orgB_uid')['uid'].first().to_dict()
+
+    source_lookup = {'ccew':'CHC','ccni':'NIC','oscr':'SC'}
+    # read in financial data:
+    # make one finhist file
+    findata = pd.DataFrame()
+    for f in inputfilelist:
+        print(f)
+        try:
+            df = pd.read_csv(f,dtype={'regno':str,'fy':int,'fye':str,'inc':float,'exp':float})
+            c=source_lookup[os.path.basename(f).split('-')[0]]
+        except IOError as e:
+            print(f'Error processing {f}: {e}')
+            return
+        
+        df = df[~df['regno'].isna()]
+        df['uid'] = df['regno'].apply(lambda x: f"GB-{c}-{x}" )
+
+        findata = pd.concat([findata,df],axis=0)
+        print(f'Concatenated files dataframe columns: {findata.columns}, and shape: {findata.shape}')
+
+    findata.drop(columns=['regno','fye'],inplace=True)
+    findata['matched_uid'] = findata['uid'].map(match_dict)
+    findata.to_csv(output_file.strip('.csv')+'.nomapping.csv')
+    # if matched_uid is not null, replace findata['uid'] with findata['matched_uid']
+    findata['uid'] = findata.apply(lambda x: x['matched_uid'] if pd.notnull(x['matched_uid']) else x['uid'], axis=1)
+    # drop matched_uid column
+    findata.drop(columns=['matched_uid'], inplace=True)
+    # for each uid, if there are multiple rows per year, sum the income and expenditure columns per year
+    findata = findata.groupby(['uid','fy']).agg({'inc':'sum','exp':'sum'}).reset_index()
+    #findata.to_csv('finhist.mapped.csv',index=False)
+
+    findata.rename(columns={'fy':'year'}, inplace=True)
+
+    source = {'NIC':'ccni',
+              'CHC':'ccew',
+              'SC':'oscr'}
+    # add source column 
+    findata['Regulator'] = findata['uid'].apply(lambda x: source[x.split('-')[1]])
+    findata[['uid','year','inc','exp','Regulator']].to_csv(output_file,index=False)
+
 
 if __name__ == '__main__':
     print('Running as script')
@@ -183,6 +229,25 @@ if __name__ == '__main__':
         """
         gen_reduced_procurement_data(infile, matchesfile, outfile)
 
+    @cli.command()
+    @click.argument('matches_file')
+    @click.argument('output_file')
+    @click.option('--inputfilelist','-i',multiple=True,help='list of input files')
+
+    def create_financial_history(matches_file,output_file,inputfilelist):
+        """
+        Generate a concatenated version of the input financial history data (expects basefilenames with regulator at the start).
+        Output to output_file the data with uids mapped to the spine, and totals summed for any linked orgs.
+        Also output to output_file.nomapping.csv the data with original uids.
+        """
+        gen_finhist_data(inputfilelist, matches_file, output_file)
+
+
     cli()
 
-
+"""
+e.g.
+ python3 spine/create_SRS_resources.py create-financial-history ../public_spine_data/public_spine.matches.csv public_spine.finhist.csv 
+ -i ../raw_data/payload_data/ccew-finhist-1995-2024.csv -i ../raw_data/payload_data/oscr-finhist-2007-2024.csv -i ../raw_data/payload_data/ccni-finhist-2018-2024.csv
+ 
+ """
