@@ -76,10 +76,6 @@ class DataHandler:
                            if (field in row) and (row[field] != '') 
                            and (row[field] not in fulladdress))
 
-        #try:
-        #    print(f'"{fulladdress[-2]}","{fulladdress[-1]}",')
-        #except:
-        #    pass
 
         fulladdress_str = ', '.join(fulladdress)
         
@@ -240,8 +236,8 @@ class DataHandler:
             }))
 
         for entry in new_extras_rows:
-            entry['source'] = r['source']
-            entry["source_register"] = r['source_register']
+            if entry:
+                entry["source_register"] = r['source_register']
             
         return new_sub_spine_row, new_extras_rows
 
@@ -284,10 +280,6 @@ def normalizer(name, norm_dict=None):
         for punct in string.punctuation:
             name = name.replace(punct, ' ')
 
-        # Replace apostrophe with an empty string
-        
-
-        #name = "".join(l for l in name if l not in string.punctuation) # keep text other than punctuation
         name = ' '.join(name.split()).strip()
         return name
     return None
@@ -297,12 +289,10 @@ def do_csv_processing(input_csv_filename,
                       output_csv_filename, 
                       data_handler: DataHandler):
     '''Called by cli.py process-source. Creates two csv files per source, organising
-    the data as primary and supplementary. Calls datahandler-specific functions
+     the data as primary and supplementary. Calls datahandler-specific functions
      transform_row (per row) to create a temporary intermediate file by processing input data
      row by row, and compress_org_details which performs the sorting algorithm on the input data
-      and sends the output to two final files '''
-    
-
+     and sends the output to two final files '''
 
     intermediate_ofile = output_csv_filename.split('.csv')[0] + '.tmp.csv'
     
@@ -316,13 +306,10 @@ def do_csv_processing(input_csv_filename,
         writer.writeheader()
         for new_row in filter(data_handler.all_filters, iter_csv_rows(input_csv_filename,data_handler)):
             
-            
-            #print(new_row)
-            
             transformed_row = data_handler.transform_row(new_row)
             if transformed_row:
                 processed_rows += 1
-            #print(f'Processed row {processed_rows} - {transformed_row}')
+
             writer.writerows(transformed_row)
     
     print(f"Intermediate process complete, {processed_rows} lines written to {intermediate_ofile}\n")

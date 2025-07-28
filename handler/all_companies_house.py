@@ -115,4 +115,4 @@ def sic_codes_lookup(ch_file,matches_file,ofile):
 
     ch_data['uid'] = ch_data.apply(lambda x: x['matched_uid'] if pd.notnull(x['matched_uid']) else x['uid'], axis=1)
 
-    ch_data[['uid','SIC']].to_csv(ofile,index=False)
+    ch_data[['uid','SIC']].drop_duplicates().to_csv(ofile,index=False)

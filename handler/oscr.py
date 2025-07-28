@@ -181,7 +181,8 @@ class OSCRDataHandler(DataHandler):
             {'uid' : r['uid'],
             "id_in_source" : r['id_in_source'],
             "companyid" : r['companyid'],
-            "source" : r['source'],})
+            "source" : r['source'],
+            "source_register" : r['source_register']})
         
         if primary_name:
             new_sub_spine_row["organisationname"] =  primary_name[0]

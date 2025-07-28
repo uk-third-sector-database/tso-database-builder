@@ -14,8 +14,11 @@ def read_dkane_sameas(file):
         parts = str(org_id).split('-')
         return parts[1] if len(parts) > 1 else None
 
-
-    df = pd.read_csv(file,usecols=['org_id_a','org_id_b'])
+    try:
+        df = pd.read_csv(file,usecols=['org_id_a','org_id_b'])
+    except IOError as e:
+        print(f'Error reading file {file} in function read_dkane_sameas: {e}')
+        return {}, []
     df['org_a_code'] = df['org_id_a'].apply(get_org_code)
     df['org_b_code'] = df['org_id_b'].apply(get_org_code)
 
@@ -75,6 +78,7 @@ class ExtraInfo(BaseModel):
         fields = list(self.model_fields.keys())
         fields.remove('uid')
         fields.remove('source')
+        fields.remove('source_register')
         return all(getattr(self, field) == '' for field in fields)
     
     def __hash__(self):
@@ -130,6 +134,7 @@ def consolidate_extras(values):
             updates.update({'removeddate':''})
         else:
             seen_rem_dates.add(rem_hash)
+
         new_item = item_obj.model_copy(update=updates)
         if not new_item.isempty():
             processed_extras.append(new_item)
@@ -233,7 +238,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
             for matched_org in matched_orgs:
                 # if matched_org has is_cic flag set to True, set is_cic flag for this org:
                 if matched_org.is_cic == 'True':
-                    print(f'matched org is cic: {self.uid} matched to {matched_org.uid}')
+#                    print(f'matched org is cic: {self.uid} matched to {matched_org.uid}')
                     self.is_cic = 'True'
 
                 if not matchtype == 'companyid - companyid':
@@ -319,7 +324,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
 
         if earliest_register and (not orgregdate or earliest_register < orgregdate):
             if orgregdate:
-                self.extras.append(ExtraInfo(uid=self.uid, source=self.source, registerdate=self.registerdate))
+                self.extras.append(ExtraInfo(uid=self.uid, source=self.source, registerdate=self.registerdate, source_register=self.source_register))
             self.registerdate = earliest_register.strftime('%d/%m/%Y')
 
         # Update removed date
@@ -329,11 +334,11 @@ class CoreOrganisation(BaseModel): # orgs for public spine
 
             if latest_removed and (not orgremdate or latest_removed > orgremdate):
                 if orgremdate:
-                    self.extras.append(ExtraInfo(uid=self.uid, source=self.source, removeddate=self.removeddate))
+                    self.extras.append(ExtraInfo(uid=self.uid, source=self.source, removeddate=self.removeddate, source_register=self.source_register))
                 self.removeddate = latest_removed.strftime('%d/%m/%Y')
         else:
             if self.removeddate:
-                self.extras.append(ExtraInfo(uid=self.uid, source=self.source, removeddate=self.removeddate))
+                self.extras.append(ExtraInfo(uid=self.uid, source=self.source, removeddate=self.removeddate, source_register=self.source_register))
                 self.removeddate = ''
 
         # Remove redundant fields from extras
@@ -397,7 +402,6 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
 
 #    @profile
     def matches(self, byname:dict, bycompanyid:dict, bysourceid:dict, spinelist:dict):
-        ##print('in SubSpineOrg.matches')
 
         matches_here = []
         
@@ -416,32 +420,27 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
 #                print(f' --- crossborder match found for {self.normalisedname} (match.source = {[x.source.lower() for x in match]})')
                 matches_here.extend([(i, 'name - crossborder') for i in match])
 
-            if self.source.lower() == 'scottishhousingregulator' and any(x.source.lower == 'oscr' for x in match):
-                print(f' --- SHR match found for {self.normalisedname}')
+            if self.source.lower() == 'scottishhousingregulator' and any(x.source.lower() == 'oscr' for x in match):
                 matches_here.extend([(i, 'name - housing') for i in match])   
 
             if self.source.lower() == 'socialhousingengland' and any(x.source.lower() == 'ccew' for x in match):
-#                print(f' --- SHE match found for {self.normalisedname}')
+                print(f' --- SHE match found for {self.normalisedname}')
                 matches_here.extend([(i, 'name - housing') for i in match])   
 
             if self.source.lower() == 'careinspectoratescot' and any(x.source.lower() == 'oscr' for x in match):
-#                print(f' --- CIS name match found for {self.normalisedname}')
                 matches_here.extend([(i, 'name - care') for i in match])   
 
 
             if self.source.lower() == 'carequalitycommission' and any(x.source.lower() == 'ccew' for x in match):
-#                print(f' --- cqc name match found for {self.normalisedname}')
                 matches_here.extend([(i, 'name - care') for i in match])   
 
                 
         if self.companyid in bysourceid:
             match = bysourceid[self.companyid]
             #for m in match:
-            if self.source.lower() == 'coops' and any(x.source.lower() in ['mutuals','ch'] for x in match): #(m.source.lower() == 'mutuals' or m.source.lower() == 'ch'):
-#                print(f' --- coops and mutuals match (X) found for {self.normalisedname}, {self.companyid}')
+            if self.source.lower() == 'coops' and any(x.source.lower() in ['mutuals','ch'] for x in match): 
                 matches_here.extend([(i, 'companyid - coop mutual') for i in match])
             elif self.source.lower() == 'mutuals' and any(m.source.lower() == 'coops' for m in match):
-#                print(f' --- coops and mutuals match (Y) found for {self.normalisedname}, {self.companyid}')
                 matches_here.extend([(i, 'companyid - coop mutual') for i in match])
 
                 
@@ -449,11 +448,9 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
             match = bycompanyid[self.id_in_source]
             if self.source.lower() == 'ch':
                 # companies house counterpart to charity
-#                print(f' --- companies house match found for {self.normalisedname}, {self.companyid}')
                 matches_here.extend([(i, 'companyid - id_in_source') for i in match])
             for m in match:
                 if self.source.lower() == 'mutuals' and m.source.lower() == 'coops':
-#                    print(f' --- coops and mutuals match (Z) found for {self.normalisedname}, {self.companyid}')
                     matches_here.extend([(i, 'companyid - coop mutual') for i in match])
             
         # find matches in dkane _sameas csv
@@ -461,7 +458,6 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
             matched_uids = ftc_dict[self.uid]
             for m in matched_uids:
                 if m in spinelist:
-#                    print(f' --- FTC match found for {self.normalisedname}, {self.uid} with {spinelist[m].normalisedname}, {spinelist[m].uid}')
                     matches_here.append((spinelist[m],'ftc')) 
     
         # find matches using historic oscr data
