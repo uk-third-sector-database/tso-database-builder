@@ -1,9 +1,14 @@
+# The Third Sector and Civil Society dataset
+
+Welcome to the project repo for the UK's dataset of not-for-profit organisations, funded by the ESRC.
+Please see project website at https://uk-third-sector-database.github.io/ for more information.
+
 # Getting Started
 
 Use python 3.11
 
     make setup-pyenv
-    pyenv activate ukri-env
+    make setup-venv
     make install-deps
     
 ## Installing requirements
@@ -16,21 +21,21 @@ To only install runtime requirements use:
 
     pip install -r requirements.txt
 
-## Testing 
-
-    pytest . 
-
 ## Running
 
+    To run the builder, download the data you wish to compile into a dataset, and follow the commands and algorithm
+    shown in spine_bash_script.sh, altering paths. If file formats have changed in any source registers you will need to edit
+    the relevant preprocess script, found in folder handler/.
+
+Basic running syntax:
+
     python cli.py process-source <data-source> <input-csv> <output-csv> 
-    python cli.py concat <input-csv-1> <input-csv-2> ... <input-csv-n> -o <output-csv>
-    python cli.py match <input-csv> <output-csv> 
+    python cli.py build-spine <processed-data-a> <processed-data-b> -o <base-output-filename>
 
 example:
 
     python cli.py process-source  CompaniesHouse txt.csv out.csv
 
-    use spine_bash_script.sh to see all commands and algorithm
 
 ## Adding new data sources
 

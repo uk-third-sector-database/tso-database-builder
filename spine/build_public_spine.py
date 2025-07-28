@@ -424,7 +424,7 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
                 matches_here.extend([(i, 'name - housing') for i in match])   
 
             if self.source.lower() == 'socialhousingengland' and any(x.source.lower() == 'ccew' for x in match):
-                print(f' --- SHE match found for {self.normalisedname}')
+#                print(f' --- SHE match found for {self.normalisedname}')
                 matches_here.extend([(i, 'name - housing') for i in match])   
 
             if self.source.lower() == 'careinspectoratescot' and any(x.source.lower() == 'oscr' for x in match):

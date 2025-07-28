@@ -25,7 +25,7 @@
 
 \title{Database of third sector organisations: schema and process}
 \author{Fiona Couper Kenney, Alan Duggan}
-\date{March 24, 2025}
+\date{July 24, 2025}
 
 
 \begin{document}
@@ -312,8 +312,8 @@ This section outlines the use of CCEW regulatory data in the construction of the
 organisational spine\footnote{For further detail on how this data was used, please see the accompanying
 ccew\_publicspine\_prep.do file.}.
 
-The CCEW data used in this project comprised 27 individual data files that were obtained
-between 2001 and 2023. These files were used to compile a list of unique charities, and to
+The initial processing of CCEW data for this project comprised 27 individual data files that were obtained
+between 2001 and 2023, along with updates lat. These files were used to compile a list of unique charities, and to
 extract   as   many   unique   names,   addresses,   registration   dates,   and   removal   dates   for   each
 organisation. These files are detailed below: 
 \begin{itemize}
@@ -411,6 +411,11 @@ source &  Variable to indicate the data source (in this case, CCEW) \\ \hline
 \caption{Fields in pre-processing of CCEW data}
 \label{tab:ccew_preprocess}
 \end{table}
+
+\subsubsection{Updates}
+Subsequent to the initial dataset created using this process, data downloads were aquired from CCEW as 
+'public extracts' in 2024 and 2025. These were normalised, pre-processed and deduplicated for updated dataset delivery. The main sections
+of this document detail the numbers ingested from each source, which include these updates.
 
 \clearpage%
 \subsection{Scottish Charity Regulator (OSCR)}
@@ -696,7 +701,7 @@ limited by guarantee (with or without 'limited exemption', with or without 'priv
 \subsection{Co-operatives}
 \url{https://www.uk.coop/resources/open-data}
 
-The Co-operatives UK organisations used in this project were from open data downloads in April 2022 and April 2024.
+The Co-operatives UK organisations used in this project were from open data downloads in April 2022, April 2024 and January 2025.
 Open data from the Co-operatives UK organisation was mapped to the format required by the public spine
 according to the rules shown in Table \ref{tab:coop_preprocess} below.
 
@@ -737,7 +742,7 @@ is used in the primary data, and alternatives are stored in supplementary data.
 
 The Mutuals Public Register is a public record of mutual societies registered by the Financial Conduct Authority. 
 Openly available register data has information for societies currently registered, and those no longer registered.
-For this project, downloads from June 2023 and April 2024 are used. The field mapping is shown in Table 
+For this project, downloads from June 2023, April 2024 and January 2025 are used. The field mapping is shown in Table 
 \ref{tab:mpr_preprocess}. 
 
 \begin{table}[h]
@@ -765,10 +770,17 @@ source & Variable to indicate the data source (in this case - MPR) \\ \hline
   
 \end{table}
 
+Where an organisation has multiple options for name and address, the most recent
+is used in the primary data, and alternatives are stored in supplementary data.
+
 
 \clearpage
 \subsection{Scottish Housing Register }
 \url{https://www.housingregulator.gov.scot/landlord-performance/statistical-information/}
+
+The Scottish Housing Regulator for social landlords publishes organisational data which has been included in the spine.
+Datasets used in this project were annual downloads collected in 2018, 2019, 2020, 2021 and 2022, and their most recent publication at the time
+of creating our data product: 'All Social Landlords Complete Dataset 2019-20 to 2023-24'.
 
 \begin{table}[h]
   \centering
@@ -794,12 +806,16 @@ source & Variable to indicate the data source (in this case - SHR) \\ \hline
   
 \end{table}
 
+Where an organisation has multiple options for name and address, the most recent
+is used in the primary data, and alternatives are stored in supplementary data.
 
 
 
 \clearpage
 \subsection{Social Housing England 	}
 \url{https://www.gov.uk/government/publications/registered-providers-of-social-housing}
+
+Two bulk downloads were used from Social Housing England's register, from 2023 and 2025.
 
 \begin{table}[h]
   \centering
@@ -824,14 +840,16 @@ source & Variable to indicate the data source (in this case - SHPE) \\ \hline
   \label{tab:shpe_preprocess}
   
 \end{table}
-
+Where an organisation has multiple options for name and address, the most recent
+is used in the primary data, and alternatives are stored in supplementary data.
 
 
 \clearpage
 \subsection{Care Inspectorate Scotland }
 \url{https://www.careinspectorate.com/index.php/statistics-and-analysis/data-and-analysis}
 
-
+Care Inspectorate Scotland release data at their financial year end (March 31st). This dataset uses data published in the
+years 2015 to 2025 inclusive.
 Organisations are included where field "Service Type" =  'Voluntary or Not for Profit'. Organisations
 have both a 'Provider Name' and a 'Service Name' in the Care Inspectorate data. We have retained
 Service Names, however the primary name for matching is the Provider Name.

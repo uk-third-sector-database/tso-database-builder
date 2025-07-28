@@ -41,6 +41,7 @@ CIS_fields = ["CSNumber",
 def fix_care_inspectorate_files():
     # Pre-process the raw files to include the source date (found in filename) as a field
     raw_files = glob.glob('../raw_data/CareInspectScot/MDSF_data*.csv')
+    raw_files.extend(glob.glob('../raw_data/CareInspectScot/*Datastore*.csv'))
     print(raw_files)
     output_file = '../raw_data/CareInspectScot.all.csv'
     
@@ -50,7 +51,14 @@ def fix_care_inspectorate_files():
         csv_writer.writeheader()  
         
         for file in raw_files:
-            date = os.path.basename(file).split('MDSF_data_')[-1].strip('.csv')
+            try:
+                date = int(os.path.basename(file).split('MDSF_data_')[-1].strip('.csv'))
+            except:
+                try:
+                    date = int(os.path.basename(file).split('Datastore')[0])
+                except:
+                    print('Issue with date in file name ',file)
+                    date = ''
             with open(file, 'r', newline='', encoding='Latin-1') as infile:
                 csv_reader = csv.DictReader(infile)
                 print(f'reading file {file}; using {date} as iteration')
