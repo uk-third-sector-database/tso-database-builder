@@ -6,7 +6,7 @@ from datetime import datetime
 from memory_profiler import profile
 from tqdm import tqdm  
 
-from handler.base_definitions import EXTRA_DETAILS_CSV_FIELDS, SPINE_CSV_FIELDS, MATCHES_CSV_FIELDS, ORG_ID_MAPPING
+from handler.base_definitions import EXTRA_DETAILS_CSV_FIELDS, SPINE_CSV_FIELDS, MATCHES_CSV_FIELDS, ORG_ID_MAPPING, SAMEAS_FILE, OSCR_LINKS_FILE
 
 def read_dkane_sameas(file):
     #print(os.getcwd())
@@ -42,7 +42,6 @@ def read_dkane_sameas(file):
             primary_orgs.append(y)
             
         if x in ftc_dict:
-            #ftc_dict[x].append(y)
             ftc_dict[x].add(y)
         else:
             ftc_dict[x] = {y}
@@ -54,8 +53,8 @@ def read_dkane_sameas(file):
     return ftc_dict, primary_orgs
     
 
-ftc_dict, primary_ccew_orgs_ftc = read_dkane_sameas('../raw_data/FTC_data/dkane_relationships_sameas.csv')
-oscr_linkage_lookup, _ = read_dkane_sameas('../raw_data/oscr.linkage.csv')
+ftc_dict, primary_ccew_orgs_ftc = read_dkane_sameas(SAMEAS_FILE)
+oscr_linkage_lookup, _ = read_dkane_sameas(OSCR_LINKS_FILE)
 
 
 
@@ -109,9 +108,7 @@ def consolidate_extras(values):
         else:
             item_obj = item
         
-        
-        
-        
+
         addr_hash = item_obj.hash_addr()
         names_hash = item_obj.hash_names()
         reg_hash = item_obj.hash_reg()
@@ -138,8 +135,7 @@ def consolidate_extras(values):
         new_item = item_obj.model_copy(update=updates)
         if not new_item.isempty():
             processed_extras.append(new_item)
-        #if not new_item == item_obj:
-        #    print(f'Consolidated extra: {item_obj.model_dump()} to {new_item.model_dump()}')
+
     return processed_extras
     
 
@@ -201,7 +197,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
         return self.model_dump(exclude={"extras","matched_orgs","sorted_matches"})
         
     def to_extras_csv(self):
-        for x in self.extras:#sorted_extras:
+        for x in self.extras:
             if not x.isempty():
                 yield x.model_dump()
 
@@ -210,15 +206,16 @@ class CoreOrganisation(BaseModel): # orgs for public spine
         for m in self.sorted_matches:
             yield m.model_dump()
 
-#    @profile
-    def sort_matches(self):
-        # decide what goes in main spine and what's in extras
 
-        # all matches considered to create single organisation other than matchtype = 'companyid - companyid' which occurs
-        # when two organisations are mapped to the same companyid, which creates a link in the match table but not an identical
-        # organisation UNLESS also in the ftc mappings.
-        # self.matches is a list of (CoreOrganisation,matchtype) tuples
-        # matchtype is in ['companyid - companyid', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source', 'ftc']
+    def sort_matches(self):
+        '''
+        decide what goes in main spine and what's in extras.
+        all matches considered to create single organisation other than matchtype = 'companyid - companyid' which occurs
+        when two organisations are mapped to the same companyid, which creates a link in the match table but not an identical
+        organisation UNLESS also in the ftc mappings.
+        self.matches is a list of (CoreOrganisation,matchtype) tuples
+        matchtype is in ['companyid - companyid', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source', 'ftc']
+        '''
 
         matchtype_order = ['ftc', 'oscr', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source' , 'name - housing', 'name - care', 'companyid - companyid']
 #   
@@ -238,14 +235,13 @@ class CoreOrganisation(BaseModel): # orgs for public spine
             for matched_org in matched_orgs:
                 # if matched_org has is_cic flag set to True, set is_cic flag for this org:
                 if matched_org.is_cic == 'True':
-#                    print(f'matched org is cic: {self.uid} matched to {matched_org.uid}')
                     self.is_cic = 'True'
 
                 if not matchtype == 'companyid - companyid':
                     assured_matched_orgs.append(matched_org)
                     e = matched_org.to_extra_info()
                     if not e in self.extras:
-                        self.extras.append(e) #matched_org.to_extra_info())
+                        self.extras.append(e) 
                     for e in matched_org.extras:
                         if not e in self.extras:
                             self.extras.append(e)
@@ -407,24 +403,20 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
         
         if self.companyid and (self.companyid in bycompanyid):
             match = bycompanyid[self.companyid]
-#            print(f' --- match on companyid {self.companyid}')
             matches_here.extend([(i, 'companyid - companyid') for i in match])
 
         if self.normalisedname in byname: 
             match = byname[self.normalisedname]
             if self.source == 'cqc' and any(x.cqc_reg == '1' for x in match): # need to make this work by adding cqc_reg field to core orgs so we don't lose this info
-#                print(f' --- match on normalisedname {self.normalisedname}')
                 matches_here.extend([(i, 'name - cqc') for i in match])
                 
-            if self.crossborder=='1':# and any(x.source.lower() in ['ccew','ccni'] for x in match): # allow matches by name if we expect a match
-#                print(f' --- crossborder match found for {self.normalisedname} (match.source = {[x.source.lower() for x in match]})')
+            if self.crossborder=='1':
                 matches_here.extend([(i, 'name - crossborder') for i in match])
 
             if self.source.lower() == 'scottishhousingregulator' and any(x.source.lower() == 'oscr' for x in match):
                 matches_here.extend([(i, 'name - housing') for i in match])   
 
             if self.source.lower() == 'socialhousingengland' and any(x.source.lower() == 'ccew' for x in match):
-#                print(f' --- SHE match found for {self.normalisedname}')
                 matches_here.extend([(i, 'name - housing') for i in match])   
 
             if self.source.lower() == 'careinspectoratescot' and any(x.source.lower() == 'oscr' for x in match):
@@ -547,13 +539,14 @@ class MainOrgList:
         remove_from_dict(self._store, org.uid)
 
 
-#    @profile
     def merge(self, orgs: list[SubSpineOrg]):
-        # merge SubSpineOrgs onto MainOrgList (self): check for matches
+        '''merge SubSpineOrgs onto MainOrgList (self): check for matches'''
 
         def check_removal_dates(subspine_org, matched_orgs):
-            # if any matched orgs are from the same source as subspine_org, check for removal dates:
-            # the primary org is the one without a removal date, or with the most recent removal date.
+            ''' 
+            if any matched orgs are from the same source as subspine_org, check for removal dates:
+            the primary org is the one without a removal date, or with the most recent removal date.
+            '''
 
             def parse_date(date_str):
                 if date_str:
@@ -583,8 +576,7 @@ class MainOrgList:
             if matched_org:
                 check_removal_dates(this_subspine_org, matched_org)
                 # check if this org should be primary rather than matched:
-                if (this_subspine_org.uid in primary_ccew_orgs_ftc):# or (primary_org_within_source != this_subspine_org):
-                    #print(f'Primary org found for {this_subspine_org.normalisedname}: {this_subspine_org.uid} (in source {this_subspine_org.source}) (requires switch of primary org)')  
+                if (this_subspine_org.uid in primary_ccew_orgs_ftc):
                     # this is the primary org in the match
                     new_coreorg = this_subspine_org.to_core_org()
 
@@ -596,14 +588,11 @@ class MainOrgList:
                         self.remove_from_stores(m)
                         new_coreorg.matched_orgs.append((reverted_m,matchtype))
                         self.add_to_stores(new_coreorg)
-                        #print(f'added new_coreorg to store: self._store[new_coreorg.uid] = {self._store[new_coreorg.uid]} ')
-
                 
                 else:
                     # add this_subspine_org to all matched this_subspine_org already in the spine:
                     for matched_coreorg,matchtype in matched_org: # o is higher up the precedence order than this_subspine_org
                         matched_coreorg.matched_orgs.append((this_subspine_org,matchtype))
-                        #print(f'not primary: adding to store {matched_coreorg}')
                         self.add_to_stores(matched_coreorg)
 
             else:
@@ -654,8 +643,7 @@ class MainOrgList:
         with open(filename_main, "w+") as out_main:
             with open(filename_extras, "w+") as out_extras:
                 with open(filename_matches, 'w+') as out_matches:
-                    #csv_keys = list(CoreOrganisation.model_fields.keys())
-                    #csv_keys.remove("extras")
+
                     main_csv = csv.DictWriter(out_main, fieldnames=SPINE_CSV_FIELDS)
                     extras_csv = csv.DictWriter(out_extras, fieldnames=EXTRA_DETAILS_CSV_FIELDS)
                     matches_csv = csv.DictWriter(out_matches,fieldnames=MATCHES_CSV_FIELDS)
@@ -665,7 +653,6 @@ class MainOrgList:
                     for org in tqdm(self._store.values(), desc='Writing to files'):
 
                         if not org.source.lower() in ['careinspectoratescot','carequalitycommission']:
-                            
                         
                             for row in [org.to_main_csv()]:
                                 filtered_row = {key: row[key] for key in SPINE_CSV_FIELDS if key in row}
@@ -687,7 +674,7 @@ class MainOrgList:
 
 def convert_csv_to_list_of_subspine_orgs(csv_file: str) -> list[SubSpineOrg]:
     
-    file_root, file_ext = os.path.splitext(csv_file)
+    file_root, _ = os.path.splitext(csv_file)
     supp_file = file_root + '.supplementary.csv'
     
     extras_dict = {}
@@ -736,10 +723,6 @@ def process_csvs_to_build_spine(csv_file_list_order):
         print(f'BUILD PROGRESS:\n Cumulative total of {unique_uids} organisations now processed.\n')
         print(f'Orgs merged into main spine: {len(main_orgs._store.keys())} organisations, of which {len([x for x in main_orgs._store.keys() if main_orgs._store[x].matched_orgs])} have matched orgs\n\n')
         print(f'Sources now in the main spine: {source_dict}\nSources from which matches were found: {match_dict}\n')
-
-        
-
-    #main_orgs.check_primary_orgs()
 
     print('For plotting:\n reports = [')  
     for t in progress:

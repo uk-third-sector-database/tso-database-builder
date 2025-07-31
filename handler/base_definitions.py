@@ -1,5 +1,12 @@
 # static definitions
 
+
+SAMEAS_FILE = '../raw_data/FTC_data/dkane_relationships_sameas.csv'
+
+OSCR_LINKS_FILE = '../raw_data/oscr.linkage.csv'
+
+
+
 ORG_ID_MAPPING = {
 'CCEW':'CHC',
 'OSCR':'SC',
