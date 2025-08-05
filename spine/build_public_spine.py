@@ -669,6 +669,7 @@ class MainOrgList:
         df = pd.read_csv(filename_extras)
         df.drop_duplicates(inplace=True)
         df.to_csv(filename_extras, index=False) 
+        print(f'\nFiles written to {filename_main}, {filename_matches}, {filename_extras}\n')
 
 
 

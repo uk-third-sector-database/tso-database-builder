@@ -69,11 +69,11 @@ Care Quality Commission 	& \url{www.cqc.org.uk}\\ \hline
 
 The organisational spine consists of three csv files: 
 \begin{itemize}
-\item public\_spine.spine.csv contains a row for each organisation considered to make up the UK's third sector, with name, address and date details. The data dictionary
+\item TSCS\_spine.spine.csv contains a row for each organisation considered to make up the UK's third sector, with name, address and date details. The data dictionary
 is found in Table \ref{tab:spine_fields}.
-\item public\_spine.supplementary.csv contains any name, address and date information associated with an organsiation which is additional to what is in the spine, 
+\item TSCS\_spine.supplementary.csv contains any name, address and date information associated with an organsiation which is additional to what is in the spine, 
 such as 'Also Known As' names, previous addresses. See Table \ref{tab:supplementary_fields} for data dictionary
-\item public\_spine.matches.csv lists the organisations which are linked or matched according to our searches (see \ref{sec:match}), along with the type of match. Data dictionary
+\item TSCS\_spine.matches.csv lists the organisations which are linked or matched according to our searches (see \ref{sec:match}), along with the type of match. Data dictionary
 in Table \ref{tab:match_fields}
 \end{itemize}
 
@@ -652,7 +652,7 @@ full list of these, indicating which have been included in the public spine data
 Each of the  companies house data sources were pre-processed to identify primary name and address for each 
 included organisation, with any alternative names and addresses also stored. The sources were then 
 also combined, since there is significant overlap between them, and the most recent name and address
-per organsiation was included in the companies house spine data, to be used for matching with other 
+per organisation was included in the companies house spine data, to be used for matching with other 
 registries to form the public spine.
 
 %Counts of organisations ingested from each source, along with the overlaps in UIDS, are shown in 
