@@ -71,7 +71,7 @@ The organisational spine consists of three csv files:
 \begin{itemize}
 \item TSCS\_spine.spine.csv contains a row for each organisation considered to make up the UK's third sector, with name, address and date details. The data dictionary
 is found in Table \ref{tab:spine_fields}.
-\item TSCS\_spine.supplementary.csv contains any name, address and date information associated with an organsiation which is additional to what is in the spine, 
+\item TSCS\_spine.supplementary.csv contains any name, address and date information associated with an organisation which is additional to what is in the spine, 
 such as 'Also Known As' names, previous addresses. See Table \ref{tab:supplementary_fields} for data dictionary
 \item TSCS\_spine.matches.csv lists the organisations which are linked or matched according to our searches (see \ref{sec:match}), along with the type of match. Data dictionary
 in Table \ref{tab:match_fields}
@@ -87,7 +87,7 @@ in Table \ref{tab:match_fields}
     uid &	UID created for each source, e.g. GB-CHC-1234\\    \hline
     organisationname &	Name as primary in source\\    \hline
     normalisedname &	Name normalised to capitalise, remove extra spaces and punctuation - to aid matching \\    \hline
-    fulladdress &	Full address as found in source with highest precendence across any matched organisations\\    \hline
+    fulladdress &	Full address as found in source with highest precedence across any matched organisations\\    \hline
     city &	City matching full address as defined above\\    \hline
     postcode &	Postcode matching full address as defined above\\    \hline
     registerdate &	Earliest registration date found in records for this organisation across all sources\\    \hline
@@ -152,10 +152,10 @@ The following routes lead to a match:
 \begin{itemize}
 \item Matching by Company ID:
 
-The charity regulator in England and Wales, CCEW, collects information about orgnaisations' associated registration at Companies House. 
+The charity regulator in England and Wales, CCEW, collects information about organisations' associated registration at Companies House. 
 If two charities share the same companyid they match the same companies house record and are therefore linked.
 
-This same company id is used to generate matches between CCEW and Companies House directly.
+This same companyid is used to generate matches between CCEW and Companies House directly.
 
 Our historic data from Scotland's charity regulator, OSCR, contains a company identifier for some organisations. This is used
 for a deterministic match between OSCR and Companies House.
@@ -167,7 +167,7 @@ the Mutuals Public Register. Matches are thus sought between CoOps and Mutuals u
 
 \item Matching by Normalised Name:
 
-If two organsiations have the same normalised name they are tentatively matched, but require an additional check. 
+If two organisations have the same normalised name they are tentatively matched, but require an additional check. 
 Any of the following being true will create a match:
 
   \begin{enumerate}
@@ -175,7 +175,7 @@ Any of the following being true will create a match:
   \item Organisation is in Care Quality Commission (CQC) data, and the matched core organisation is flagged as having a CQC registration, 
   which is a flag in CCEW data.
   \item Organisation is in the Scottish charity regular (OSCR) register and has a 'cross border' flag, 
-  indicating that a match is expected between itself and an organsiation in CCEW.
+  indicating that a match is expected between itself and an organisation in CCEW.
   \item Organisation is in Scottish Housing Regulator or Care Inspectorate Scotland, and normalised name match is with an organisation in OSCR.
   \item Organisation is in Social Housing England Regulator or Care Quality Commission, and matches an organisation in CCEW.
   \end{enumerate}
@@ -184,13 +184,13 @@ Any of the following being true will create a match:
 \item Matching using work by Find That Charity:
 
 A lookup table provided by David Kane\footnote{\url{https://raw.githubusercontent.com/drkane/charity-lookups/master/relationships/_sameas.csv}} is also used to generate matches. 
-These links include historic reregistrations, allowing
+These links include historic re-registrations, allowing
 this dataset to be further deduplicated.
 \end{itemize}
 
 
 
-The  order in Table \ref{tab:order} shows the precendence given to sources where matches occur: the higher precendence
+The  order in Table \ref{tab:order} shows the precedence given to sources where matches occur: the higher precedence
 source will provide the data and unique identifier (uid) in the main spine table. Matches will be found in the matches table, and any data
 found in addition to the primary fields will be in the supplementary table, indexed by the uid given at source. The first eight sources are processed such that any organisations not already present 
 in the dataset are added to it. Sources CIS and CQC are only noted in the matches table where they link to a source present.
@@ -257,7 +257,7 @@ The above techniques are used to match organisations between sources. Where a ma
 the primary organisation is determined by the following rules:
 \begin{itemize}
 \item If an organisation from the Charity Commission for England and Wales matches an organisation from the same commission,
-the primary organisation uses the Find That Charity lookup to identify which of the two is the 'transferee' in a reregistration. The 
+the primary organisation uses the Find That Charity lookup to identify which of the two is the 'transferee' in a re-registration. The 
 transferor is then linked to the transferee in the matches table, with the transferee being the primary organisation.
 \item In other cases where there are two organisations from the same regulator which match, the organisation considered primary
 is the one without a removal date (and is therefore still active), or the one with the most recent removal date (and was therefore
@@ -270,7 +270,7 @@ the organisation with the earliest registration date is considered primary.
 \clearpage
 \section{Ingesting data from each source}
 
-Each of the ten sources use different conventions for their databases. These needed to be pre-processed individually to accomodate different fieldnames,
+Each of the ten sources use different conventions for their databases. These needed to be pre-processed individually to accommodate different fieldnames,
 encodings, systems of marking alternative names, and so on. The pre-process step identified primary names and addresses for each organisation, 
 choosing the most recent where multiple iterations exist, and storing alternatives for completeness.
 
@@ -309,8 +309,8 @@ Details for each source are given in the sections below.
 \url{https://register-of-charities.charitycommission.gov.uk/en/register/full-register-download}
 
 This section outlines the use of CCEW regulatory data in the construction of the third sector
-organisational spine\footnote{For further detail on how this data was used, please see the accompanying
-ccew\_publicspine\_prep.do file.}.
+organisational spine\footnote {For further detail on how this data was used, please see the Stata file
+ccew\_publicspine\_prep.do in the project GitHub repository.}.
 
 The initial processing of CCEW data for this project comprised 27 individual data files that were obtained
 between 2001 and 2023, along with updates lat. These files were used to compile a list of unique charities, and to
