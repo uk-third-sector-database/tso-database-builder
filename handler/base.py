@@ -334,15 +334,13 @@ def compress_org_details(csv_in,
     print(f'Running handler.base.compress_org_details with file {csv_in}\n')
     uid_dict = dict_indexed_by_field(csv_in,'uid')
     
-    
-
     # for each uid, if more than one record, find unique names and addresses
     # and write line to csv_out, with additional data to details_csv_out
     with open(spine_csv_out,'w+',newline='') as spine_csvfile,  open(details_csv_out, 'w+', newline='') as details_csvfile:
         tmp_fields = data_handler.tmp_fields
         if 'iteration' in tmp_fields: tmp_fields.remove('iteration')
-        spine_writer = csv.DictWriter(spine_csvfile, fieldnames=SUB_SPINE_CSV_FIELDS+tmp_fields, extrasaction='ignore')
-        extras_writer = csv.DictWriter(details_csvfile, fieldnames=EXTRA_DETAILS_CSV_FIELDS, extrasaction='ignore')
+        spine_writer = csv.DictWriter(spine_csvfile, fieldnames=SUB_SPINE_CSV_FIELDS+tmp_fields, extrasaction='ignore', restval='', quoting=csv.QUOTE_ALL)
+        extras_writer = csv.DictWriter(details_csvfile, fieldnames=EXTRA_DETAILS_CSV_FIELDS, extrasaction='ignore', restval='', quoting=csv.QUOTE_ALL)
         
         spine_writer.writeheader()
         extras_writer.writeheader()  
@@ -357,7 +355,7 @@ def compress_org_details(csv_in,
             elif len(uid_dict[uid]) > 1: # more than one record with this uid - sort primary and secondary data
                 try:
                     sub_spine_data,extra_data = data_handler.combine_org_details_per_source(uid_dict[uid])
-                    spine_writer.writerow(sub_spine_data)
+                    spine_writer.writerows([sub_spine_data])
                     extras_writer.writerows(extra_data)
                 except ValueError as e:
                     print(f'Error with combining org details for uid {uid}: {e}')
@@ -379,7 +377,7 @@ def sort_csv_by_field(filename,date_field):
         return
 
     print(f'Sorting file {backupfilename} by field {date_field}\n')
-    df = pd.read_csv(backupfilename)
+    df = pd.read_csv(backupfilename,dtype=str)
     df[date_field] = pd.to_datetime(df[date_field], errors='coerce', dayfirst=True)
 
     # Sort the dataframe by the date column (null values first, then most recent)

@@ -70,35 +70,6 @@ class CCEWDataHandler(DataHandler):
         return new_row
         
 
-    def _find_primary_info(self,s):
-        '''input is a set generated in combine_org_details_per_source.
-        Find primary details and return as list, where list[0] is primary'''
-        s = list(s)
-        new_s = set()
-        primary = ()
-        
-        for item in s:
-            item_data = item[:-1]
-            
-            primary_flag = item[-1]
-            if primary_flag == '1':
-                if len(primary) == 0:
-                    primary = item_data
-                else:
-                    new_s.add(primary)
-                    primary = ()
-            new_s.add(item_data)
-
-        if len(primary) == 0:
-            primary = ('',)*len(item_data)
-
-        extra_rows = [i for i in new_s if (i != primary) and 
-                      not all(f == '' for f in i)]
-
-        return primary, extra_rows
-
-
-
 
     def find_primary_info(self, s):
         """
@@ -108,10 +79,14 @@ class CCEWDataHandler(DataHandler):
         Returns:
             - primary: the selected primary record (tuple without flag/iteration)
             - extra_rows: other non-empty rows that are not the primary
+
+        Original (historic) ccew data had 'primary_flag' set to determine the details 
+        for the spine. This needs to be superseded if there are more recent data for an org.
         """
         s = list(s)
         new_s = set()
         primary = None
+        primary_iteration = None
         fallback_candidates = []
 
         for item in s:
@@ -119,7 +94,8 @@ class CCEWDataHandler(DataHandler):
             item_data = tuple(item_data)
             if all(f == '' for f in item_data):
                 continue
-
+            
+            iteration = None
             if iteration_str:
                 try:
                     if len(iteration_str)==4:
@@ -137,12 +113,25 @@ class CCEWDataHandler(DataHandler):
             fallback_candidates.append((iteration, item_data))
 
             if primary_flag == '1':
-                if primary is None and any(f != '' for f in item_data):
+                #if primary is None and any(f != '' for f in item_data):
+                if primary_flag =='1' and any(f != '' for f in item_data):
                     primary = item_data
+                    primary_iteration = iteration
                 else:
                     new_s.add(item_data)  # demote previous or bad primary
             else:
                 new_s.add(item_data)
+
+        # Determine the most recent iteration among all candidates
+        if fallback_candidates:
+            most_recent_iteration, most_recent_data = max(fallback_candidates, key=lambda x: x[0])
+
+            # Replace primary if its iteration is older
+            if primary_iteration is None or (most_recent_iteration and primary_iteration and primary_iteration < most_recent_iteration):
+                if primary is not None:
+                    new_s.add(primary)  # move old primary to extras
+                primary = most_recent_data
+                primary_iteration = most_recent_iteration
 
         # Fallback to most recent iteration if needed
         if primary is None or all(f == '' for f in primary):
@@ -177,10 +166,12 @@ class CCEWDataHandler(DataHandler):
         regdates = set()
         remdates = set()
         cqc_reg = False
-        
+        company_id = ''
+        #print(f"\n\nUID = {rows[0]['uid']}")
         
         # gather up the various options for name, address, and dates
         for r in rows:
+#            print(f'row = {r}')
             uid = r['uid']
             for field in self.tmp_fields:
                 if not field in r.keys(): r[field] = ''
@@ -198,7 +189,12 @@ class CCEWDataHandler(DataHandler):
             
             for var in [(n,names),(a,addresses),(reg,regdates),(dis,remdates)]:
                 var[1].add(var[0])
-                
+        
+        # find company id:
+        for r in rows:
+            if r['companyid']:
+                company_id = r['companyid']
+                break
 
         primary_name,    extra_names = self.find_primary_info(names)
         try:
@@ -214,9 +210,10 @@ class CCEWDataHandler(DataHandler):
         new_sub_spine_row = sub_spine_entry_creator(
             {'uid' : uid,
             "id_in_source" : r['id_in_source'],
-            "companyid" : r['companyid'],
+            "companyid" : company_id,
             "source_register" : r['source_register'],
             "source" : r['source'],})
+        
         
 
         if primary_name:
@@ -272,6 +269,8 @@ class CCEWDataHandler(DataHandler):
             entry['source'] = r['source']
             entry['source_register'] = r['source_register']
 
+
+#        print(f'new_sub_spine_row = {new_sub_spine_row}')
         return new_sub_spine_row,new_extras_rows
         
 

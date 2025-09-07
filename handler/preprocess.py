@@ -357,12 +357,12 @@ def fix_SocialHousingEng():
 
 if __name__ == '__main__':
     # all updated for new data Feb 2025
-    #fix_SocialHousingEng()
-    #fix_coops_files() 
+    fix_SocialHousingEng()
+    fix_coops_files() 
     fix_care_inspectorate_files() 
-    #fix_mutuals_files() 
-    #fix_ScotHousingReg_files() 
-    #fix_CQC_files() 
+    fix_mutuals_files() 
+    fix_ScotHousingReg_files() 
+    fix_CQC_files() 
 
 
 

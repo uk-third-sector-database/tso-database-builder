@@ -313,7 +313,7 @@ def process_ccew():
     output_file = '../raw_data/ccew.all.csv'
 
     with open(output_file,'w+', newline='', encoding='UTF8') as outfile:
-        csv_writer = csv.DictWriter(outfile, fieldnames=ccew_fields)
+        csv_writer = csv.DictWriter(outfile, fieldnames=ccew_fields, restval='', quoting=csv.QUOTE_ALL)
         csv_writer.writeheader()
 
         with open(base_file, 'r', newline='', encoding='utf-8-sig') as basefile:
