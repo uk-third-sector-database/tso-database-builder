@@ -55,7 +55,9 @@ def fix_care_inspectorate_files():
                 date = int(os.path.basename(file).split('MDSF_data_')[-1].strip('.csv'))
             except:
                 try:
-                    date = int(os.path.basename(file).split('Datastore')[0])
+#                    date = int(os.path.basename(file).split('Datastore')[0])
+                    date_obj = datetime.strptime(os.path.basename(file).split('.')[-2], "%b%Y")
+                    date = date_obj.strftime("%m/%Y")
                 except:
                     print('Issue with date in file name ',file)
                     date = ''
@@ -187,8 +189,12 @@ def fix_mutuals_files():
                 year,month = os.path.basename(file).strip('.csv').split('-')[-2:]
                 date = f'{month}/{year}'
             except ValueError:
-                date_obj = datetime.strptime(os.path.basename(file).split('.')[-2], "%b%Y")
-                date = date_obj.strftime("%m/%Y")
+                try:
+                    date_obj = datetime.strptime(os.path.basename(file).split('.')[-2], "%b%Y")
+                    date = date_obj.strftime("%m/%Y")
+                except ValueError:
+                    print(f'Error finding date in {file}. Skipping.')
+                    continue
 
             with open(file, 'r', newline='', encoding=encoding) as infile:
                 csv_reader = csv.DictReader(infile)
@@ -242,8 +248,10 @@ def fix_ScotHousingReg_files():
         for file in raw_files:
             date = os.path.basename(file).split('-')[-1].strip('.csv')
             if not date.isdigit():
-                date = os.path.basename(file).split('.')[-2].strip('.csv')[-4:]
-                if not date.isdigit():
+                try:
+                    date_obj = datetime.strptime(os.path.basename(file).split('.')[-2].replace('to_',''), "%b%Y")
+                    date = date_obj.strftime("%m/%Y")
+                except:
                     print(f'Error finding date in filename for {file} - skipping')
                     continue
             
@@ -363,7 +371,6 @@ if __name__ == '__main__':
     fix_mutuals_files() 
     fix_ScotHousingReg_files() 
     fix_CQC_files() 
-
 
 
 

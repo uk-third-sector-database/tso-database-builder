@@ -217,11 +217,11 @@ def find_postcode(address_string:str,name_str:str):
 
 
 def process_ccni():
-    raw_files = glob.glob('../raw_data/ccni/ccni-charitydetails_*.csv')
+    raw_files = glob.glob('../raw_data/ccni/*charitydetails_*.csv')
     dissolution_files = glob.glob('../raw_data/ccni/ni-removals-*.csv')
     base_file = '../raw_data/ccni/ccni_spine.csv'
     output_file = '../raw_data/ccni.all.csv'
-
+    print('Processing CCNI raw files. Make sure filenames are in the form *charitydetails_yy_mm_dd.csv for inclusion.')
 
     with open(output_file, 'w+', newline='', encoding='UTF8') as outfile:
         csv_writer = csv.DictWriter(outfile, fieldnames=ccni_fields)
@@ -246,8 +246,8 @@ def process_ccni():
 
         for file in raw_files:
             lc = 0
-            date = os.path.basename(file).split('-charitydetails_')[1].strip('.csv')
-            date_obj = datetime.strptime(date, '%Y_%m_%d_%H_%M_%S')
+            date = os.path.basename(file).split('charitydetails_')[1].strip('.csv')
+            date_obj = datetime.strptime(date, '%Y_%m_%d')
             iteration_date = date_obj.strftime('%m/%Y')
 
             with open(file, 'r', newline='', encoding='Latin-1') as infile:
@@ -299,6 +299,7 @@ ccew_fields = ['uid', 'charitynumber', 'organisationname', 'normalisedname',
        'regdate_origin', 'remdate_origin', 'iteration', 'source', 'cqc_reg']
 
 def process_ccew():
+    print("Processing ccew. If downloaded files are in json or txt format, first use code in reformat_ccew.ipynb to create csvs.")
 
     def formatdate(datestr):
         try:
@@ -309,8 +310,26 @@ def process_ccew():
 
 
     raw_files = glob.glob('../raw_data/ccew/ccew-publicextract.*.csv')
+    #raw_txt_files = glob.glob('../raw_data/ccew/ccew-publicextract*.txt')
     base_file = '../raw_data/ccew/ccew_spine_public.csv'
     output_file = '../raw_data/ccew.all.csv'
+#
+    #for txt_file in raw_txt_files:
+    #    f=os.path.basename(txt_file.replace('.txt','.csv'))
+    #    r=[os.path.basename(i) for i in raw_files]
+    #    if not f in r:
+    #        data = pd.read_csv(
+    #            txt_file,
+    #            sep='\t',
+    #            engine='python',
+    #            quoting=csv.QUOTE_NONE,  
+    #            on_bad_lines='warn',
+    #            encoding='utf-8',
+    #        )
+    #        ofile = txt_file.replace('.txt','.csv')
+    #        data.to_csv(ofile,index=False)
+    #        raw_files.append(ofile)
+    #        print(f'Converted {ofile} from .txt and added to list to process')
 
     with open(output_file,'w+', newline='', encoding='UTF8') as outfile:
         csv_writer = csv.DictWriter(outfile, fieldnames=ccew_fields, restval='', quoting=csv.QUOTE_ALL)
@@ -336,7 +355,7 @@ def process_ccew():
                 for row in csv_reader:
                     new_row = {key:'' for key in ccew_fields}
                     new_row['iteration'] = iteration_date
-                    new_row['charitynumber'] = row['registered_charity_number']
+                    new_row['charitynumber'] = row['registered_charity_number']+'-'+row['linked_charity_number']
                     new_row['organisationname'] = row['charity_name']
                     new_row['companyid'] = row['charity_company_registration_number']
                     new_row['addressline1'] = row['charity_contact_address1']
@@ -351,6 +370,8 @@ def process_ccew():
                     new_row['source'] = 'CCEW'
                     new_row['regdate_origin'] = iteration_date
                     new_row['remdate_origin'] = iteration_date
+                    new_row['primary_name'] = 1 if row['linked_charity_number']=='0' else ''
+                    new_row['primary_address'] = 1 if row['linked_charity_number']=='0' else ''
 
                     csv_writer.writerow(new_row)
                     lc +=1
