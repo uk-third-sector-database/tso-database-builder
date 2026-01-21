@@ -302,34 +302,22 @@ def process_ccew():
     print("Processing ccew. If downloaded files are in json or txt format, first use code in reformat_ccew.ipynb to create csvs.")
 
     def formatdate(datestr):
+        if not datestr:
+            return ''
         try:
-            d = datetime.strptime(datestr,'%Y-%m-%dT%H:%M:%S')
-            return d.strftime('%d%b%Y')
-        except ValueError:
+            #d = datetime.strptime(datestr.split('.0')[0],'%Y-%m-%d %H:%M:%S')
+            d = datetime.fromisoformat(datestr.replace('Z',''))
+            r = d.strftime('%d%b%Y')
+#            print('.  returning ',r)
+            return r
+        except ValueError as e:
+            print(f'Error with date {datestr}: {e}')
             return ''
 
 
     raw_files = glob.glob('../raw_data/ccew/ccew-publicextract.*.csv')
-    #raw_txt_files = glob.glob('../raw_data/ccew/ccew-publicextract*.txt')
     base_file = '../raw_data/ccew/ccew_spine_public.csv'
     output_file = '../raw_data/ccew.all.csv'
-#
-    #for txt_file in raw_txt_files:
-    #    f=os.path.basename(txt_file.replace('.txt','.csv'))
-    #    r=[os.path.basename(i) for i in raw_files]
-    #    if not f in r:
-    #        data = pd.read_csv(
-    #            txt_file,
-    #            sep='\t',
-    #            engine='python',
-    #            quoting=csv.QUOTE_NONE,  
-    #            on_bad_lines='warn',
-    #            encoding='utf-8',
-    #        )
-    #        ofile = txt_file.replace('.txt','.csv')
-    #        data.to_csv(ofile,index=False)
-    #        raw_files.append(ofile)
-    #        print(f'Converted {ofile} from .txt and added to list to process')
 
     with open(output_file,'w+', newline='', encoding='UTF8') as outfile:
         csv_writer = csv.DictWriter(outfile, fieldnames=ccew_fields, restval='', quoting=csv.QUOTE_ALL)

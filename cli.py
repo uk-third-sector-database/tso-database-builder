@@ -91,8 +91,8 @@ def build_spine(infiles, outfile_base):
     Generate organisational spine, plus matches, plus supplementary files, for all given inputs (in format {source}.spine.csv with {source}.supplementary.csv in the same folder)
     """
     MainOrgs = process_csvs_to_build_spine(infiles)
-    print(MainOrgs._store['GB-CHC-211714'])
     print('PROGRESS: process_csvs_to_build_spine complete. Now to write to files...\n')
+    print(MainOrgs)
     MainOrgs.write_out(outfile_base+'.spine.csv', 
                        outfile_base+'.supplementary.csv', 
                        outfile_base+'.matches.csv')

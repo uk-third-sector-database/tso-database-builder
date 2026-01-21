@@ -34,7 +34,7 @@ def process_bulk_download(file,ofile,datahandler):
     year,month = os.path.basename(file).split('-')[1:3]
     date = '%s/%s'%(month,year)
     data_handler = datahandler()
-    print('data_handler = ',data_handler)
+#    print('data_handler = ',data_handler)
     for new_row in filter(
         data_handler.all_filters, iter_csv_rows(file,data_handler)):
         rows =  data_handler.transform_row(new_row)
@@ -69,7 +69,7 @@ def find_CIC_uids(file,companytype_field,cic_search,encode):
     return CIC_uids
 
 def main_process(ofilename):
-    api_scrape_file = '../raw_data/CompaniesHouse/ch_adv_scrape.csv'
+    api_scrape_files = glob.glob('../raw_data/CompaniesHouse/ch_adv_scrape*csv')
     #historic_data = '../raw_data/CompaniesHouse/soton14reduced.csv'
     bulk_downloads = glob.glob('../raw_data/CompaniesHouse/BasicCompanyDataAsOneFile*csv')
 
@@ -79,14 +79,14 @@ def main_process(ofilename):
 
         csv_writer = csv.DictWriter(outfile, fieldnames=fields)  # possibly change field list to a CH specific one?
         csv_writer.writeheader()  
-        process_api_scrape(api_scrape_file,csv_writer)
+        for file in api_scrape_files:
+            process_api_scrape(file,csv_writer)
         #process_2014_data(historic_data,csv_writer)
         for file in bulk_downloads:
             process_bulk_download(file,csv_writer,datahandler)
 
     all_CICs = set()
-    for file, type_field, cic_search, encode in [#(historic_data,'companycategory','Community Interest Company','Latin-1'),
-                                         (api_scrape_file,'company_subtype','community-interest-company','Latin-1')] + \
+    for file, type_field, cic_search, encode in [(i,'company_subtype','community-interest-company','Latin-1') for i in api_scrape_files] + \
                                         [(i,'CompanyCategory','Community Interest Company','utf8') for i in bulk_downloads]:
         CIC_uids = find_CIC_uids(file,type_field,cic_search,encode)
         all_CICs.update(CIC_uids)
@@ -94,7 +94,7 @@ def main_process(ofilename):
         #print(CIC_uids[:5])
 
     with open('all_CICs.txt','w') as f:
-        f.write(f"# CICs found in files {','.join([api_scrape_file] + bulk_downloads)}\n\n") #{','.join([api_scrape_file,historic_data] + bulk_downloads)}\n\n")
+        f.write(f"# CICs found in files {','.join(api_scrape_files + bulk_downloads)}\n\n") #{','.join([api_scrape_file,historic_data] + bulk_downloads)}\n\n")
         f.write('\n'.join(all_CICs))
 
 

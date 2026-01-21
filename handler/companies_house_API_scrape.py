@@ -1,8 +1,5 @@
 """
-This code processes the bulk download from the companies house advanced search,
-filtered on 'dissolved date between 01/01/2013 and 01/01/2023'
-to capture the organisations which would be missing from both the data available at
-the start of this project and the legacy data held by soton (2014)
+This code processes the bulk download from the companies house advanced search
 """
 
 

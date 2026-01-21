@@ -40,7 +40,7 @@ python3 cli.py process-source OSCR ../raw_data/oscr.all.csv ../public_spine_data
 
 ##-----------------------------
 
-python3 cli.py build-spine ../public_spine_data/ccew.spine.csv ../public_spine_data/oscr.spine.csv ../public_spine_data/ccni.spine.csv ../public_spine_data/CH_all.spine.csv ../public_spine_data/CoOps.spine.csv ../public_spine_data/mutuals.spine.csv ../public_spine_data/ScotHousingReg.spine.csv ../public_spine_data/SocialHousingEngland.spine.csv ../public_spine_data/CareInspectScot.spine.csv ../public_spine_data/CQC.spine.csv -o ../public_spine_data/TSCS_spine &> build_spine.out
+python3 cli.py build-spine ../public_spine_data/ccew.spine.csv ../public_spine_data/oscr.spine.csv ../public_spine_data/ccni.spine.csv ../public_spine_data/mutuals.spine.csv ../public_spine_data/CH_all.spine.csv ../public_spine_data/CoOps.spine.csv  ../public_spine_data/ScotHousingReg.spine.csv ../public_spine_data/SocialHousingEngland.spine.csv ../public_spine_data/CareInspectScot.spine.csv ../public_spine_data/CQC.spine.csv -o ../public_spine_data/TSCS_spine &> build_spine.out
 
 python3 cli.py build-sic-codes-list ../raw_data/CH.all.csv ../public_spine_data/public_spine.matches.csv ../public_spine_data/TSCS_spine.SIC_codes.csv
 

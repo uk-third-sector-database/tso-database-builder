@@ -77,6 +77,7 @@ def extra_csv_entry_creator(overrides):
         "removeddate" : "",
         "source" : "",
         'source_register' : "",
+        "id_in_source" : ""
         }
     entry.update(**overrides)
     return entry
@@ -137,6 +138,7 @@ EXTRA_DETAILS_CSV_FIELDS = [
     "registerdate",
     "removeddate",
     "source_register",
+    "id_in_source"
     ]
 
 MATCHES_CSV_FIELDS = [
