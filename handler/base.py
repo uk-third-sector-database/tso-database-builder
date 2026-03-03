@@ -244,6 +244,8 @@ class DataHandler:
 
 
 def sort_encoding_issue(st:str):
+    if not st:
+        return ''
     st = st.strip()
     while not st.isascii():
         try:
@@ -333,7 +335,8 @@ def compress_org_details(csv_in,
        # create dictionary key'd by uid
     print(f'Running handler.base.compress_org_details with file {csv_in}\n')
     uid_dict = dict_indexed_by_field(csv_in,'uid')
-    
+
+    print(uid_dict.keys())
     # for each uid, if more than one record, find unique names and addresses
     # and write line to csv_out, with additional data to details_csv_out
     with open(spine_csv_out,'w+',newline='') as spine_csvfile,  open(details_csv_out, 'w+', newline='') as details_csvfile:
@@ -365,9 +368,17 @@ def compress_org_details(csv_in,
     print(f'Completed handler.base.compress_org_details - output in {spine_csv_out} and {details_csv_out}')
 
 
-def sort_csv_by_field(filename,date_field):
-    '''sorts a csv file by a date field, with null values first, new values stored in same filename, old in filename.replace('.csv','.notsorted.csv')'''
+def sort_csv_by_field(filename, date_field1, date_field2=None):
+    '''sorts a csv file by a date field (optionally two date fields), with null values first, new values stored in same filename, old in filename.replace('.csv','.notsorted.csv')'''
     
+    sort_columns = [date_field1]
+    ascending = [False]
+
+    if date_field2:
+        sort_columns.append(date_field2)
+        ascending.append(False)
+
+
     backupfilename = filename.replace(".csv",".notsorted.csv")
     try:
         os.rename(filename,backupfilename)
@@ -376,12 +387,20 @@ def sort_csv_by_field(filename,date_field):
         print(f'Error renaming file {filename} to {backupfilename}: file not found')
         return
 
-    print(f'Sorting file {backupfilename} by field {date_field}\n')
+
+    print(f'Sorting file {backupfilename} by field {date_field1} {date_field2}\n')
     df = pd.read_csv(backupfilename,dtype=str)
-    df[date_field] = pd.to_datetime(df[date_field], errors='coerce', dayfirst=True)
+
+    df[date_field1] = pd.to_datetime(df[date_field1], errors='coerce', dayfirst=True)
+    if date_field2:
+        df[date_field2] = pd.to_datetime(df[date_field2], errors='coerce', dayfirst=True)
 
     # Sort the dataframe by the date column (null values first, then most recent)
-    df_sorted = df.sort_values(by=date_field, na_position='first', ascending=False)
+    #df_sorted = df.sort_values(by=date_field, na_position='first', ascending=False)
+    df_sorted = df.sort_values(
+    by=sort_columns,
+    na_position='first',
+    ascending=ascending)
 
     # Save the sorted dataframe to a new CSV file, with input filename
     ofile = filename#.replace('.csv', '.sorted.csv')

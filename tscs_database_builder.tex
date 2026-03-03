@@ -25,7 +25,7 @@
 
 \title{Database of third sector organisations: schema and process}
 \author{Fiona Couper Kenney, Alan Duggan}
-\date{July 24, 2025}
+\date{Revised March 3, 2026, FCK}
 
 
 \begin{document}
@@ -50,13 +50,13 @@ their online location are listed in Table \ref{tab:sources}.
 \centering
 \begin{tabularx}{\textwidth}{|l|X|}
 \hline
-Data Source & URL \\ \ hline
+Data Source & URL \\ \hline
 Charity Commission, England and Wales	& \url{www.gov.uk/government/organisations/charity-commission}\\ \hline
 Scottish Charity Register	& \url{www.oscr.org.uk/}\\ \hline
 Charity Commission, Northern Ireland	& \url{www.charitycommissionni.org.uk/} \\ \hline
+Mutuals Public Register 	& \url{mutuals.fca.org.uk} \\ \hline
 Companies House 	& \url{www.gov.uk/government/organisations/companies-house} \\ \hline
 Co-operatives 	& \url{www.uk.coop/} \\ \hline
-Mutuals Public Register 	& \url{mutuals.fca.org.uk} \\ \hline
 Scottish Housing Register 	& \url{www.housingregulator.gov.scot/} \\ \hline
 Social Housing England 	& \url{www.gov.uk/government/publications/registered-providers-of-social-housing} \\ \hline
 Care Inspectorate Scotland 	& \url{www.careinspectorate.com} \\ \hline
@@ -185,7 +185,7 @@ Any of the following being true will create a match:
 
 A lookup table provided by David Kane\footnote{\url{https://raw.githubusercontent.com/drkane/charity-lookups/master/relationships/_sameas.csv}} is also used to generate matches. 
 These links include historic re-registrations, allowing
-this dataset to be further deduplicated.
+this dataset to be further deduplicated. 
 \end{itemize}
 
 
@@ -193,7 +193,7 @@ this dataset to be further deduplicated.
 The  order in Table \ref{tab:order} shows the precedence given to sources where matches occur: the higher precedence
 source will provide the data and unique identifier (uid) in the main spine table. Matches will be found in the matches table, and any data
 found in addition to the primary fields will be in the supplementary table, indexed by the uid given at source. The first eight sources are processed such that any organisations not already present 
-in the dataset are added to it. Sources CIS and CQC are only noted in the matches table where they link to a source present.
+in the dataset are added to it. Organisations registered with CIS and CQC are only noted in the matches table where they link to a source present.
 
 \begin{table}[h]
   \centering
@@ -203,9 +203,9 @@ Order &	Source & Code \\ \hline \hline
 1 &	Charity Commission, England and Wales	& CHC	\\ \hline
 2 &	Scottish Charity Register	& SC	\\ \hline
 3 &	Charity Commission, Northern Ireland	& NIC	\\ \hline
-4 &	Companies House 	& COH	\\ \hline
-5 &	Co-operatives 	& COOP	\\ \hline
-6 &	Mutuals Public Register 	& MPR	\\ \hline
+4 &	Mutuals Public Register 	& MPR	\\ \hline
+5 &	Companies House 	& COH	\\ \hline
+6 &	Co-operatives 	& COOP	\\ \hline
 7 &	Scottish Housing Register 	& SHR	\\ \hline
 8 &	Social Housing England 	& SHPE	\\ \hline
 - &	Care Inspectorate Scotland 	& CIS	\\ \hline
@@ -232,21 +232,21 @@ showing the distribution of the types of linkages.
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=1.2\textwidth,center]{../public_spine_data/public_spine.all_orgs.upsetplot.png}
+\includegraphics[width=1.2\textwidth,center]{../public_spine_data/TSCS_spine.all_orgs.upsetplot.png}
 \caption{Sources each organisation is registered with}
 \label{fig:Matches1}
 \end{figure}
 
 \begin{figure}[h]
   \centering
-\includegraphics[width=1.2\textwidth,center]{../public_spine_data/public_spine.matched_orgs.upsetplot.png}
+\includegraphics[width=1.2\textwidth,center]{../public_spine_data/TSCS_spine.matched_orgs.upsetplot.png}
 \caption{Sources each organisation is registered with, for all organisations in at least 2 registers}
 \label{fig:Matches2}
 \end{figure}
 
 \begin{figure}[h]
   \centering
-\includegraphics[width=0.6\textwidth,center]{../public_spine_data/public_spine.matchtypes.png}
+\includegraphics[width=0.6\textwidth,center]{../public_spine_data/TSCS_spine.matchtypes.png}
 \caption{Distribution of match types used to deduplicate the spine}
 \label{fig:Matches3}
 \end{figure}
@@ -257,7 +257,7 @@ The above techniques are used to match organisations between sources. Where a ma
 the primary organisation is determined by the following rules:
 \begin{itemize}
 \item If an organisation from the Charity Commission for England and Wales matches an organisation from the same commission,
-the primary organisation uses the Find That Charity lookup to identify which of the two is the 'transferee' in a re-registration. The 
+the primary organisation uses the Find That Charity lookup to identify which of the two is the 'transferee' in a merger. The 
 transferor is then linked to the transferee in the matches table, with the transferee being the primary organisation.
 \item In other cases where there are two organisations from the same regulator which match, the organisation considered primary
 is the one without a removal date (and is therefore still active), or the one with the most recent removal date (and was therefore
@@ -279,7 +279,7 @@ More information about the processes for each source are found in the appendix, 
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.8\textwidth]{../public_spine_data/public_spine.sources.png}
+  \includegraphics[width=0.8\textwidth]{../public_spine_data/TSCS_spine.sources.png}
   \caption{Sources found in public spine}
   \label{fig:Sources}
   \end{figure}
@@ -287,7 +287,7 @@ More information about the processes for each source are found in the appendix, 
 
   \begin{table}[h]
     \centering
-    \input{../public_spine_data/public_spine.all_orgs.spine_match.tab.tex}
+    \input{../public_spine_data/TSCS_spine.all_orgs.spine_match.tab.tex}
     \caption{Counts of organisations in the spine, and matched to the spine, from each source register}
     \label{tab:counts_per_source}
     \end{table}
@@ -307,6 +307,23 @@ Details for each source are given in the sections below.
 \url{https://www.gov.uk/government/organisations/charity-commission}
 
 \url{https://register-of-charities.charitycommission.gov.uk/en/register/full-register-download}
+
+\subsubsection{Recent CCEW downloads}
+'Public extract' data downloads are available at the CCEW website (above). We collected regular data downloads during 2024 and 2025,
+and in pre-processing we extract fields for name, address, registration date and removal date, along with charity number and linked charity number.
+We retain the date of the download, and where there are multiple options for any details we choose the most recent for the spine, and 
+retain other information to be provided as supplementary data. All data is normalised, deduplicated and divided between primary and 
+supplementary per charity number.
+
+Typically the most recent data per charity number is allocated to the spine, and other data to the supplementary file. The exception to this
+is where the charity contains an entity with a 'linked charity number' of zero. CCEW uses this to indicate an overarching identity for 
+a charity, with subsidiary entities being assigned non-zero integer values for linked charity number. The spine reflects this by
+using the data for the overarching charity, with subsidiaries added to supplementary data.
+
+
+
+
+\subsubsection{Historical CCEW data}
 
 This section outlines the use of CCEW regulatory data in the construction of the third sector
 organisational spine\footnote {For further detail on how this data was used, please see the Stata file
@@ -412,10 +429,9 @@ source &  Variable to indicate the data source (in this case, CCEW) \\ \hline
 \label{tab:ccew_preprocess}
 \end{table}
 
-\subsubsection{Updates}
-Subsequent to the initial dataset created using this process, data downloads were aquired from CCEW as 
-'public extracts' in 2024 and 2025. These were normalised, pre-processed and deduplicated for updated dataset delivery. The main sections
-of this document detail the numbers ingested from each source, which include these updates.
+
+
+
 
 \clearpage%
 \subsection{Scottish Charity Regulator (OSCR)}
@@ -425,11 +441,14 @@ This section outlines the use of OSCR regulatory data in the construction of the
 organisational spine\footnote{ For further detail on how this data was used, please see the accompanying
 oscr\_publicspine\_prep.do file.}.
 
-The OSCR data used in this project comprised eight individual data files that were obtained
+The OSCR data used in this project comprised data files that were obtained
 between 2012 and 2025. These files were used to compile a list of unique charities, and to
 extract   as   many   unique   names,   addresses,   registration   dates,   and   removal   dates   for   each
 organisation. These files are detailed below: 
 \begin{itemize}
+  \item CharityExport-Removed-05-Dec-2025.csv : List of removed charities, December 2025
+  \item CharityExport-03-Nov-2025.csv: Scottish Charity Register November 2025
+  \item CharityExport-28-Jul-2025.csv: Scottish Charity Register July 2025
   \item CharityExport-05-Feb-2025.csv : Scottish Charity Register, February 2025
   \item CharityExport-Removed-05-Feb-2025.csv : List of removed charities, February 2025
   \item CharityExport-12-Apr-2023.csv : Scottish Charity Register, April 2023
@@ -535,8 +554,15 @@ ccni\_publicspine\_prep.do file.}.
 
 The CCNI data used in this project comprised of open data files obtained in 
 \begin{itemize}
-  \item April 2023 (ccni-charity-register-2023-04-19.csv [CCNI charity register - 19 April 2023])
+  \item 
+  \item November 2025 (ccni-charitydetails\_2025\_11\_03.csv) [data download]
+  \item November 2025 (ni-removals-2025-11-03.csv 	[removals from the register, compiled via web scrape])
+  \item May 2025  (charitydetails\_2025\_05\_19.csv		[data download])
+  \item May 2025 (ni-removals-2025-05-16.csv [removals from the register, compiled via web scrape]
   \item January 2025 (ccni-charitydetails\_2025\_01\_29\_14\_23\_47.csv [CCNI charity details - 29 January 2025])
+  \item July 2024 (ni-removals-2024-07-18.csv	[removals from the register, compiled via web scrape])
+  \item April 2023 (ccni-charity-register-2023-04-19.csv [CCNI charity register - 19 April 2023])
+  
 \end{itemize}
 These files were used to compile a list of unique charities with accompanying names, addresses, and
 registration dates for each organisation. 
@@ -583,13 +609,51 @@ source & Variable to indicate the data source (in this case - CCNI) \\ \hline
 
 
 \clearpage
+\subsection{Mutuals Public Register }
+\url{https://mutuals.fca.org.uk/}
+
+The Mutuals Public Register is a public record of mutual societies registered by the Financial Conduct Authority. 
+Openly available register data has information for societies currently registered, and those no longer registered.
+For this project, downloads from June 2023, April 2024, and January, July and October 2025 are used. The field mapping is shown in Table 
+\ref{tab:mpr_preprocess}. 
+
+\begin{table}[h]
+  \centering
+  \begin{tabularx}{\textwidth}{|l|X|}
+    \hline
+    Fieldname  &	Notes \\
+    \hline \hline
+uid & Unique ID assigned to each organisation using \\
+&'GB-MPR-' + \textbf{Full Registration Number} \\ \hline
+organisationname & \textbf{Society Name} \\ \hline
+normalisedname & Normalised version of organisationname\\ \hline
+companyid &  \\ \hline
+fulladdress & \textbf{Society Address} \\ \hline
+city & \\ \hline
+postcode & Postcode taken from \textbf{Society Address} : \\ 
+&  = last two 'words' of address if their lengths are at most 4 characters each\\ \hline
+registerdate & \textbf{Registration Date} mapped from yyyy-mm-dd format to dd/mm/yyyy\\ \hline
+removeddate & \textbf{Deregistration Date} mapped from yyyy-mm-dd format to dd/mm/yyyy\\ \hline
+source & Variable to indicate the data source (in this case - MPR) \\ \hline
+\hline 
+\end{tabularx}
+  \caption{Fields in pre-procesing of Mutuals data (bold text indicates fieldname in Mutuals Public Register data)}
+  \label{tab:mpr_preprocess}
+  
+\end{table}
+
+Where an organisation has multiple options for name and address, the most recent
+is used in the primary data, and alternatives are stored in supplementary data.
+
+
+\clearpage
 \subsection{Companies House}
 \url{https://www.gov.uk/government/organisations/companies-house}
 
 
 
 Companies House release a bulk download every quarter of all currently live companies\footnote{\url{https://download.companieshouse.gov.uk/en_output.html}}. The Alpha public 
-spine encorporates these downloads for April, June and October 2023, March, May and September 2024, and January 2025. 
+spine encorporates these downloads for April, June and October 2023, March, May and September 2024, and January, July and November 2025. 
 
 
 Using bulk downloads alone would mean organisations that were dissolved earlier than 2023 would 
@@ -598,7 +662,8 @@ we found all companies registered and dissolved which fit our inclusion criteria
 company types). 
 The code used to search the API is found in our 
 github repository 
-\url{https://github.com/uk-third-sector-database/ch_adv_scraper}. 
+\url{https://github.com/uk-third-sector-database/ch_adv_scraper}. Additionally, since the bulk download does not contain any removed organisations, it contains no
+removal dates. The API scraped data is used to fill in this field for all removed organisations.
 
 % inlcuded company types from CH
 
@@ -701,7 +766,8 @@ limited by guarantee (with or without 'limited exemption', with or without 'priv
 \subsection{Co-operatives}
 \url{https://www.uk.coop/resources/open-data}
 
-The Co-operatives UK organisations used in this project were from open data downloads in April 2022, April 2024 and January 2025.
+The Co-operatives UK organisations used in this project were from open data downloads in April 2022, April 2024 and 
+January, July and October 2025.
 Open data from the Co-operatives UK organisation was mapped to the format required by the public spine
 according to the rules shown in Table \ref{tab:coop_preprocess} below.
 
@@ -736,42 +802,6 @@ Where an organisation has multiple options for name and address, the most recent
 is used in the primary data, and alternatives are stored in supplementary data.
 
 
-\clearpage
-\subsection{Mutuals Public Register }
-\url{https://mutuals.fca.org.uk/}
-
-The Mutuals Public Register is a public record of mutual societies registered by the Financial Conduct Authority. 
-Openly available register data has information for societies currently registered, and those no longer registered.
-For this project, downloads from June 2023, April 2024 and January 2025 are used. The field mapping is shown in Table 
-\ref{tab:mpr_preprocess}. 
-
-\begin{table}[h]
-  \centering
-  \begin{tabularx}{\textwidth}{|l|X|}
-    \hline
-    Fieldname  &	Notes \\
-    \hline \hline
-uid & Unique ID assigned to each organisation using \\
-&'GB-MPR-' + \textbf{Full Registration Number} \\ \hline
-organisationname & \textbf{Society Name} \\ \hline
-normalisedname & Normalised version of organisationname\\ \hline
-companyid &  \\ \hline
-fulladdress & \textbf{Society Address} \\ \hline
-city & \\ \hline
-postcode & Postcode taken from \textbf{Society Address} : \\ 
-&  = last two 'words' of address if their lengths are at most 4 characters each\\ \hline
-registerdate & \textbf{Registration Date} mapped from yyyy-mm-dd format to dd/mm/yyyy\\ \hline
-removeddate & \textbf{Deregistration Date} mapped from yyyy-mm-dd format to dd/mm/yyyy\\ \hline
-source & Variable to indicate the data source (in this case - MPR) \\ \hline
-\hline 
-\end{tabularx}
-  \caption{Fields in pre-procesing of Mutuals data (bold text indicates fieldname in Mutuals Public Register data)}
-  \label{tab:mpr_preprocess}
-  
-\end{table}
-
-Where an organisation has multiple options for name and address, the most recent
-is used in the primary data, and alternatives are stored in supplementary data.
 
 
 \clearpage
@@ -779,8 +809,8 @@ is used in the primary data, and alternatives are stored in supplementary data.
 \url{https://www.housingregulator.gov.scot/landlord-performance/statistical-information/}
 
 The Scottish Housing Regulator for social landlords publishes organisational data which has been included in the spine.
-Datasets used in this project were annual downloads collected in 2018, 2019, 2020, 2021 and 2022, and their most recent publication at the time
-of creating our data product: 'All Social Landlords Complete Dataset 2019-20 to 2023-24'.
+Datasets used in this project were annual downloads collected in 2018, 2019, 2020, 2021, 2022, 2024, 2025. 
+Table \ref{tab:shr_preprocess} shows the how the spine fields relate to the provided data.
 
 \begin{table}[h]
   \centering
@@ -815,7 +845,9 @@ is used in the primary data, and alternatives are stored in supplementary data.
 \subsection{Social Housing England 	}
 \url{https://www.gov.uk/government/publications/registered-providers-of-social-housing}
 
-Two bulk downloads were used from Social Housing England's register, from 2023 and 2025.
+The government publishes a download monthly of registered social housing providers in England. The data in the 
+spine is compiled from downloads accessed January 2023, January, July and October 2025. The mapping to the fields
+seen in the spine is shown in Table \ref{tab:shpe_preprocess}.
 
 \begin{table}[h]
   \centering
@@ -852,7 +884,8 @@ Care Inspectorate Scotland release data at their financial year end (March 31st)
 years 2015 to 2025 inclusive.
 Organisations are included where field "Service Type" =  'Voluntary or Not for Profit'. Organisations
 have both a 'Provider Name' and a 'Service Name' in the Care Inspectorate data. We have retained
-Service Names, however the primary name for matching is the Provider Name.
+Service Names, however the primary name for matching is the Provider Name. Table \ref{tab:cis_preprocess} shows
+the fields used to develop the spine.
 
 \begin{table}[h]
   \centering
@@ -892,6 +925,10 @@ organisationname & \textbf{ServiceName} \\
 \subsection{Care Quality Commission }
 \url{https://www.cqc.org.uk/about-us/transparency/using-cqc-data}
 
+
+Data from the Care Quality Commission is available as a Directory Download from their website. Monthly snapshots
+are retrievable from their linked drive space. For this product we have used downloads from January 2023, April 2024, 
+and January, July and October 2025. Table \ref{tab:cqc_preprocess} shows the mapping between CQC data fields and spine fields.
 
 \begin{table}[h]
   \centering

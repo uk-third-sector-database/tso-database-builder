@@ -8,49 +8,128 @@ from tqdm import tqdm
 
 from handler.base_definitions import EXTRA_DETAILS_CSV_FIELDS, SPINE_CSV_FIELDS, MATCHES_CSV_FIELDS, ORG_ID_MAPPING, SAMEAS_FILE, OSCR_LINKS_FILE
 
+
 def read_dkane_sameas(file):
-    #print(os.getcwd())
+
     def get_org_code(org_id):
         parts = str(org_id).split('-')
         return parts[1] if len(parts) > 1 else None
 
+    wanted_cols = ['org_id_a', 'org_id_b', 'source']
+
     try:
-        df = pd.read_csv(file,usecols=['org_id_a','org_id_b'])
-    except IOError as e:
+        df = pd.read_csv(file,low_memory=False)
+    except OSError as e:
         print(f'Error reading file {file} in function read_dkane_sameas: {e}')
         return {}, []
+
+    # Ensure required columns exist
+    for col in wanted_cols:
+        if col not in df.columns:
+            df[col] = None
+
+    df = df[wanted_cols]
+
     df['org_a_code'] = df['org_id_a'].apply(get_org_code)
     df['org_b_code'] = df['org_id_b'].apply(get_org_code)
 
     codes = set(ORG_ID_MAPPING.values())
 
-    trimmed_df = df[df['org_a_code'].isin(codes) & df['org_b_code'].isin(codes)]
+    trimmed_df = df[
+        df['org_a_code'].isin(codes) &
+        df['org_b_code'].isin(codes)
+    ]
 
     ftc_dict = {}
-    tuples = list(zip(trimmed_df['org_id_a'],trimmed_df['org_id_b']))
-    # orgB in _sameas is the transferee in mergers (see relationships/ccew-register-of-mergers.csv in drkane's github):
-    #  the org that receives the merged charity and so should be the primary. 
-    # So we want to note that and check for primacy in subspinelist.matches()
-    # For other sources we want to allow matches to be found in both directions.
+
+    tuples = list(zip(
+        trimmed_df['org_id_a'],
+        trimmed_df['org_id_b'],
+        trimmed_df['source'],
+    ))
 
     primary_orgs = []
 
-    for x,y in tuples:
+    for x, y, source in tuples:
+
         x_source = x.split('-')[1]
         y_source = y.split('-')[1]
-        if x_source == 'CHC' and y_source == 'CHC':
+        if (
+            x_source == 'CHC'
+            and y_source == 'CHC'
+            and source
+            and 'merger' in source.lower()
+        ):
+            if x in primary_orgs:
+                primary_orgs.remove(x)
+                #print(
+                #    f'Merger already found for {x} - removing from primary orgs and replacing with {y}'
+                #)
+
             primary_orgs.append(y)
-            
-        if x in ftc_dict:
-            ftc_dict[x].add(y)
-        else:
-            ftc_dict[x] = {y}
-        if y in ftc_dict:
-            ftc_dict[y].add(x)
-        else:
-            ftc_dict[y] = {x}
+
+        ftc_dict.setdefault(x, set()).add(y)
+        ftc_dict.setdefault(y, set()).add(x)
 
     return ftc_dict, primary_orgs
+
+#def read_dkane_sameas(file):
+#
+#    def get_org_code(org_id):
+#        parts = str(org_id).split('-')
+#        return parts[1] if len(parts) > 1 else None
+#
+#    try:
+#        df = pd.read_csv(file,usecols=['org_id_a','org_id_b','source','valid_from'])
+#    except IOError as e:
+#        print(f'Error reading file {file} in function read_dkane_sameas: {e}')
+#        return {}, []
+#    except ValueError as e:
+#        try:
+#            df = pd.read_csv(file,usecols=['org_id_a','org_id_b'])
+#        except IOError as e:
+#            print(f'Error reading file {file} in function read_dkane_sameas: {e}')
+#            return {}, []
+#
+#
+#    df['org_a_code'] = df['org_id_a'].apply(get_org_code)
+#    df['org_b_code'] = df['org_id_b'].apply(get_org_code)
+#
+#    codes = set(ORG_ID_MAPPING.values())
+#
+#    trimmed_df = df[df['org_a_code'].isin(codes) & df['org_b_code'].isin(codes)]
+#
+#    ftc_dict = {}
+#    tuples = list(zip(trimmed_df['org_id_a'],trimmed_df['org_id_b'],trimmed_df['source'],trimmed_df['valid_from']))
+#    # when source = 'Register of Mergers', orgB in _sameas is the transferee in mergers 
+#    # (see relationships/ccew-register-of-mergers.csv in drkane's github):
+#    #  the org that receives the merged charity and so should be the primary. 
+#    # So we want to note that and check for primacy in subspinelist.matches()
+#    # For other sources we want to allow matches to be found in both directions.
+#
+#    primary_orgs = []
+#
+#    for x,y,source,date in tuples:
+#        x_source = x.split('-')[1]
+#        y_source = y.split('-')[1]
+#        if x_source == 'CHC' and y_source == 'CHC' and 'merger' in source.lower():
+#            if x in primary_orgs:
+#                # this already has been identified as a transferee: amend mapping to reflect subsequent merger
+#                primary_orgs.remove(x)
+#                print(f'Merger already found for {x} - removing from primary orgs and replacing with {y}')
+#
+#            primary_orgs.append(y)
+#            
+#        if x in ftc_dict:
+#            ftc_dict[x].add(y)
+#        else:
+#            ftc_dict[x] = {y}
+#        if y in ftc_dict:
+#            ftc_dict[y].add(x)
+#        else:
+#            ftc_dict[y] = {x}
+#
+#    return ftc_dict, primary_orgs
     
 
 ftc_dict, primary_ccew_orgs_ftc = read_dkane_sameas(SAMEAS_FILE)
@@ -291,6 +370,35 @@ class CoreOrganisation(BaseModel): # orgs for public spine
             valid_dates = sorted(filter(None, dates))
             return valid_dates[order] if valid_dates else None
 
+
+        def add_or_update_date(extra_info_list, uid, source, datefield, date, source_register):
+            """
+            Update an existing ExtraInfo with matching uid if possible.
+            Otherwise create and append a new ExtraInfo.
+            """
+
+            for extra in extra_info_list:
+                if extra.uid == uid:
+                    # Found matching uid
+                    if not getattr(extra, datefield, None):
+                        setattr(extra, datefield, date)
+                        return extra_info_list
+                    else:
+                        # Already has a register/removal date → create new object
+                        break
+                    
+            # If no matching uid found OR existing one already had register/removal date
+            new_obj = ExtraInfo(
+                uid=uid,
+                source=source,
+                datefield=date,
+                source_register=source_register
+            )
+            extra_info_list.append(new_obj)
+
+            return extra_info_list
+
+
         def find_dates(orgs, reg_dates, rem_dates):
             """ Collect all valid register & removal dates. """
             for o in orgs:
@@ -308,6 +416,9 @@ class CoreOrganisation(BaseModel): # orgs for public spine
         # Check if all matched orgs are removed
         for m in self.matched_orgs:
             if not m[0].removed():
+                # and not m[0].id_in_source.startswith('CE'):
+                ## if the match is between CCEW and CompaniesHouse CIO type, we want to use the CCEW removal date if there is one, since
+                ## CIO filing is superseded by CCEW and so CIO data does not reflect check_removal_dates
                 all_orgs_removed = False
 
         # Collect dates from matched orgs and extras
@@ -318,24 +429,30 @@ class CoreOrganisation(BaseModel): # orgs for public spine
         earliest_register = fix_dates_set(registerdates, 0)
         orgregdate = parse_date(self.registerdate)
 
-        if earliest_register and (not orgregdate or earliest_register < orgregdate):
+        if earliest_register and ((not orgregdate) or (earliest_register < orgregdate)):
+            # there's a registration date that's not in the spine org, or is earlier than that of the spine org: replace and store alternative in extras
             if orgregdate:
-                self.extras.append(ExtraInfo(uid=self.uid, source=self.source, registerdate=self.registerdate, source_register=self.source_register))
+                self.extras = add_or_update_date(self.extras, self.uid, self.source, 'registerdate', self.registerdate, self.source_register)
+                #self.extras.append(ExtraInfo(uid=self.uid, source=self.source, registerdate=self.registerdate, source_register=self.source_register))
             self.registerdate = earliest_register.strftime('%d/%m/%Y')
 
         # Update removed date
+        # if there's a removal date in the mainorg and its source was ccew, use this regardless of matches, as it is the primary register
+        # for organisations which are also CIOs or Care Inspectorate members
         if all_orgs_removed:
             latest_removed = fix_dates_set(removeddates, -1)
             orgremdate = parse_date(self.removeddate)
 
             if latest_removed and (not orgremdate or latest_removed > orgremdate):
                 if orgremdate:
-                    self.extras.append(ExtraInfo(uid=self.uid, source=self.source, removeddate=self.removeddate, source_register=self.source_register))
+                    self.extras = add_or_update_date(self.extras, self.uid, self.source, 'removeddate', self.removeddate, self.source_register)
+                    #self.extras.append(ExtraInfo(uid=self.uid, source=self.source, removeddate=self.removeddate, source_register=self.source_register))
                 self.removeddate = latest_removed.strftime('%d/%m/%Y')
         else:
-            if self.removeddate:
-                self.extras.append(ExtraInfo(uid=self.uid, source=self.source, removeddate=self.removeddate, source_register=self.source_register))
-                self.removeddate = ''
+            if not self.source.lower()=='ccew':
+                if self.removeddate:
+                    self.extras = add_or_update_date(self.extras, self.uid, self.source, 'removeddate', self.removeddate, self.source_register)
+                    self.removeddate = ''
 
         # Remove redundant fields from extras
         for x in self.extras:
@@ -349,7 +466,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                 x.registerdate = ''
             if self.removeddate == x.removeddate:
                 x.removeddate = ''
-
+        
         # consolidate extras per uid so that supplementary.csv has as few rows as possible
         consolidate_extras(self.extras)
 
@@ -574,9 +691,11 @@ class MainOrgList:
             # does this_subspine_org match anything already in the spine (MainList (self))?
             matched_org = this_subspine_org.matches(self.byname, self.bycompanyid, self.bysourceid, self._store)
             if matched_org:
+                #print('\nmatch: ',this_subspine_org.uid,this_subspine_org.normalisedname,' \n   to: ',matched_org)
                 check_removal_dates(this_subspine_org, matched_org)
                 # check if this org should be primary rather than matched:
                 if (this_subspine_org.uid in primary_ccew_orgs_ftc):
+                    #print(f"primary org found ({this_subspine_org.uid})")
                     # this is the primary org in the match
                     new_coreorg = this_subspine_org.to_core_org()
 
@@ -715,6 +834,7 @@ def process_csvs_to_build_spine(csv_file_list_order):
         print(f'\n\n------------------ PROCESS: Processing file {csv_file} ------------------')
 
         base_orgs = convert_csv_to_list_of_subspine_orgs(csv_file)
+
         print(f'\nFile contained {len(base_orgs)} organisations \n\n')
         main_orgs.merge(base_orgs)
         source_dict, match_dict, unique_uids = main_orgs.report()
@@ -735,4 +855,11 @@ def process_csvs_to_build_spine(csv_file_list_order):
 
 
 
- 
+#[CoreOrganisation(uid='GB-CHC-1161599', organisationname='HEART OF GISSING', normalisedname='HEART OF GISSING', fulladdress='GISSING COMMUNITY BUILDING, RECTORY ROAD, GISSING, DISS, NORFOLK', city='', postcode='IP22 5XB', companyid='', registerdate='11/05/2015', removeddate='', source='ccew', source_register='Charity Commission for England and Wales', id_in_source='1161599-0', cqc_reg='', crossborder='', is_cic='', 
+#extras=[ExtraInfo(uid='GB-CHC-1161599', organisationname='HEART OF GISSING', normalisedname='HEART OF GISSING', fulladdress='TALL TREES, LOWER STREET, GISSING, DISS, NORFOLK', city='', postcode='IP22 5UJ', registerdate='11/05/2015', removeddate='', source='', source_register='Charity Commission for England and Wales')], 
+#matched_orgs=[(SubSpineOrg(uid='GB-CHC-1118587', organisationname='THE HEART OF GISSING', normalisedname='THE HEART OF GISSING', fulladdress='TALL TREES, LOWER STREET, GISSING, DISS', city='', postcode='IP22 5UJ', companyid='', registerdate='28/03/2007', removeddate='12/12/2015', source='ccew', source_register='Charity Commission for England and Wales', id_in_source='1118587-0', crossborder='', cqc_reg='', is_cic='', 
+#extras=[ExtraInfo(uid='GB-CHC-1118587', organisationname='THE HEART OF GISSING', normalisedname='THE HEART OF GISSING', fulladdress='TALL TREES, LOWER STREET, GISSING, DISS', city='', postcode='IP22 5UJ', registerdate='28/03/2007', removeddate='', source='', source_register='Charity Commission for England and Wales')]), 'ftc'), 
+#(SubSpineOrg(uid='GB-CHC-1047887', organisationname='THE HEART OF GISSING (LAND AND BUILDINGS)', normalisedname='THE HEART OF GISSING LAND AND BUILDINGS', fulladdress='TALL TREES, LOWER STREET, GISSING, DISS, NORFOLK', city='', postcode='IP22 5UJ', companyid='', registerdate='12/07/1995', removeddate='12/12/2015', source='ccew', source_register='Charity Commission for England and Wales', id_in_source='1047887-0', crossborder='', cqc_reg='', is_cic='', 
+#extras=[ExtraInfo(uid='GB-CHC-1047887', organisationname='THE HEART OF GISSING (LAND AND BUILDINGS)', normalisedname='THE HEART OF GISSING LAND AND BUILDINGS', fulladdress='TALL TREES, LOWER STREET, GISSING, DISS, NORFOLK', city='', postcode='IP22 5UJ', registerdate='', removeddate='', source='', source_register='Charity Commission for England and Wales')]), 'ftc')], 
+#sorted_matches=[], sorted_extras=[])]
+

@@ -172,6 +172,9 @@ class CCEWDataHandler(DataHandler):
             regdates = {r['registerdate'] for r in umbrella_rows}
             remdates = {r['removeddate'] for r in umbrella_rows}
 
+            print('In create_umbrella_rows: ')
+            print(f"names = {names}\naddresses = {addresses}\nregdates = {regdates}\nremdates = {remdates}\n")
+
             new_sub_spine_row = sub_spine_entry_creator(
                 {'uid' : r['uid'],
                 "id_in_source" : r['id_in_source'],
@@ -204,11 +207,11 @@ class CCEWDataHandler(DataHandler):
 
             new_extra_rows = generate_extra_rows(extra_names,extra_addresses,extra_regdates,extra_remdates)
 #            print(f'in generate_subspine_and_extras. {len(new_extra_rows)} rows created.')
-#            print(f'in generate_subspine_and_extras. new subspine row: {new_sub_spine_row}')
             return new_sub_spine_row,new_extra_rows
 
 
         def generate_extra_rows(names,addresses,regdates,remdates):   
+
             new_extras_rows = []
             for name in names:
                 new_extras_rows.append(
@@ -274,21 +277,26 @@ class CCEWDataHandler(DataHandler):
 
 
 
-        def extras_for_umbrella_org(non_primary_rows):
+        def extras_for_umbrella_org(non_primary_rows,primary_row):
             # takes a set of rows which share the same id_in_source and should be consolidated
             # as original code, keeping names and addressses together and removing duplicates
             names=set()
             addresses=set()
             regdates=set()
             remdates=set()
-
+            pname = (primary_row['organisationname'],primary_row['normalisedname'])
+            padd = (primary_row['fulladdress'],primary_row['city'],primary_row['postcode'] )
+            preg = primary_row['registerdate']
+            pdis = primary_row['removeddate']
             for r in non_primary_rows:
                 n = (r['organisationname'],r['normalisedname'])#,r['primary_name'], r['iteration'])
                 a = (r['fulladdress'],r['city'],r['postcode'] )#,r['primary_address'], r['iteration'])
                 reg = r['registerdate']
                 dis = r['removeddate']
-                for var in [(n,names),(a,addresses),(reg,regdates),(dis,remdates)]:
-                    if var[0]: var[1].add(var[0])
+                for var in [(n,names,pname),(a,addresses,padd),(reg,regdates,preg),(dis,remdates,pdis)]:
+                    if var[0]: 
+                        if not var[0] == var[2]:
+                            var[1].add(var[0])
 
             return generate_extra_rows_umbrella(names,addresses,regdates,remdates)
 
@@ -479,10 +487,7 @@ class CCEWDataHandler(DataHandler):
 
             for field in self.tmp_fields: 
                 if not field in r.keys(): r[field] = ''
-            if not r['id_in_source'] in source_id_dict.keys():
-                source_id_dict[r['id_in_source']] = [r]
-            else:
-                source_id_dict[r['id_in_source']].append(r)
+            source_id_dict.setdefault(r['id_in_source'], []).append(r)
 
             n = (r['organisationname'],r['normalisedname'],r['primary_name'], r['iteration'])
             a = (r['fulladdress'],r['city'],r['postcode'],r['primary_address'], r['iteration'])
@@ -505,9 +510,9 @@ class CCEWDataHandler(DataHandler):
             new_extra_rows = merge_extra_rows(new_extra_rows, extra_rows)
             #print(f'Extras from creating umbrella row = {len(new_extra_rows)}')
             for id,datarows in source_id_dict.items():
-                #print(id)
                 if id == umbrella_id: continue
-                new_extra_rows = merge_extra_rows(new_extra_rows, extras_for_umbrella_org(datarows))
+                extras_to_merge = extras_for_umbrella_org(datarows,new_sub_spine_row)
+                new_extra_rows = merge_extra_rows(new_extra_rows, extras_to_merge)
 #                print(f'Extras after umbrella row = {len(new_extra_rows)}')
 
         else:

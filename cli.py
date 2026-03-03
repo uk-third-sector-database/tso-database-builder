@@ -59,7 +59,7 @@ def process_source(source, infile, outfile):
         do_csv_processing(infile, outfile, handler_map[source]())
 
     # create sorted csv file from spine.csv
-    sort_csv_by_field(outfile,'removeddate')
+    sort_csv_by_field(outfile,'removeddate', 'registerdate')
 
 
 @cli.command()
