@@ -336,7 +336,6 @@ def compress_org_details(csv_in,
     print(f'Running handler.base.compress_org_details with file {csv_in}\n')
     uid_dict = dict_indexed_by_field(csv_in,'uid')
 
-    print(uid_dict.keys())
     # for each uid, if more than one record, find unique names and addresses
     # and write line to csv_out, with additional data to details_csv_out
     with open(spine_csv_out,'w+',newline='') as spine_csvfile,  open(details_csv_out, 'w+', newline='') as details_csvfile:
@@ -406,3 +405,14 @@ def sort_csv_by_field(filename, date_field1, date_field2=None):
     ofile = filename#.replace('.csv', '.sorted.csv')
     df_sorted.to_csv(ofile, index=False, date_format='%d/%m/%Y', encoding='UTF8')
     print(f'Sorted file written to {ofile}\n')
+
+
+
+    
+	
+	
+	
+	
+	
+	
+	
