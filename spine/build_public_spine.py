@@ -852,14 +852,3 @@ def process_csvs_to_build_spine(csv_file_list_order):
 
     return main_orgs
 
-
-
-
-#[CoreOrganisation(uid='GB-CHC-1161599', organisationname='HEART OF GISSING', normalisedname='HEART OF GISSING', fulladdress='GISSING COMMUNITY BUILDING, RECTORY ROAD, GISSING, DISS, NORFOLK', city='', postcode='IP22 5XB', companyid='', registerdate='11/05/2015', removeddate='', source='ccew', source_register='Charity Commission for England and Wales', id_in_source='1161599-0', cqc_reg='', crossborder='', is_cic='', 
-#extras=[ExtraInfo(uid='GB-CHC-1161599', organisationname='HEART OF GISSING', normalisedname='HEART OF GISSING', fulladdress='TALL TREES, LOWER STREET, GISSING, DISS, NORFOLK', city='', postcode='IP22 5UJ', registerdate='11/05/2015', removeddate='', source='', source_register='Charity Commission for England and Wales')], 
-#matched_orgs=[(SubSpineOrg(uid='GB-CHC-1118587', organisationname='THE HEART OF GISSING', normalisedname='THE HEART OF GISSING', fulladdress='TALL TREES, LOWER STREET, GISSING, DISS', city='', postcode='IP22 5UJ', companyid='', registerdate='28/03/2007', removeddate='12/12/2015', source='ccew', source_register='Charity Commission for England and Wales', id_in_source='1118587-0', crossborder='', cqc_reg='', is_cic='', 
-#extras=[ExtraInfo(uid='GB-CHC-1118587', organisationname='THE HEART OF GISSING', normalisedname='THE HEART OF GISSING', fulladdress='TALL TREES, LOWER STREET, GISSING, DISS', city='', postcode='IP22 5UJ', registerdate='28/03/2007', removeddate='', source='', source_register='Charity Commission for England and Wales')]), 'ftc'), 
-#(SubSpineOrg(uid='GB-CHC-1047887', organisationname='THE HEART OF GISSING (LAND AND BUILDINGS)', normalisedname='THE HEART OF GISSING LAND AND BUILDINGS', fulladdress='TALL TREES, LOWER STREET, GISSING, DISS, NORFOLK', city='', postcode='IP22 5UJ', companyid='', registerdate='12/07/1995', removeddate='12/12/2015', source='ccew', source_register='Charity Commission for England and Wales', id_in_source='1047887-0', crossborder='', cqc_reg='', is_cic='', 
-#extras=[ExtraInfo(uid='GB-CHC-1047887', organisationname='THE HEART OF GISSING (LAND AND BUILDINGS)', normalisedname='THE HEART OF GISSING LAND AND BUILDINGS', fulladdress='TALL TREES, LOWER STREET, GISSING, DISS, NORFOLK', city='', postcode='IP22 5UJ', registerdate='', removeddate='', source='', source_register='Charity Commission for England and Wales')]), 'ftc')], 
-#sorted_matches=[], sorted_extras=[])]
-
