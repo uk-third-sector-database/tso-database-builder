@@ -2,7 +2,7 @@
 from datetime import datetime
 import pandas as pd
 
-from .base import DataHandler,sort_encoding_issue
+from .base import DataHandler,sort_encoding_issue,fix_dates_set
 from .base_definitions import sub_spine_entry_creator,extra_csv_entry_creator
 nulls = (None, '', [], {}, ())
 
@@ -109,7 +109,11 @@ class CCEWDataHandler(DataHandler):
             if iteration_str:
                 iteration = self.iteration_datetime(iteration_str)
                 if not iteration:
-                    return None, None
+                    print(f'Warning: invalid iteration tag "{iteration_str}" for details {item_data} - treating as oldest')
+            if iteration is None:
+                # blank or invalid iteration tag: treat as the oldest possible,
+                # so any properly dated entry takes precedence
+                iteration = datetime(1900, 1, 1)
             fallback_candidates.append((iteration, item_data))
             if primary_flag == '1':
                 #if primary is None and any(f != '' for f in item_data):
@@ -151,17 +155,7 @@ class CCEWDataHandler(DataHandler):
 
         # ================ EMBEDDED FUNCTIONS ===========================
 
-        def fix_dates_set(datesset, order):
-            ret = list(datesset)
-            ret = [i for i in ret if i !='']
-            ret.sort()
-            if ret:
-                primary = ret[order]
-                extra_dates = [i for i in ret if i != primary]
-            else:
-                return '',''
-
-            return primary,extra_dates
+        # date selection uses handler.base.fix_dates_set (chronological sort)
 
         def create_umbrella_rows(umbrella_rows,cqc_reg,company_id):
             # collect most recent data from umbrella_rows for subspine entry,
@@ -175,12 +169,15 @@ class CCEWDataHandler(DataHandler):
             print('In create_umbrella_rows: ')
             print(f"names = {names}\naddresses = {addresses}\nregdates = {regdates}\nremdates = {remdates}\n")
 
+            # take identifiers from the umbrella rows themselves (previously this
+            # used the outer loop variable, i.e. whichever row happened to be last)
+            base = umbrella_rows[0]
             new_sub_spine_row = sub_spine_entry_creator(
-                {'uid' : r['uid'],
-                "id_in_source" : r['id_in_source'],
+                {'uid' : base['uid'],
+                "id_in_source" : base['id_in_source'],
                 "companyid" : company_id,
-                "source_register" : r['source_register'],
-                "source" : r['source'],})
+                "source_register" : base['source_register'],
+                "source" : base['source'],})
             if cqc_reg: new_sub_spine_row['cqc_reg'] = 1
 
             return generate_subspine_and_extras(new_sub_spine_row,names,addresses,regdates,remdates)
@@ -449,7 +446,7 @@ class CCEWDataHandler(DataHandler):
                     if row[field]:
                         collection[self.iteration_datetime(row['iteration'])]=row[field]
                 if collection:
-                    most_recent_data, _ = fix_dates_set(collection.keys(),0)
+                    most_recent_data, _ = fix_dates_set(collection.keys(),-1) # most recent iteration
                     subspine[field] = collection[most_recent_data]
             #        print(f'added data {subspine[field]} to {field}')
             return subspine
@@ -522,7 +519,7 @@ class CCEWDataHandler(DataHandler):
                 "companyid" : company_id,
                 "source_register" : source_register,
                 "source" : source,})
-
+            if cqc_reg: new_sub_spine_row['cqc_reg'] = 1
 
             new_sub_spine_row, extra_rows = generate_subspine_and_extras(new_sub_spine_row,names,addresses,regdates,remdates)
             new_extra_rows = merge_extra_rows(new_extra_rows, extra_rows)

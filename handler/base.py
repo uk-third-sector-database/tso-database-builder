@@ -7,7 +7,39 @@ import os
 
 from .base_definitions import SUB_SPINE_CSV_FIELDS,EXTRA_DETAILS_CSV_FIELDS,ORG_ID_MAPPING,sub_spine_entry_creator,extra_csv_entry_creator
 
-    
+
+def fix_dates_set(datesset, order):
+    '''select the earliest (order=0) or latest (order=-1) date from a set of
+    dd/mm/yyyy date strings (datetime objects also accepted), comparing
+    chronologically rather than as text.
+    Returns (primary, extra_dates): the selected date plus all the others.
+    Dates that cannot be parsed become extra dates; if nothing parses at all,
+    fall back to the previous behaviour of sorting the values as text.'''
+    ret = [i for i in datesset if i != '']
+    parseable = []
+    unparseable = []
+    for d in ret:
+        if isinstance(d, datetime):
+            parseable.append((d, d))
+            continue
+        try:
+            parseable.append((datetime.strptime(d, '%d/%m/%Y'), d))
+        except (TypeError, ValueError):
+            unparseable.append(d)
+    if parseable:
+        parseable.sort(key=lambda x: x[0])
+        ordered = [d for _, d in parseable]
+        primary = ordered[order]
+        extra_dates = [i for i in ordered if i != primary] + sorted(unparseable, key=str)
+    elif unparseable:
+        unparseable.sort(key=str)
+        primary = unparseable[order]
+        extra_dates = [i for i in unparseable if i != primary]
+    else:
+        return '', ''
+    return primary, extra_dates
+
+
 def dict_indexed_by_field(csv_in,fieldname):
     field_dict={}
     with open(csv_in,'r') as file:
@@ -96,8 +128,14 @@ class DataHandler:
 
         if not row['uid']: row['uid'] = 'GB-%s-%s'%(ORG_ID_MAPPING[row['source']],row['charitynumber'])
 
-        try: row['fulladdress'] = row['fulladdress'].split(row['city'])[0].strip().rstrip(',')
-        except ValueError: pass
+        # only remove the city if it appears at the END of the address (with optional
+        # trailing punctuation/whitespace); a city name appearing mid-address
+        # (e.g. '12 GLASGOW ROAD' in GLASGOW) must be left intact
+        if row['city']:
+            city_at_end = re.search(r'(?<!\w)' + re.escape(row['city']) + r'[\s,\.]*$',
+                                    row['fulladdress'], flags=re.IGNORECASE)
+            if city_at_end:
+                row['fulladdress'] = row['fulladdress'][:city_at_end.start()].strip()
 
         row['fulladdress'] = row['fulladdress'].replace(' ,',',').strip(', ').strip('.')
 
@@ -141,20 +179,10 @@ class DataHandler:
     def combine_org_details_per_source(self, rows: list):
         ''' use data iteration to find primary address and primary name. 
         Uses earliest date for registration and 
-        latest for dissolution (though could change this to use the dates in 
+        latest for dissolution (though could change this to use the dates in
         the most recent iteration instead) '''
 
-    
-        def fix_dates_set(datesset, order):
-            ret = list(datesset)
-            ret = [i for i in ret if i !='']
-            ret.sort()
-            if ret:
-                primary = ret[order]
-                extra_dates = [i for i in ret if i != primary]
-            else:
-                return '',''
-            return primary,extra_dates
+        # date selection uses the module-level fix_dates_set (chronological sort)
 
         names = set()
         addresses = set()
@@ -345,8 +373,9 @@ def compress_org_details(csv_in,
         extras_writer = csv.DictWriter(details_csvfile, fieldnames=EXTRA_DETAILS_CSV_FIELDS, extrasaction='ignore', restval='', quoting=csv.QUOTE_ALL)
         
         spine_writer.writeheader()
-        extras_writer.writeheader()  
+        extras_writer.writeheader()
 
+        failed_uids = []
         for uid in uid_dict.keys():
 
             if not uid.split('-')[-1]:
@@ -360,11 +389,19 @@ def compress_org_details(csv_in,
                     spine_writer.writerows([sub_spine_data])
                     extras_writer.writerows(extra_data)
                 except ValueError as e:
-                    print(f'Error with combining org details for uid {uid}: {e}')
+                    source = uid_dict[uid][0].get('source', 'unknown')
+                    print(f'ERROR: could not consolidate organisation uid={uid} (source={source}, input file {csv_in}): {e}')
+                    failed_uids.append(uid)
             else: # only one record with this uid - write directly
                 spine_writer.writerow(uid_dict[uid][0])
 
     print(f'Completed handler.base.compress_org_details - output in {spine_csv_out} and {details_csv_out}')
+
+    if failed_uids:
+        raise RuntimeError(
+            f'compress_org_details: {len(failed_uids)} organisation(s) failed consolidation and were NOT '
+            f'written to {spine_csv_out} (first uids: {", ".join(failed_uids[:5])}). '
+            f'A data-prep run must not silently drop organisations - fix the underlying data errors and re-run.')
 
 
 def sort_csv_by_field(filename, date_field1, date_field2=None):

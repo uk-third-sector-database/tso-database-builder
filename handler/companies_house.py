@@ -44,20 +44,41 @@ include_filters = {
 class CompaniesHouseDataHandler(DataHandler):
     fileencoding='UTF8'
     tmp_fields = ['iteration','extraname','SIC']
-    
+
+    def __init__(self):
+        # CompanyCategory values seen in the data that are on neither the exclude
+        # nor the include list; collected so the run can fail loudly at the end
+        # of processing (see raise_for_unknown_categories) instead of silently
+        # letting an unrecognised category into (or out of) the register
+        self.unknown_categories = {}
+
     def all_filters(self, row: dict) -> bool:
-        
-        ##exclude row if in exclude_filters
-        for fieldname, exclude_values in exclude_filters.items():
-            if row.get(fieldname).lower() in exclude_values:
-                return False
-        return True
+        category = row.get('CompanyCategory', '').lower()
+        if category in exclude_filters['CompanyCategory']:
+            return False
+        if category in include_filters['CompanyCategory']:
+            return True
+        # category on neither list: exclude for now, but record it so the run halts
+        original = row.get('CompanyCategory', '')
+        self.unknown_categories[original] = self.unknown_categories.get(original, 0) + 1
+        return False
+
+    def raise_for_unknown_categories(self):
+        '''call after a file has been processed: stop the run if any CompanyCategory
+        was on neither the exclude nor the include list, so a human can decide
+        whether the new/renamed category belongs in the register'''
+        if self.unknown_categories:
+            summary = '; '.join(f'"{cat}" ({count} rows)' for cat, count in sorted(self.unknown_categories.items()))
+            raise RuntimeError(
+                'Companies House data contains CompanyCategory values that are on neither the '
+                f'include nor the exclude list: {summary}. Add each category to the correct list '
+                'in handler/companies_house.py, then re-run.')
 
     def map_date(self, datestr):
         if not datestr:
             return ''
         try:
-            d = datetime.strptime(datestr,'%d/%m/%Y')
+            d = datetime.datetime.strptime(datestr,'%d/%m/%Y')
         except:
             print('error with date',datestr)
         return d.strftime('%d/%m/%Y')

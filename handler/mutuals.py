@@ -8,7 +8,8 @@ exclude_filters = {
 
 
 class MutualsDataHandler(DataHandler):
-    fileencoding='cp1252'#utf-8'#Latin-1'
+    fileencoding='Latin-1' # mutuals.all.csv is written as UTF-8 by preprocess.py; reading as
+    # Latin-1 matches the other handlers' pattern, which sort_encoding_issue (base.py) reverses
     tmp_fields = ['iteration']
     
     def all_filters(self,row: dict) -> bool:

@@ -46,8 +46,13 @@ def process_bulk_download(file,ofile,datahandler):
             r.pop('extraname')
 
         filtered_rows = [{key: row[key] for key in ofile.fieldnames if key in row} for row in rows]
-    
+
         ofile.writerows(filtered_rows)
+
+    # halt the run if the file contained any CompanyCategory on neither the
+    # include nor the exclude list (needs a human decision before the register is built)
+    if hasattr(data_handler, 'raise_for_unknown_categories'):
+        data_handler.raise_for_unknown_categories()
 
 def find_CIC_uids(file,companytype_field,cic_search,encode):
     print(f'Opening {file} to find CICs, using encoding {encode}')
@@ -69,9 +74,9 @@ def find_CIC_uids(file,companytype_field,cic_search,encode):
     return CIC_uids
 
 def main_process(ofilename):
-    api_scrape_files = glob.glob('../raw_data/CompaniesHouse/ch_adv_scrape*csv')
+    api_scrape_files = sorted(glob.glob('../raw_data/CompaniesHouse/ch_adv_scrape*csv'))
     #historic_data = '../raw_data/CompaniesHouse/soton14reduced.csv'
-    bulk_downloads = glob.glob('../raw_data/CompaniesHouse/BasicCompanyDataAsOneFile*csv')
+    bulk_downloads = sorted(glob.glob('../raw_data/CompaniesHouse/BasicCompanyDataAsOneFile*csv'))
 
     with open(ofilename, 'w+', newline='', encoding='UTF8') as outfile:
         datahandler =  CompaniesHouseDataHandler

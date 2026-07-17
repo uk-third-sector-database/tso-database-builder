@@ -3,8 +3,36 @@
 import csv
 import glob
 import os
+import re
 from datetime import datetime
 import pandas as pd
+
+
+def parse_iteration_tag(value):
+    '''parse an iteration tag into a datetime for chronological comparison.
+    Accepts 'mm/yyyy'; bare years (e.g. '2022') count as the oldest point in
+    that year; 8-digit ddmmyyyy/yyyymmdd tags are also recognised. Anything
+    blank or unrecognised is treated as the oldest possible.'''
+    oldest = datetime(1900, 1, 1)
+    if value is None or (not isinstance(value, str) and pd.isna(value)):
+        return oldest
+    s = str(value).strip()
+    if s.endswith('.0'):
+        s = s[:-2]  # bare years read back from csv as floats, e.g. '2022.0'
+    try:
+        if re.fullmatch(r'\d{2}/\d{4}', s):
+            return datetime(int(s[3:]), int(s[:2]), 1)
+        if re.fullmatch(r'\d{4}', s):
+            return datetime(int(s), 1, 1)
+        if re.fullmatch(r'\d{8}', s):
+            for fmt in ('%d%m%Y', '%Y%m%d'):
+                try:
+                    return datetime.strptime(s, fmt)
+                except ValueError:
+                    continue
+    except ValueError:
+        pass
+    return oldest
 
 
 def drop_duplicates(filename):
@@ -13,7 +41,11 @@ def drop_duplicates(filename):
     print(f' -- {df.shape[0]} rows before dropping duplicates')
     cols = list(df.columns)
     cols.remove('Iteration')
-    df.drop_duplicates(inplace=True, subset=cols)
+    # sort by parsed iteration date (chronologically, not as text) so that for
+    # otherwise-identical rows the MOST RECENT iteration tag is the one kept
+    df = df.sort_values('Iteration', key=lambda col: col.map(parse_iteration_tag), kind='stable')
+    df = df.drop_duplicates(subset=cols, keep='last')
+    df = df.sort_index()  # restore original file order
     print(f' -- {df.shape[0]} rows after dropping duplicates')
     df.to_csv(filename, index=False)
 
@@ -40,8 +72,8 @@ CIS_fields = ["CSNumber",
 
 def fix_care_inspectorate_files():
     # Pre-process the raw files to include the source date (found in filename) as a field
-    raw_files = glob.glob('../raw_data/CareInspectScot/MDSF_data*.csv')
-    raw_files.extend(glob.glob('../raw_data/CareInspectScot/*Datastore*.csv'))
+    raw_files = sorted(glob.glob('../raw_data/CareInspectScot/MDSF_data*.csv'))
+    raw_files.extend(sorted(glob.glob('../raw_data/CareInspectScot/*Datastore*.csv')))
     print(raw_files)
     output_file = '../raw_data/CareInspectScot.all.csv'
     
@@ -52,7 +84,7 @@ def fix_care_inspectorate_files():
         
         for file in raw_files:
             try:
-                date = int(os.path.basename(file).split('MDSF_data_')[-1].strip('.csv'))
+                date = int(os.path.basename(file).split('MDSF_data_')[-1].removesuffix('.csv'))
             except:
                 try:
 #                    date = int(os.path.basename(file).split('Datastore')[0])
@@ -120,7 +152,7 @@ co_op_fields = [
 
 def fix_coops_files():
     # Pre-process the raw files to include the source date (found in filename) as a field
-    raw_files = glob.glob('../raw_data/co_ops/*.csv')
+    raw_files = sorted(glob.glob('../raw_data/co_ops/*.csv'))
     print(raw_files)
     output_file = '../raw_data/co_ops.all.csv'
     
@@ -131,7 +163,7 @@ def fix_coops_files():
         
         # Iterate over each raw file
         for file in raw_files:
-            year,month = os.path.basename(file).strip('.csv').split('_')[-2:]
+            year,month = os.path.basename(file).removesuffix('.csv').split('_')[-2:]
             date = f'{month}/{year}'
 
             with open(file, 'r', newline='', encoding='UTF8') as infile:
@@ -173,7 +205,7 @@ mutuals_fields_2 = [
 
 def fix_mutuals_files():
     # Pre-process the raw files to include the source date (found in filename) as a field, 
-    raw_files = glob.glob('../raw_data/mutuals/*.csv')
+    raw_files = sorted(glob.glob('../raw_data/mutuals/*.csv'))
     print(raw_files)
     output_file = '../raw_data/mutuals.all.csv'
     encoding = 'Latin-1'
@@ -186,7 +218,7 @@ def fix_mutuals_files():
         # Iterate over each raw file
         for file in raw_files:
             try:
-                year,month = os.path.basename(file).strip('.csv').split('-')[-2:]
+                year,month = os.path.basename(file).removesuffix('.csv').split('-')[-2:]
                 date = f'{month}/{year}'
             except ValueError:
                 try:
@@ -237,7 +269,7 @@ ScHR_fields = [
 
 def fix_ScotHousingReg_files():
     # Pre-process the raw files to include the source date (found in filename) as a field
-    raw_files = glob.glob('../raw_data/ScotHousingReg/*.csv')
+    raw_files = sorted(glob.glob('../raw_data/ScotHousingReg/*.csv'))
     print(raw_files)
     output_file = '../raw_data/ScotHousingReg.all.csv'
     
@@ -246,7 +278,7 @@ def fix_ScotHousingReg_files():
         csv_writer = csv.DictWriter(outfile, fieldnames=ScHR_fields)  
         csv_writer.writeheader()  
         for file in raw_files:
-            date = os.path.basename(file).split('-')[-1].strip('.csv')
+            date = os.path.basename(file).split('-')[-1].removesuffix('.csv')
             if not date.isdigit():
                 try:
                     date_obj = datetime.strptime(os.path.basename(file).split('.')[-2].replace('to_',''), "%b%Y")
@@ -283,7 +315,7 @@ CQC_fields = [
 ]
 def fix_CQC_files():
     # Pre-process the raw files to include the source date (found in filename) as a field
-    raw_files = glob.glob('../raw_data/CareQualityCommission/*.csv')
+    raw_files = sorted(glob.glob('../raw_data/CareQualityCommission/*.csv'))
     print(raw_files)
     output_file = '../raw_data/CareQualityCommission.all.csv'
     
@@ -325,7 +357,7 @@ SHE_fields = [
     ]
 def fix_SocialHousingEng():
     # Pre-process the raw files to include the source date (found in filename) as a field
-    raw_files = glob.glob('../raw_data/SocialHousingEngland/*.csv')
+    raw_files = sorted(glob.glob('../raw_data/SocialHousingEngland/*.csv'))
     print(raw_files)
     output_file = '../raw_data/SocialHousingEng.all.csv'
     
@@ -335,7 +367,7 @@ def fix_SocialHousingEng():
         csv_writer.writeheader()  
         for file in raw_files:
             print(file)
-            datestr = os.path.basename(file).split('_')[-1].strip('.csv')
+            datestr = os.path.basename(file).split('_')[-1].removesuffix('.csv')
             try:
                 date_obj = datetime.strptime(datestr, '%Y%m%d')
             except ValueError:

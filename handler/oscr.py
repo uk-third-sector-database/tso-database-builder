@@ -2,7 +2,7 @@
 from datetime import datetime
 import pandas as pd
 
-from .base import DataHandler,sort_encoding_issue
+from .base import DataHandler,sort_encoding_issue,fix_dates_set
 from .base_definitions import sub_spine_entry_creator,extra_csv_entry_creator
 nulls = (None, '', [], {}, ())
 
@@ -95,13 +95,21 @@ class OSCRDataHandler(DataHandler):
             #print(f'name_origin = {name_origin}')
             #print(f'name_tuple = {name_tuple}')
             if 'NAME' in name_origin.upper():
-                d = datetime.strptime((name_origin.split(' ')[0]),'%m/%Y')
-                if d > date:
+                # name_origin is usually 'mm/yyyy Name' but can have no leading
+                # date (e.g. plain 'Name') - treat those entries as undated
+                try:
+                    d = datetime.strptime((name_origin.split(' ')[0]),'%m/%Y')
+                except ValueError:
+                    d = None
+                if d is not None and d > date:
                     date = d
                     extra_names.add(primary)
                     primary = name_tuple
                     #print(f' -- primary = {primary}')
                     #print(f' -- extra_names = {extra_names}')
+                elif d is None and primary == ('',''):
+                    # undated 'Name' entry: honour it unless a dated entry has already won
+                    primary = name_tuple
             
             extra_names.add(name_tuple)
 
@@ -144,19 +152,9 @@ class OSCRDataHandler(DataHandler):
          primary name. As per ccew, using earliest date for registration and 
           latest for dissolution (though could change this to use the dates in 
           the most recent iteration instead) '''
-        
-        def fix_dates_set(datesset, order):
-            ret = list(datesset)
-            ret = [i for i in ret if i !='']
-            ret.sort()
-            if ret:
-                primary = ret[order]
-                extra_dates = [i for i in ret if i != primary]
-            else:
-                return '',''
 
-            return primary,extra_dates
-        
+        # date selection uses handler.base.fix_dates_set (chronological sort)
+
         def generate_subspine_and_extras(new_sub_spine_row,names,addresses,regdates,remdates):
             primary_name, extra_names = self.find_primary_name(names)
             primary_address, extra_addresses = self.find_primary_info(addresses)
@@ -295,6 +293,7 @@ class OSCRDataHandler(DataHandler):
         id_in_source=set()
         new_extras_rows = []
         company_id=''
+        crossborder = False
         uid = rows[0]['uid']
         source = rows[0]['source']
         source_register = rows[0]['source_register']
@@ -302,6 +301,7 @@ class OSCRDataHandler(DataHandler):
         for r in rows:
             id_in_source.add(r['id_in_source'])
             if r['companyid']: company_id = r['companyid']
+            if r.get('crossborder') in ('1', 1, 'True', 'true'): crossborder = True
             for field in self.tmp_fields:
                 if not field in r.keys(): r[field] = ''
             try:
@@ -333,7 +333,8 @@ class OSCRDataHandler(DataHandler):
             "companyid" : company_id,
             "source" : source,
             "source_register" : source_register})
-        
+        if crossborder: new_sub_spine_row['crossborder'] = 1
+
         new_sub_spine_row, extra_rows = generate_subspine_and_extras(new_sub_spine_row,names,addresses,regdates,remdates)
         print('subspine row = ',new_sub_spine_row)
         
