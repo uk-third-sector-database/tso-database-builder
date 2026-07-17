@@ -5,6 +5,10 @@ Please see project website at https://uk-third-sector-database.github.io/ for mo
 
 # Getting Started
 
+**To regenerate the full Organisation Register (Spine), follow `RUNBOOK.md`** —
+it documents data acquisition for every source register, the build steps in
+order, validation checks, and release packaging.
+
 Use python 3.11
 
     make setup-pyenv

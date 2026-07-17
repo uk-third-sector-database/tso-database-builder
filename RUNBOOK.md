@@ -1,0 +1,173 @@
+# Regenerating the TSCS Organisation Register (Spine): Run Book
+
+This document describes the complete process for regenerating the Third
+Sector and Civil Society (TSCS) Organisation Register from scratch. It was
+written in July 2026 after a full review of the pipeline, so that the Spine
+can be rebuilt without relying on any one person's working knowledge.
+
+Read this alongside:
+
+- `README.md` — quick start.
+- `tscs_database_builder.tex/pdf` — the technical appendix (method detail,
+  source URLs, download dates used in past builds).
+- The published guidance:
+  https://uk-third-sector-database.github.io/guidance/tcss-organisation-register-guidance.html
+
+## 1. How the pipeline fits together
+
+```
+raw register downloads            (step 0 — manual/scripted, see §3)
+        |
+  preprocess: stamp each file's snapshot date ("iteration"), concatenate
+        |                         (steps 1–3)
+  per-source handlers: one standardised "sub-spine" CSV per register
+        |                         (step 4)
+  build-spine: rule-based record linkage across registers
+        |                         (step 5)
+  check-spine + SIC codes + cso_type classification
+        |                         (steps 6–8)
+  TSCS_spine.{spine,supplementary,matches,SIC_codes}.csv
+```
+
+All commands run **from the repo root**. Data lives in two sibling folders
+(outside the repo, so nothing large is ever committed):
+
+- `../raw_data/` — one subfolder per source (see §3 for exact names).
+- `../public_spine_data/` — all intermediate and final outputs.
+
+The whole recipe is scripted in `spine_bash_script.sh` (run under Git Bash
+on Windows). The steps below explain what each stage does and what can go
+wrong.
+
+## 2. Environment
+
+- Python **3.11** (python.org installer on Windows; `pyenv` targets in the
+  Makefile are Unix-only).
+- Create and activate a virtual environment, then install:
+
+  ```
+  python -m venv .tso
+  .tso\Scripts\activate        (Windows;  source .tso/bin/activate on Unix)
+  pip install -r test-requirements.txt
+  ```
+
+- Run the test suite before a build: `pytest` from the repo root. All tests
+  should pass; investigate any failure before proceeding.
+- On Windows, run `spine_bash_script.sh` under **Git Bash** (it uses bash
+  redirection). PowerShell will not run it unmodified.
+
+## 3. Step 0 — acquire the raw data
+
+This is the least automated stage and the most common source of failure.
+The snapshot date ("iteration") of every downloaded file is parsed **from
+its filename**, so files must be named exactly as shown. Get a pattern
+wrong and the file is silently skipped or its details lose the recency
+contest.
+
+### 3.1 Files that must be PRESERVED (cannot be re-downloaded)
+
+Four inputs are irreplaceable or curated. They must be restored from
+backup before any rebuild — as of July 2026 they were **not present** on
+the current machine and must be recovered (from the previous maintainer's
+environment, the university team, or a backup):
+
+| File | Role | If lost |
+|---|---|---|
+| `../raw_data/ccew/ccew_spine_public.csv` | Historical CCEW base (2001–2023), built once by `archive/ccew_publicspine_prep.do` from private snapshots | Spine loses pre-2023 E&W charity history; base cannot be rebuilt from public sources |
+| `../raw_data/oscr/oscr_spine_public.csv` | Historical OSCR base (2012–2023), from `archive/oscr_publicspine_prep.do` | Same, for Scotland |
+| `../raw_data/ccni/ccni_spine.csv` | Historical CCNI base (April 2023), from `archive/ccni_spine_prep.do` | Same, for Northern Ireland |
+| `../raw_data/FTC_data/dkane_relationships_sameas.csv` | Find that Charity "same-as" lookup; supplies the majority of cross-register links and the charity-merger logic | Can be re-derived from David Kane's public Find that Charity data (findthatcharity.uk; drkane on GitHub — includes CCEW Register of Mergers). Document the derivation when refreshed |
+
+The build now **stops with an error** if the FTC or OSCR linkage files are
+missing (pass `--allow-missing-linkage` to `build-spine` only if you
+deliberately want a spine without them).
+
+### 3.2 Fresh downloads, per source
+
+| Source | Download from | Save as (exact pattern) | Notes |
+|---|---|---|---|
+| CCEW (Charity Commission E&W) | register-of-charities.charitycommission.gov.uk → full register download ("charity" table) | `../raw_data/ccew/ccew-publicextract.<monyyyy>.csv` e.g. `ccew-publicextract.feb2025.csv` | Download is JSON/txt; convert to CSV first (the original `reformat_ccew.ipynb` is lost — an 8-line recipe survives in a comment in `handler/preprocess_charity_regulators.py`; recreate and commit the converter) |
+| OSCR (Scottish Charity Register) | oscr.org.uk charity register download (updated daily) | keep native names: `../raw_data/oscr/CharityExport-DD-Mon-YYYY.csv` and `CharityExport-Removed-DD-Mon-YYYY.csv` | Two files: current + removed |
+| CCNI (NI) | run `archive/ccni-scrape-2025-05-20.py` | register → `../raw_data/ccni/<anything>charitydetails_YYYY_MM_DD.csv`; removals → `../raw_data/ccni/ni-removals-YYYY-MM-DD.csv` | The scraper also recovers removal dates (CCNI's own download omits them). Fragile HTML scrape — verify output row counts against the CCNI website total |
+| Companies House bulk | download.companieshouse.gov.uk/en_output.html | `../raw_data/CompaniesHouse/BasicCompanyDataAsOneFile-YYYY-MM-DD.csv` | Free monthly product; covers live companies only |
+| Companies House API scrape | one-off 2022 output of github.com/uk-third-sector-database/ch_adv_scraper | `../raw_data/CompaniesHouse/ch_adv_scrape*.csv` | Covers companies dissolved before bulk downloads began. PRESERVE the 2022 output; re-running needs a Companies House API key |
+| CQC (Care Quality Commission) | cqc.org.uk → "Using CQC data" → care directory | `../raw_data/CareQualityCommission/DD_MonthName_YYYY_<anything>.csv` e.g. `01_January_2023_directory.csv` | File has 4 preamble rows (handled). Matches only — CQC records never form spine rows |
+| Care Inspectorate Scotland | careinspectorate.com → statistics → datastore (MDSF) | `../raw_data/CareInspectScot/MDSF_data_<year>.csv` or `<name>.<MonYYYY>.csv` | Matches only. Column names have varied across years; new variants need edits in `handler/preprocess.py` |
+| Co-operatives UK | uk.coop/resources/open-data | `../raw_data/co_ops/<anything>_YYYY_MM.csv` | |
+| Mutuals (FCA register) | mutuals.fca.org.uk export | `../raw_data/mutuals/<anything>-YYYY-MM.csv` or `<name>.MonYYYY.csv` | Code relies on the register's own header typo "Full Registation Number" — check it still exists after FCA portal changes |
+| Social Housing England | gov.uk "Registered providers of social housing" (monthly) | `../raw_data/SocialHousingEngland/<anything>_YYYYMMDD.csv` or `_MonYYYY.csv` | Published as a spreadsheet; export the providers sheet to CSV. Only "Non-profit" designations are kept |
+| Scottish Housing Regulator | housingregulator.gov.scot → statistical information (annual) | `../raw_data/ScotHousingReg/<anything>-YYYY.csv` or `<name>.to_MonYYYY.csv` | Source has no addresses or dates |
+
+Keep every previously used download in place — the preprocess step
+concatenates **all** files in each folder, and history (e.g. an
+organisation's removal) is inferred across snapshots.
+
+## 4. Steps 1–8 — the build
+
+These are the commands in `spine_bash_script.sh`, in order:
+
+1. `python3 handler/preprocess.py`
+   Stamps iterations and concatenates the six non-charity sources →
+   `../raw_data/<Source>.all.csv` each.
+2. `python3 cli.py preprocess-ch ../raw_data/CH.all.csv`
+   Concatenates Companies House bulk + API-scrape files. **The argument is
+   the OUTPUT path.**
+3. `python3 cli.py process-charity-source ccni` (then `oscr`, then `ccew`)
+   Combines each regulator's base file + downloads → `../raw_data/{ccni,oscr,ccew}.all.csv`.
+   The OSCR step also writes `../raw_data/oscr.linkage.csv`, required later.
+4. Ten `python3 cli.py process-source <Handler> <in> <out>` calls →
+   per-source `*.spine.csv` + `*.supplementary.csv` in `../public_spine_data/`.
+5. `python3 cli.py build-spine <ten .spine.csv files> -o ../public_spine_data/TSCS_spine`
+   The record linkage. **The file order is part of the method** (earlier
+   sources take precedence, and most match rules only link a later record
+   to an earlier one): ccew, oscr, ccni, mutuals, CH, co-ops, Scottish
+   Housing Regulator, Social Housing England, Care Inspectorate Scotland,
+   CQC. Console output (including per-organisation warnings) goes to
+   `build_spine.out` — read it after every build.
+6. `python3 cli.py check-spine <same ten files> -o ../public_spine_data/TSCS_spine`
+   Verifies every input organisation reached the spine, supplementary or
+   matches output.
+7. `python3 cli.py build-sic-codes-list ../raw_data/CH.all.csv ../public_spine_data/TSCS_spine.matches.csv ../public_spine_data/TSCS_spine.SIC_codes.csv`
+   SIC (industry) codes for spine organisations, via their Companies House
+   links. Must use the matches file just built (an earlier version of the
+   script read a stale file here).
+8. `python3 cli.py add-cso-type ../public_spine_data/TSCS_spine.spine.csv ../public_spine_data/TSCS_spine.SIC_codes.csv`
+   Appends the `cso_type` and `cso_subtype` classification columns
+   (rewrites the spine CSV in place). Historically this ran outside the
+   repo; it is now step 8 of the standard build.
+
+## 5. Validating a build before release
+
+- `build_spine.out`: scan for ERROR lines (removal-date inconsistencies,
+  organisations that failed consolidation).
+- Row counts and distributions: compare spine rows, supplementary rows,
+  match counts by `match_type`, and spine counts by `source_register`
+  against the previous release (v1.0, March 2026: 770,923 spine rows;
+  872,084 supplementary; 125,624 matches; 668,280 SIC rows; full tables in
+  the guidance). Large unexplained swings in any cell mean stop and
+  investigate.
+- uid conventions: every spine uid starts GB-CHC/GB-COH/GB-SC/GB-MPR/
+  GB-NIC/GB-COOP/GB-SHPE/GB-SHR; GB-CIS and GB-CQC appear only in matches.
+- `python3 cli.py tex-table-spine` produces the release-notes counts table.
+- Update the guidance page (schema, counts, changelog, download-date
+  coverage) and `release_info.tex` for every release.
+
+## 6. Known caveats and open items (July 2026 review)
+
+- **Release lineage**: the published v1.0 ("Mar 2026") is the January 2026
+  build with classification columns appended. An improved February rebuild
+  (revised removal-date handling; 769,850 rows) exists in
+  `tso-spine-files.March2026.zip` but was never published. The next release
+  should state which lineage it continues.
+- The July 2026 correctness fixes (this branch) deliberately change
+  outputs: dates are now compared chronologically rather than as text,
+  addresses are no longer truncated at city names, same-name organisations
+  are no longer over-merged, and previously inert cross-border/CQC match
+  rules now fire. Expect small, explainable count differences from v1.0.
+- CQC and Care Inspectorate Scotland contribute matches only, by design.
+- The supplementary file's `id_in_source` column is empty by construction.
+- `prepare_zip.sh` is out of date (wrong file names, dead branch) — release
+  packaging is currently manual: zip the four CSVs + `LICENCE.txt` + the
+  guidance PDF.
+- The Makefile's `setup-pyenv`/`setup-venv` targets are Unix-only and
+  broken; use §2 instead.
