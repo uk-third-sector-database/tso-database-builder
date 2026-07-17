@@ -1,7 +1,8 @@
 click
 pandas
 upsetplot
-splink
 matplotlib
 matplotlib_venn
 tqdm
+pydantic
+memory_profiler

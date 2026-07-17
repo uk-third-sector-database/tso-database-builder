@@ -4,6 +4,26 @@ from copy import deepcopy
 from handler.base_definitions import public_spine_entry_creator, sub_spine_entry_creator, extra_csv_entry_creator, match_csv_entry_creator, MATCHES_CSV_FIELDS, SUB_SPINE_CSV_FIELDS, SPINE_CSV_FIELDS, EXTRA_DETAILS_CSV_FIELDS
 import tempfile
 
+
+def build_spine_for_test(files):
+    # the external linkage files (dkane sameas / oscr linkage) are not part of these fixtures:
+    # point at clearly-nonexistent paths and allow them to be missing, so every test runs with
+    # empty linkage tables regardless of what is on the machine
+    return process_csvs_to_build_spine(files,
+                                       allow_missing_linkage=True,
+                                       sameas_file='no_such_sameas_fixture.csv',
+                                       oscr_links_file='no_such_oscr_linkage_fixture.csv')
+
+
+def expected_public_spine_row(overrides):
+    # the published spine writes is_cic as the literal string "False" (or "True"):
+    # to_main_csv() fills a blank is_cic with "False". Expected main rows therefore use
+    # "False" unless a test overrides it.
+    entry = public_spine_entry_creator({"is_cic" : "False"})
+    entry.update(**overrides)
+    return entry
+
+
 def assert_files_basically_same(a,b,ignore=False):
     def filter_na_lines(line):
         return not line.startswith('n/a')
@@ -159,7 +179,7 @@ def test_oscr_merge_in(setup_base_ccew_orgs,setup_base_oscr_orgs):
     oscr_file = write_input_data_to_tmp_file(oscr_datarows,oscr_extras,SUB_SPINE_CSV_FIELDS+['crossborder'])
     ccew_file = write_input_data_to_tmp_file(ccew_datarows,ccew_extras,SUB_SPINE_CSV_FIELDS)
     
-    main_orgs = process_csvs_to_build_spine([ccew_file,oscr_file])
+    main_orgs = build_spine_for_test([ccew_file,oscr_file])
     
 
     # Write out to temporary files in a temp directory
@@ -179,7 +199,7 @@ def test_oscr_merge_in(setup_base_ccew_orgs,setup_base_oscr_orgs):
             match_csv = match_csv_file.read()
 
     expected_main_rows = [
-    public_spine_entry_creator({
+    expected_public_spine_row({
         "uid" : "GB-CHC-1001",
         "organisationname" : "101 Trust Fund",
         "normalisedname" : "101 TRUST FUND",
@@ -188,7 +208,7 @@ def test_oscr_merge_in(setup_base_ccew_orgs,setup_base_oscr_orgs):
         "postcode" : "LL1 1LL",
         "registerdate" : "23/06/1961",
         "removeddate" : "23/06/2019",}),
-    public_spine_entry_creator({
+    expected_public_spine_row({
         "uid" : "GB-CHC-1002",
         "organisationname" : "The Charity group",
         "normalisedname" : "THE CHARITY GROUP",
@@ -197,7 +217,7 @@ def test_oscr_merge_in(setup_base_ccew_orgs,setup_base_oscr_orgs):
         "postcode" : "EH1 1EH",
         "registerdate" : "01/06/1998",
         }),
-    public_spine_entry_creator({
+    expected_public_spine_row({
         "uid" : "GB-CHC-1003",
         "organisationname" : "The 51st Charity group",
         "normalisedname" : "THE 51ST CHARITY GROUP",
@@ -206,7 +226,7 @@ def test_oscr_merge_in(setup_base_ccew_orgs,setup_base_oscr_orgs):
         "postcode" : "G1 1EH",
         "registerdate" : "01/12/1990",
         }),
-    public_spine_entry_creator({"uid" : "GB-SC-102",
+    expected_public_spine_row({"uid" : "GB-SC-102",
         "organisationname" : "The Charity group",
         "normalisedname" : "THE CHARITY GROUP",
         "fulladdress" : "High Street House",
@@ -216,7 +236,7 @@ def test_oscr_merge_in(setup_base_ccew_orgs,setup_base_oscr_orgs):
         "registerdate" : "01/06/1998",
         "removeddate" : "",
         }),
-    public_spine_entry_creator({
+    expected_public_spine_row({
         "uid" : "GB-SC-103",
         "organisationname" : "The 41st Charity group",
         "normalisedname" : "THE 41ST CHARITY GROUP",
@@ -256,7 +276,7 @@ def test_oscr_merge_extras(setup_base_ccew_orgs,setup_base_oscr_orgs):
     oscr_file = write_input_data_to_tmp_file(oscr_datarows,oscr_extras,SUB_SPINE_CSV_FIELDS+['crossborder'])
     ccew_file = write_input_data_to_tmp_file(ccew_datarows,ccew_extras,SUB_SPINE_CSV_FIELDS)
 
-    main_orgs = process_csvs_to_build_spine([ccew_file,oscr_file])
+    main_orgs = build_spine_for_test([ccew_file,oscr_file])
     print('STORES: ')
     print(f'_store = {main_orgs._store}')
     print(f'byname = {main_orgs.byname}')
@@ -285,7 +305,7 @@ def test_oscr_merge_extras(setup_base_ccew_orgs,setup_base_oscr_orgs):
         
         
     expected_main_rows = [
-    public_spine_entry_creator({
+    expected_public_spine_row({
         "uid" : "GB-CHC-1001",
         "organisationname" : "101 Trust Fund",
         "normalisedname" : "101 TRUST FUND",
@@ -295,7 +315,7 @@ def test_oscr_merge_extras(setup_base_ccew_orgs,setup_base_oscr_orgs):
         "registerdate" : "23/06/1961",
         "removeddate" : "23/06/2019",
         }),
-    public_spine_entry_creator({
+    expected_public_spine_row({
         "uid" : "GB-CHC-1002",
         "organisationname" : "The Charity group",
         "normalisedname" : "THE CHARITY GROUP",
@@ -304,7 +324,7 @@ def test_oscr_merge_extras(setup_base_ccew_orgs,setup_base_oscr_orgs):
         "postcode" : "EH1 1EH",
         "registerdate" : "01/06/1998",
         }),
-    public_spine_entry_creator({
+    expected_public_spine_row({
         "uid" : "GB-CHC-1003",
         "organisationname" : "The 51st Charity group",
         "normalisedname" : "THE 51ST CHARITY GROUP",
@@ -313,7 +333,7 @@ def test_oscr_merge_extras(setup_base_ccew_orgs,setup_base_oscr_orgs):
         "postcode" : "G1 1EH",
         "registerdate" : "01/12/1990",
         }),
-    public_spine_entry_creator({"uid" : "GB-SC-102",
+    expected_public_spine_row({"uid" : "GB-SC-102",
         "organisationname" : "The Charity group",
         "normalisedname" : "THE CHARITY GROUP",
         "fulladdress" : "High Street House",
@@ -323,7 +343,7 @@ def test_oscr_merge_extras(setup_base_ccew_orgs,setup_base_oscr_orgs):
         "registerdate" : "01/06/1998",
         "removeddate" : "",
         }),
-    public_spine_entry_creator({
+    expected_public_spine_row({
         "uid" : "GB-SC-103",
         "organisationname" : "The 41st Charity group",
         "normalisedname" : "THE 41ST CHARITY GROUP",
@@ -401,7 +421,7 @@ def test_merge_dates(reg_dateA, reg_dateB, expected_primary_date, expected_extra
         new_row = sub_spine_entry_creator({})
         expected_extra = extra_csv_entry_creator({})
 
-    expected_main = public_spine_entry_creator({
+    expected_main = expected_public_spine_row({
         "uid" : "GB-CHC-001",
         "organisationname" : "org",
         "normalisedname" : "ORG",
@@ -418,7 +438,7 @@ def test_merge_dates(reg_dateA, reg_dateB, expected_primary_date, expected_extra
     with open(expected_extra_csv) as csv_file: expected_extra_csv = csv_file.read()
 
     
-    main_orgs = process_csvs_to_build_spine([base_file,new_file])
+    main_orgs = build_spine_for_test([base_file,new_file])
     print('STORES after process_csvs_to_build_spine: ')
     print(f'_store = {main_orgs._store}')
     print(f'byname = {main_orgs.byname}')
@@ -468,7 +488,7 @@ def test_sort_extras():
         "crossborder" : '1',
         "id_in_source" : "44",})
     
-    expected_main = public_spine_entry_creator({
+    expected_main = expected_public_spine_row({
         "uid" : "GB-CHC-001",
         "organisationname" : "org",
         "normalisedname" : "ORG",
@@ -483,7 +503,7 @@ def test_sort_extras():
     new_file = write_input_data_to_tmp_file([new_row],[],SUB_SPINE_CSV_FIELDS+['crossborder'])
 
         
-    main_orgs = process_csvs_to_build_spine([base_file,new_file])
+    main_orgs = build_spine_for_test([base_file,new_file])
     print('STORES after process_csvs_to_build_spine: ')
     print(f'_store = {main_orgs._store}')
     print(f'byname = {main_orgs.byname}')
@@ -519,7 +539,7 @@ def test_extras_no_change():
     base_file = write_input_data_to_tmp_file([baserow],[extra],SUB_SPINE_CSV_FIELDS)
     supp_file = base_file.replace('.csv','.supplementary.csv')
 
-    main_orgs = process_csvs_to_build_spine([base_file])
+    main_orgs = build_spine_for_test([base_file])
     with tempfile.TemporaryDirectory() as temp_dir:
         main_file = f"{temp_dir}/main.csv"
         extra_file = f"{temp_dir}/extra.csv"
@@ -536,7 +556,8 @@ def test_extras_no_change():
     
     assert_files_basically_same(extra_csv, expected_supp)
 
-#@pytest.mark.xfail(reason='This test is failing because the sort_extras method is not yet working')
+# (a commented-out xfail marker used to sit here: the per-uid compression it referred to is
+# now implemented in build_public_spine.compress_extras_per_uid, applied in sort_extras)
 def test_sort_extras_compressed(setup_base_ccew_orgs):
     '''supplementary file should have data compressed, so that all data for a given uid is on one line, unless the course provided more than one entry for a given field'''
     
@@ -556,14 +577,14 @@ def test_sort_extras_compressed(setup_base_ccew_orgs):
                     "removeddate" : "01/01/2019"})]
     
     # expected spine file:
-    expected_spine = public_spine_entry_creator({**ccew_row})
+    expected_spine = expected_public_spine_row({**ccew_row})
     print(expected_spine)
     # expected supplementary file:
     expected_supp = extra_csv_entry_creator({"uid" : "GB-CHC-1001",
                                             "organisationname" : "1001 Trust Fund",
                                             "fulladdress" : "An old address",
                                             "city" : "Dundee",
-                                            "postcode" : "LL1 1LLJ",
+                                            "postcode" : "LL1 1LJ", # matches the input extra above (a previous expectation had a typo, 'LL1 1LLJ')
                                             "registerdate" : "23/07/1961",
                                             "removeddate" : "01/01/2019"})
     
@@ -572,7 +593,7 @@ def test_sort_extras_compressed(setup_base_ccew_orgs):
     supp_file = ccew_file.replace('.csv','.supplementary.csv')
 
     # process:
-    main_orgs = process_csvs_to_build_spine([ccew_file])
+    main_orgs = build_spine_for_test([ccew_file])
     print(main_orgs)
     assert len(main_orgs._store["GB-CHC-1001"].extras) == len(ccew_extras)
 
@@ -633,7 +654,7 @@ def test_CIS_link(basesource,mergesource,basename,mergename,match_expected):
             "id_in_source" : "44",})
 
 
-    expected_main = public_spine_entry_creator({
+    expected_main = expected_public_spine_row({
         "uid" : "GB-SC-001",
         "organisationname" : "org",
         "normalisedname" : basename,
@@ -667,7 +688,7 @@ def test_CIS_link(basesource,mergesource,basename,mergename,match_expected):
     with open(expected_matches_csv) as csv_file: expected_match_csv = csv_file.read()
 
     
-    main_orgs = process_csvs_to_build_spine([base_file,new_file])
+    main_orgs = build_spine_for_test([base_file,new_file])
     print('STORES after process_csvs_to_build_spine: ')
     print(f'_store = {main_orgs._store}')
     print(f'byname = {main_orgs.byname}')
@@ -717,7 +738,7 @@ def test_degreg_date(setup_base_ccew_orgs,setup_base_oscr_orgs,ccew_remdate,oscr
     oscr_file = write_input_data_to_tmp_file(oscr_datarow,oscr_extras,SUB_SPINE_CSV_FIELDS+['crossborder'])
     ccew_file = write_input_data_to_tmp_file(ccew_datarow,ccew_extras,SUB_SPINE_CSV_FIELDS)
     
-    main_orgs = process_csvs_to_build_spine([ccew_file,oscr_file])
+    main_orgs = build_spine_for_test([ccew_file,oscr_file])
     
 
     # Write out to temporary files in a temp directory
@@ -737,7 +758,7 @@ def test_degreg_date(setup_base_ccew_orgs,setup_base_oscr_orgs,ccew_remdate,oscr
             match_csv = match_csv_file.read()
 
     expected_main_rows = [
-    public_spine_entry_creator({
+    expected_public_spine_row({
         "uid" : "GB-CHC-1001",
         "organisationname" : "101 Trust Fund",
         "normalisedname" : "101 TRUST FUND",
@@ -745,7 +766,10 @@ def test_degreg_date(setup_base_ccew_orgs,setup_base_oscr_orgs,ccew_remdate,oscr
         "city" : "Dundee",
         "postcode" : "LL1 1LL",
         "registerdate" : "23/06/1961",
-        "removeddate" : "",}),
+        # deliberate behaviour (March change): CCEW is the primary register, so a CCEW removal
+        # date stands in the spine even when a matched record (here OSCR) is still active.
+        # When CCEW has no removal date, the spine removal date stays blank.
+        "removeddate" : ccew_remdate,}),
     ]
 
 
@@ -765,6 +789,137 @@ def test_degreg_date(setup_base_ccew_orgs,setup_base_oscr_orgs,ccew_remdate,oscr
 def test_empty_extras():
     e = ExtraInfo(uid='1')
     assert e.isempty() == True
+
+
+def test_missing_linkage_files():
+    # a missing external linkage file must be a hard error naming the file, unless the
+    # caller explicitly opts out with allow_missing_linkage=True (empty linkage tables)
+    row = sub_spine_entry_creator({
+        "uid" : "GB-CHC-900",
+        "organisationname" : "org",
+        "normalisedname" : "ORG",
+        "source" : "ccew",
+        "id_in_source" : "900",})
+    base_file = write_input_data_to_tmp_file([row],[],SUB_SPINE_CSV_FIELDS)
+
+    with pytest.raises(RuntimeError, match='no_such_sameas_fixture.csv'):
+        process_csvs_to_build_spine([base_file],
+                                    sameas_file='no_such_sameas_fixture.csv',
+                                    oscr_links_file='no_such_oscr_linkage_fixture.csv')
+
+    main_orgs = process_csvs_to_build_spine([base_file],
+                                            allow_missing_linkage=True,
+                                            sameas_file='no_such_sameas_fixture.csv',
+                                            oscr_links_file='no_such_oscr_linkage_fixture.csv')
+    assert list(main_orgs._store.keys()) == ['GB-CHC-900']
+
+    from spine import build_public_spine as bps
+    assert bps.ftc_dict == {}
+    assert bps.oscr_linkage_lookup == {}
+
+
+def test_name_rule_matches_only_qualifying_candidates():
+    # regression test for the over-merge fix: three same-name organisations are in the spine
+    # (oscr + ccew + Companies House), then a careinspectoratescot record of the same name
+    # arrives. The 'name - care' rule qualifies only the OSCR organisation, so the record must
+    # merge into it alone - not into every organisation sharing the name.
+    base_rows = [
+        sub_spine_entry_creator({
+            "uid" : "GB-SC-301",
+            "organisationname" : "Shared Name",
+            "normalisedname" : "SHARED NAME",
+            "source" : "oscr",
+            "id_in_source" : "301",}),
+        sub_spine_entry_creator({
+            "uid" : "GB-CHC-302",
+            "organisationname" : "Shared Name",
+            "normalisedname" : "SHARED NAME",
+            "source" : "ccew",
+            "id_in_source" : "302",}),
+        sub_spine_entry_creator({
+            "uid" : "GB-COH-303",
+            "organisationname" : "Shared Name",
+            "normalisedname" : "SHARED NAME",
+            "source" : "CH",
+            "id_in_source" : "303",}),
+    ]
+    cis_row = sub_spine_entry_creator({
+        "uid" : "GB-CIS-304",
+        "organisationname" : "Shared Name",
+        "normalisedname" : "SHARED NAME",
+        "source" : "careinspectoratescot",
+        "id_in_source" : "304",})
+
+    base_file = write_input_data_to_tmp_file(base_rows,[],SUB_SPINE_CSV_FIELDS)
+    cis_file = write_input_data_to_tmp_file([cis_row],[],SUB_SPINE_CSV_FIELDS)
+
+    main_orgs = build_spine_for_test([base_file,cis_file])
+
+    absorbed_into = [org for org in main_orgs._store.values()
+                     if any(m.uid == 'GB-CIS-304' for m,mt in org.matched_orgs)]
+    assert len(absorbed_into) == 1
+    assert absorbed_into[0].uid == 'GB-SC-301'
+    # the same-name ccew and Companies House organisations are untouched
+    assert main_orgs._store['GB-CHC-302'].matched_orgs == []
+    assert main_orgs._store['GB-COH-303'].matched_orgs == []
+    # the record was merged, not added as its own spine organisation
+    assert 'GB-CIS-304' not in main_orgs._store
+
+
+def test_same_name_record_merged_into_one_org_only():
+    # regression test for the multi-merge fix (reviewer's scenario): two CCEW charities and a
+    # Companies House company all named "COMMUNITY ASSOCIATION" are in the spine; a
+    # socialhousingengland record of the same name arrives. It must be merged into at most one
+    # CCEW organisation (the best match), never into the Companies House record, and the other
+    # CCEW organisation keeps an association-only match row (blank uid, not absorbed).
+    ccew_rows = [
+        sub_spine_entry_creator({
+            "uid" : "GB-CHC-2001",
+            "organisationname" : "Community Association",
+            "normalisedname" : "COMMUNITY ASSOCIATION",
+            "source" : "ccew",
+            "id_in_source" : "2001",}),
+        sub_spine_entry_creator({
+            "uid" : "GB-CHC-2002",
+            "organisationname" : "Community Association",
+            "normalisedname" : "COMMUNITY ASSOCIATION",
+            "source" : "ccew",
+            "id_in_source" : "2002",}),
+    ]
+    ch_row = sub_spine_entry_creator({
+        "uid" : "GB-COH-2003",
+        "organisationname" : "Community Association",
+        "normalisedname" : "COMMUNITY ASSOCIATION",
+        "source" : "CH",
+        "id_in_source" : "2003",})
+    she_row = sub_spine_entry_creator({
+        "uid" : "GB-SHPE-2004",
+        "organisationname" : "Community Association",
+        "normalisedname" : "COMMUNITY ASSOCIATION",
+        "source" : "socialhousingengland",
+        "id_in_source" : "2004",})
+
+    ccew_file = write_input_data_to_tmp_file(ccew_rows,[],SUB_SPINE_CSV_FIELDS)
+    ch_file = write_input_data_to_tmp_file([ch_row],[],SUB_SPINE_CSV_FIELDS)
+    she_file = write_input_data_to_tmp_file([she_row],[],SUB_SPINE_CSV_FIELDS)
+
+    main_orgs = build_spine_for_test([ccew_file,ch_file,she_file])
+
+    absorbed_into = [org for org in main_orgs._store.values()
+                     if any(m.uid == 'GB-SHPE-2004' for m,mt in org.matched_orgs)]
+    # merged into exactly one organisation, and it is a CCEW charity
+    assert len(absorbed_into) == 1
+    assert absorbed_into[0].source.lower() == 'ccew'
+    # never merged into the Companies House record
+    assert not any(m.uid == 'GB-SHPE-2004' for m,mt in main_orgs._store['GB-COH-2003'].matched_orgs)
+    # the record does not become its own spine organisation
+    assert 'GB-SHPE-2004' not in main_orgs._store
+    # the other CCEW organisation keeps an association-only match row (blank uid)
+    other_ccew = [org for org in main_orgs._store.values()
+                  if org.source.lower() == 'ccew' and org.uid != absorbed_into[0].uid]
+    assert len(other_ccew) == 1
+    assert any(r.orgB_uid == 'GB-SHPE-2004' and r.uid == '' and r.match_type == 'name - housing'
+               for r in other_ccew[0].sorted_matches)
 
 
     

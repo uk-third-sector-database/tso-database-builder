@@ -9,7 +9,9 @@ def verify_representation(infiles,ofile_basename):
     for csvfile in infiles:
         # find all uids in infiles, excepting CIS and CQC
         df = pd.read_csv(csvfile, usecols=['uid','source'])
-        df = df[~df['source'].isin(['CareInspectorateScot','CareQualityCommission'])]
+        # handlers emit lowercase source labels ('careinspectoratescot', 'carequalitycommission'),
+        # so normalise case before filtering
+        df = df[~df['source'].astype(str).str.lower().isin(['careinspectoratescot','carequalitycommission'])]
         uids = list(df['uid'])
         infile_uids.update(uids)
         print(f'\tinfile {csvfile} has {len(uids)} (ignoring any CIS and CQC)')

@@ -1,7 +1,7 @@
 import csv
 import pandas as pd
 import os
-from  pydantic import BaseModel, Field, field_validator
+from  pydantic import BaseModel, Field, field_validator, ValidationError
 from datetime import datetime
 from memory_profiler import profile
 from tqdm import tqdm  
@@ -9,7 +9,7 @@ from tqdm import tqdm
 from handler.base_definitions import EXTRA_DETAILS_CSV_FIELDS, SPINE_CSV_FIELDS, MATCHES_CSV_FIELDS, ORG_ID_MAPPING, SAMEAS_FILE, OSCR_LINKS_FILE
 
 
-def read_dkane_sameas(file):
+def read_dkane_sameas(file, role='linkage', allow_missing=False):
 
     def get_org_code(org_id):
         parts = str(org_id).split('-')
@@ -18,17 +18,24 @@ def read_dkane_sameas(file):
     wanted_cols = ['org_id_a', 'org_id_b', 'source']
 
     try:
-        df = pd.read_csv(file,low_memory=False)
+        # dtype=str + fillna('') so a blank source cell cannot crash the .lower() call below
+        df = pd.read_csv(file, usecols=lambda c: c in wanted_cols, dtype=str)
     except OSError as e:
-        print(f'Error reading file {file} in function read_dkane_sameas: {e}')
-        return {}, []
+        if allow_missing:
+            print(f'WARNING: linkage file {file} ({role}) could not be read - building with no {role} links: {e}')
+            return {}, []
+        raise RuntimeError(
+            f'Required linkage file {file} ({role}) could not be read: {e}. '
+            f'Building without it would silently drop these links from the spine. '
+            f'Pass allow_missing_linkage=True to build anyway with an empty linkage table.'
+        ) from e
 
     # Ensure required columns exist
     for col in wanted_cols:
         if col not in df.columns:
-            df[col] = None
+            df[col] = ''
 
-    df = df[wanted_cols]
+    df = df[wanted_cols].fillna('')
 
     df['org_a_code'] = df['org_id_a'].apply(get_org_code)
     df['org_b_code'] = df['org_id_b'].apply(get_org_code)
@@ -132,8 +139,22 @@ def read_dkane_sameas(file):
 #    return ftc_dict, primary_orgs
     
 
-ftc_dict, primary_ccew_orgs_ftc = read_dkane_sameas(SAMEAS_FILE)
-oscr_linkage_lookup, _ = read_dkane_sameas(OSCR_LINKS_FILE)
+# linkage lookup tables used by SubSpineOrg.matches() and MainOrgList.merge().
+# These are populated by load_linkage_tables(), called from process_csvs_to_build_spine(),
+# so that importing this module performs no file I/O.
+ftc_dict = {}
+primary_ccew_orgs_ftc = []
+oscr_linkage_lookup = {}
+
+
+def load_linkage_tables(sameas_file=SAMEAS_FILE, oscr_links_file=OSCR_LINKS_FILE, allow_missing_linkage=False):
+    global ftc_dict, primary_ccew_orgs_ftc, oscr_linkage_lookup
+    ftc_dict, primary_ccew_orgs_ftc = read_dkane_sameas(
+        sameas_file, role="Find that Charity same-as links (the 'ftc' match rule)",
+        allow_missing=allow_missing_linkage)
+    oscr_linkage_lookup, _ = read_dkane_sameas(
+        oscr_links_file, role="historic OSCR links (the 'oscr' match rule)",
+        allow_missing=allow_missing_linkage)
 
 
 
@@ -216,9 +237,58 @@ def consolidate_extras(values):
             processed_extras.append(new_item)
 
     return processed_extras
-    
+
+
+def compress_extras_per_uid(values):
+    '''
+    Merge complementary rows for the same uid so that supplementary.csv has as few rows as
+    possible: all data for a given uid goes on one line, unless the source provided more than
+    one entry for a given field (conflicting values stay on separate rows).
+    Only called at the final sort_extras stage (write-out), not at ingest, so intermediate
+    processing still sees one row per source entry.
+    Fields are merged as groups so that e.g. an address stays together. source_register is
+    treated as a group too, so rows from different registers are never merged (provenance).
+    '''
+    field_groups = [('organisationname', 'normalisedname'),
+                    ('fulladdress', 'city', 'postcode'),
+                    ('registerdate',),
+                    ('removeddate',),
+                    ('source_register',)]
+
+    merged = []
+    by_uid = {}
+    for item in values:
+        placed = False
+        for target in by_uid.get(item.uid, []):
+            conflict = False
+            for group in field_groups:
+                item_has = any(getattr(item, f) for f in group)
+                target_has = any(getattr(target, f) for f in group)
+                if item_has and target_has and any(getattr(item, f) != getattr(target, f) for f in group):
+                    conflict = True
+                    break
+            if not conflict:
+                for group in field_groups:
+                    if any(getattr(item, f) for f in group) and not any(getattr(target, f) for f in group):
+                        for f in group:
+                            setattr(target, f, getattr(item, f))
+                if item.source and not target.source:
+                    target.source = item.source
+                placed = True
+                break
+        if not placed:
+            by_uid.setdefault(item.uid, []).append(item)
+            merged.append(item)
+
+    return merged
+
 
     
+# precedence of match rules, strongest first: used by sort_matches() and by merge() when an
+# incoming record matches more than one organisation and only the best match may absorb it
+MATCHTYPE_ORDER = ['ftc', 'oscr', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source' , 'name - housing', 'name - care', 'companyid - companyid']
+
+
 class MatchInfo(BaseModel):
     uid: str
     orgA_id_in_source : str
@@ -261,16 +331,12 @@ class CoreOrganisation(BaseModel): # orgs for public spine
 
     def to_extra_info(self) -> ExtraInfo:
         return ExtraInfo(**self.model_dump())
-    
-    # if an org is added to matched_orgs, check if it is_cic, and if so, set is_cic flag for this org
-    @field_validator('matched_orgs', mode='before')
-    def validate_matched_orgs(cls,values):
-        for m,matchtype in values:
-            if m.is_cic == 'True':
-                cls.is_cic = 'True'
-        return values
 
-    
+    # NOTE: is_cic propagation from matched orgs happens per-instance in sort_matches();
+    # a former validator here mutated the *class* attribute (cls.is_cic), which was unsafe
+    # and redundant, so it has been removed.
+
+
     def to_main_csv(self):
         self.is_cic = self.is_cic if self.is_cic else 'False'
         return self.model_dump(exclude={"extras","matched_orgs","sorted_matches"})
@@ -296,11 +362,11 @@ class CoreOrganisation(BaseModel): # orgs for public spine
         matchtype is in ['companyid - companyid', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source', 'ftc']
         '''
 
-        matchtype_order = ['ftc', 'oscr', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source' , 'name - housing', 'name - care', 'companyid - companyid']
-#   
+        matchtype_order = MATCHTYPE_ORDER
+#
         if len(self.matched_orgs)==0:
             return
-        
+
         new_main_rows = []
         assured_matched_orgs = []
 
@@ -391,8 +457,8 @@ class CoreOrganisation(BaseModel): # orgs for public spine
             new_obj = ExtraInfo(
                 uid=uid,
                 source=source,
-                datefield=date,
-                source_register=source_register
+                source_register=source_register,
+                **{datefield: date}
             )
             extra_info_list.append(new_obj)
 
@@ -467,8 +533,11 @@ class CoreOrganisation(BaseModel): # orgs for public spine
             if self.removeddate == x.removeddate:
                 x.removeddate = ''
         
-        # consolidate extras per uid so that supplementary.csv has as few rows as possible
-        consolidate_extras(self.extras)
+        # consolidate extras per uid so that supplementary.csv has as few rows as possible.
+        # consolidate_extras blanks values duplicated across rows (its return value was
+        # previously discarded, so it had no effect); compress_extras_per_uid then merges
+        # complementary rows for the same uid onto a single line.
+        self.extras = compress_extras_per_uid(consolidate_extras(self.extras))
 
 
 
@@ -522,26 +591,34 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
             match = bycompanyid[self.companyid]
             matches_here.extend([(i, 'companyid - companyid') for i in match])
 
-        if self.normalisedname in byname: 
+        if self.normalisedname in byname:
             match = byname[self.normalisedname]
-            if self.source == 'cqc' and any(x.cqc_reg == '1' for x in match): # need to make this work by adding cqc_reg field to core orgs so we don't lose this info
-                matches_here.extend([(i, 'name - cqc') for i in match])
-                
-            if self.crossborder=='1':
-                matches_here.extend([(i, 'name - crossborder') for i in match])
+            # each name rule only ever matches the *qualifying* candidates, not every org that
+            # happens to share the name (previously all of `match` was extended in, which
+            # over-merged unrelated same-name organisations).
+            if self.source.lower() == 'carequalitycommission': # the CQC handler emits source 'carequalitycommission' (a former comparison to 'cqc' never matched)
+                candidates = [x for x in match if x.cqc_reg == '1'] # cqc_reg is the CCEW flag 'should be registered with CQC too'
+                matches_here.extend((x, 'name - cqc') for x in candidates)
 
-            if self.source.lower() == 'scottishhousingregulator' and any(x.source.lower() == 'oscr' for x in match):
-                matches_here.extend([(i, 'name - housing') for i in match])   
+            if self.crossborder=='1': # crossborder is the OSCR flag 'should be registered with CCEW too'
+                candidates = [x for x in match if x.source.lower() == 'ccew']
+                matches_here.extend((x, 'name - crossborder') for x in candidates)
 
-            if self.source.lower() == 'socialhousingengland' and any(x.source.lower() == 'ccew' for x in match):
-                matches_here.extend([(i, 'name - housing') for i in match])   
+            if self.source.lower() == 'scottishhousingregulator':
+                candidates = [x for x in match if x.source.lower() == 'oscr']
+                matches_here.extend((x, 'name - housing') for x in candidates)
 
-            if self.source.lower() == 'careinspectoratescot' and any(x.source.lower() == 'oscr' for x in match):
-                matches_here.extend([(i, 'name - care') for i in match])   
+            if self.source.lower() == 'socialhousingengland':
+                candidates = [x for x in match if x.source.lower() == 'ccew']
+                matches_here.extend((x, 'name - housing') for x in candidates)
 
+            if self.source.lower() == 'careinspectoratescot':
+                candidates = [x for x in match if x.source.lower() == 'oscr']
+                matches_here.extend((x, 'name - care') for x in candidates)
 
-            if self.source.lower() == 'carequalitycommission' and any(x.source.lower() == 'ccew' for x in match):
-                matches_here.extend([(i, 'name - care') for i in match])   
+            if self.source.lower() == 'carequalitycommission':
+                candidates = [x for x in match if x.source.lower() == 'ccew']
+                matches_here.extend((x, 'name - care') for x in candidates)
 
                 
         if self.companyid in bysourceid:
@@ -648,12 +725,23 @@ class MainOrgList:
                 add_to_dict(self.bysourceid, m.id_in_source, org)
 
     def remove_from_stores(self, org):
+        # remove only this organisation from each index list (other organisations can share
+        # a name/companyid key); drop the key only once its list is empty.
         def remove_from_dict(dictionary, key):
-            dictionary.pop(key, None)
+            if key and key in dictionary:
+                dictionary[key] = [x for x in dictionary[key] if x.uid != org.uid]
+                if not dictionary[key]:
+                    del dictionary[key]
         remove_from_dict(self.byname, org.normalisedname)
         remove_from_dict(self.bycompanyid, org.companyid)
         remove_from_dict(self.bysourceid, org.id_in_source)
-        remove_from_dict(self._store, org.uid)
+        # add_to_stores also indexes the org under its matched orgs' keys, so remove those too
+        if isinstance(org, CoreOrganisation):
+            for m,matchtype in org.matched_orgs:
+                remove_from_dict(self.byname, m.normalisedname)
+                remove_from_dict(self.bycompanyid, m.companyid)
+                remove_from_dict(self.bysourceid, m.id_in_source)
+        self._store.pop(org.uid, None)
 
 
     def merge(self, orgs: list[SubSpineOrg]):
@@ -709,8 +797,37 @@ class MainOrgList:
                         self.add_to_stores(new_coreorg)
                 
                 else:
-                    # add this_subspine_org to all matched this_subspine_org already in the spine:
-                    for matched_coreorg,matchtype in matched_org: # o is higher up the precedence order than this_subspine_org
+                    # merge the incoming record into ONE organisation only - the best match by
+                    # match-rule priority (MATCHTYPE_ORDER, ties broken by the order the rules
+                    # produced them). Previously the record was absorbed into EVERY matched
+                    # organisation, duplicating its details across several organisations.
+                    # 'companyid - companyid' matches keep their association-only behaviour.
+                    absorbing = [(m,mt) for m,mt in matched_org if mt != 'companyid - companyid']
+                    associations = [(m,mt) for m,mt in matched_org if mt == 'companyid - companyid']
+
+                    if absorbing:
+                        best_org, _ = min(absorbing,
+                            key=lambda pair: MATCHTYPE_ORDER.index(pair[1]) if pair[1] in MATCHTYPE_ORDER else len(MATCHTYPE_ORDER))
+                        for m,mt in absorbing:
+                            if m.uid == best_org.uid:
+                                # absorb into the single best-matched organisation, keeping
+                                # every matchtype that pointed at it
+                                m.matched_orgs.append((this_subspine_org,mt))
+                            else:
+                                # runner-up organisations keep a record of the link WITHOUT
+                                # absorbing the record: an association-only match row with
+                                # blank uid, mirroring the 'companyid - companyid' behaviour
+                                m.sorted_matches.append(MatchInfo(uid = '',
+                                    orgA_id_in_source = m.id_in_source,
+                                    orgA_source = m.source,
+                                    orgA_uid = m.uid,
+                                    orgB_id_in_source = this_subspine_org.id_in_source,
+                                    orgB_source = this_subspine_org.source,
+                                    orgB_uid = this_subspine_org.uid,
+                                    match_type = mt))
+                        self.add_to_stores(best_org)
+
+                    for matched_coreorg,matchtype in associations:
                         matched_coreorg.matched_orgs.append((this_subspine_org,matchtype))
                         self.add_to_stores(matched_coreorg)
 
@@ -720,20 +837,9 @@ class MainOrgList:
 
 
 
-    def restore_from_csv(self, filename_main: str, filename_extras: str):
-        with open(filename_main) as in_main:
-            main_csv = csv.DictReader(in_main)
-            for main_row in main_csv:
-                new_org = CoreOrganisation(**main_row)
-                self._store[new_org.id] = new_org
-
-            with open(filename_extras) as in_extras:
-                extras_csv = csv.DictReader(in_extras)
-                for extras_row in extras_csv:
-                    main_row = self._store[extras_row["uid"]]
-                    main_row.extras.append(ExtraInfo(**extras_row))
-
-
+    # NOTE: a restore_from_csv() method was removed here: it was never called, referenced a
+    # nonexistent attribute (new_org.id), and could not work in principle because the public
+    # spine CSV omits fields that CoreOrganisation requires (companyid, source, id_in_source).
 
     def sort_matches(self):
         new_store_items = []
@@ -759,9 +865,10 @@ class MainOrgList:
         print('\n\nsort_extras complete.')
 
 
-        with open(filename_main, "w+") as out_main:
-            with open(filename_extras, "w+") as out_extras:
-                with open(filename_matches, 'w+') as out_matches:
+        # newline='' is required by the csv module: without it, Windows doubles every line ending
+        with open(filename_main, "w+", newline='') as out_main:
+            with open(filename_extras, "w+", newline='') as out_extras:
+                with open(filename_matches, 'w+', newline='') as out_matches:
 
                     main_csv = csv.DictWriter(out_main, fieldnames=SPINE_CSV_FIELDS)
                     extras_csv = csv.DictWriter(out_extras, fieldnames=EXTRA_DETAILS_CSV_FIELDS)
@@ -799,7 +906,7 @@ def convert_csv_to_list_of_subspine_orgs(csv_file: str) -> list[SubSpineOrg]:
     
     extras_dict = {}
     if os.path.exists(supp_file):
-        with open(supp_file) as supp_csv:
+        with open(supp_file, newline='') as supp_csv:
             csv_reader = csv.DictReader(supp_csv)
             for row in csv_reader:
                 uid = row['uid']
@@ -811,14 +918,17 @@ def convert_csv_to_list_of_subspine_orgs(csv_file: str) -> list[SubSpineOrg]:
         print(f'Missing supplementary file {supp_file}')
 
     orglist = []
-    with open(csv_file) as in_csv:
+    with open(csv_file, newline='') as in_csv:
         csv_reader = csv.DictReader(in_csv)
         for row in csv_reader:
             if any(field.strip() for field in row.values()):
                 try:
                     neworg = SubSpineOrg(**row)
-                except TypeError as e:
-                    print(f'{e} : row = {row}')
+                except (ValidationError, TypeError) as e:
+                    # skip the bad row entirely so a stale neworg from a previous
+                    # iteration can never be reused
+                    print(f'Skipping invalid row in file {csv_file}: {e} : row = {row}')
+                    continue
                 if neworg.uid in extras_dict:
                     neworg.extras = extras_dict[neworg.uid]
                 orglist.append(neworg)
@@ -827,7 +937,14 @@ def convert_csv_to_list_of_subspine_orgs(csv_file: str) -> list[SubSpineOrg]:
     return orglist
 
 
-def process_csvs_to_build_spine(csv_file_list_order):
+def process_csvs_to_build_spine(csv_file_list_order, allow_missing_linkage=False,
+                                sameas_file=SAMEAS_FILE, oscr_links_file=OSCR_LINKS_FILE):
+    # load the external linkage tables up front: by default a missing file is a hard error
+    # (a build without them silently loses the 'ftc' and 'oscr' links), unless the caller
+    # explicitly opts out with allow_missing_linkage=True
+    load_linkage_tables(sameas_file=sameas_file, oscr_links_file=oscr_links_file,
+                        allow_missing_linkage=allow_missing_linkage)
+
     main_orgs = MainOrgList()
     progress = []
     for csv_file in csv_file_list_order:
