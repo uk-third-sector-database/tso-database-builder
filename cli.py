@@ -17,6 +17,7 @@ from handler.oscr import OSCRDataHandler
 from handler.preprocess_charity_regulators import process_ccew,process_ccni,process_oscr
 from spine.build_public_spine import process_csvs_to_build_spine
 from spine.verify_build import verify_representation,create_tex_table
+from spine.add_cso_type import add_cso_type_to_spine
 
 
 from handler.all_companies_house import main_process, sic_codes_lookup
@@ -86,11 +87,13 @@ def preprocess_CH(ofile):
 @cli.command()
 @click.argument("infiles", nargs =-1)
 @click.option("-o", "outfile_base", default="public_spine")
-def build_spine(infiles, outfile_base):
+@click.option("--allow-missing-linkage", is_flag=True, default=False,
+              help="Proceed even if the external linkage files (Find that Charity same-as, OSCR linkage) are missing. Without this flag a missing file stops the build, because those files supply the majority of cross-register links.")
+def build_spine(infiles, outfile_base, allow_missing_linkage):
     """
     Generate organisational spine, plus matches, plus supplementary files, for all given inputs (in format {source}.spine.csv with {source}.supplementary.csv in the same folder)
     """
-    MainOrgs = process_csvs_to_build_spine(infiles)
+    MainOrgs = process_csvs_to_build_spine(infiles, allow_missing_linkage=allow_missing_linkage)
     print('PROGRESS: process_csvs_to_build_spine complete. Now to write to files...\n')
     print(MainOrgs)
     MainOrgs.write_out(outfile_base+'.spine.csv', 
@@ -118,6 +121,20 @@ def tex_table_spine(outfile_base):
 @click.argument('ofile')
 def build_sic_codes_list(ch_prepared_file,spine_matches_file,ofile):
     sic_codes_lookup(ch_prepared_file,spine_matches_file,ofile)
+
+
+@cli.command()
+@click.argument('spine_csv')
+@click.argument('sic_csv')
+@click.option("-o", "outfile", default=None,
+              help="Output path. If omitted the spine CSV is rewritten in place (as in the published release).")
+def add_cso_type(spine_csv, sic_csv, outfile):
+    """
+    Append the cso_type and cso_subtype classification columns to a built
+    spine CSV, using the SIC codes lookup. This is the final step of the
+    build and must run after build-sic-codes-list.
+    """
+    add_cso_type_to_spine(spine_csv, sic_csv, outfile)
 
 if __name__ == "__main__":
     cli()

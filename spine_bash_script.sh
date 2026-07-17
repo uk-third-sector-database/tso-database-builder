@@ -40,12 +40,25 @@ python3 cli.py process-source OSCR ../raw_data/oscr.all.csv ../public_spine_data
 
 ##-----------------------------
 
+# NOTE: the input order below is part of the linkage method (earlier files
+# take precedence and most match rules only fire against already-loaded
+# records). Do not reorder without documenting the change.
 python3 cli.py build-spine ../public_spine_data/ccew.spine.csv ../public_spine_data/oscr.spine.csv ../public_spine_data/ccni.spine.csv ../public_spine_data/mutuals.spine.csv ../public_spine_data/CH_all.spine.csv ../public_spine_data/CoOps.spine.csv  ../public_spine_data/ScotHousingReg.spine.csv ../public_spine_data/SocialHousingEngland.spine.csv ../public_spine_data/CareInspectScot.spine.csv ../public_spine_data/CQC.spine.csv -o ../public_spine_data/TSCS_spine &> build_spine.out
 
-python3 cli.py build-sic-codes-list ../raw_data/CH.all.csv ../public_spine_data/public_spine.matches.csv ../public_spine_data/TSCS_spine.SIC_codes.csv
+# Verify every input organisation is accounted for in the outputs
+python3 cli.py check-spine ../public_spine_data/ccew.spine.csv ../public_spine_data/oscr.spine.csv ../public_spine_data/ccni.spine.csv ../public_spine_data/mutuals.spine.csv ../public_spine_data/CH_all.spine.csv ../public_spine_data/CoOps.spine.csv  ../public_spine_data/ScotHousingReg.spine.csv ../public_spine_data/SocialHousingEngland.spine.csv ../public_spine_data/CareInspectScot.spine.csv ../public_spine_data/CQC.spine.csv -o ../public_spine_data/TSCS_spine
+
+# SIC codes lookup. Must read the matches file written by build-spine above
+# (an earlier version of this script pointed at public_spine.matches.csv,
+# which meant the SIC file was built from a stale matches table).
+python3 cli.py build-sic-codes-list ../raw_data/CH.all.csv ../public_spine_data/TSCS_spine.matches.csv ../public_spine_data/TSCS_spine.SIC_codes.csv
 
 ##-----------------------------
 
+# Final step: append the cso_type / cso_subtype classification columns
+# (documented in the Organisation Register guidance). Rewrites the spine
+# CSV in place; requires the SIC codes file from the previous step.
+python3 cli.py add-cso-type ../public_spine_data/TSCS_spine.spine.csv ../public_spine_data/TSCS_spine.SIC_codes.csv
 
 #counts
 #python3 visualise/source_plots.py > all_data.matchtypes.out
