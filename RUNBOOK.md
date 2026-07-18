@@ -71,13 +71,14 @@ contest.
 
 ### 3.1 Files that must be PRESERVED (or reconstructed)
 
-Four inputs are irreplaceable or curated:
+Five inputs are irreplaceable or curated:
 
 | File | Role | If lost |
 |---|---|---|
 | `../raw_data/ccew/ccew_spine_public.csv` | Historical CCEW base (2001–2023), built once by `archive/ccew_publicspine_prep.do` from private snapshots | Reconstruct from the published Spine — see §3.1.1 |
 | `../raw_data/oscr/oscr_spine_public.csv` | Historical OSCR base (2012–2023), from `archive/oscr_publicspine_prep.do` | Reconstruct from the published Spine — see §3.1.1 |
 | `../raw_data/ccni/ccni_spine.csv` | Historical CCNI base (April 2023), from `archive/ccni_spine_prep.do` | Reconstruct from the published Spine — see §3.1.1 |
+| `../raw_data/CompaniesHouse/ch_adv_scrape.csv` | One-off 2022 advanced-search API scrape (github.com/uk-third-sector-database/ch_adv_scraper); the only source for companies dissolved before the bulk downloads began | Reconstruct from the published Spine — see §3.1.2 |
 | `../raw_data/FTC_data/dkane_relationships_sameas.csv` | Find that Charity "same-as" lookup; supplies the majority of cross-register links and the charity-merger logic | Can be re-derived from David Kane's public Find that Charity data (findthatcharity.uk; drkane on GitHub — includes CCEW Register of Mergers). Document the derivation when refreshed |
 
 The build now **stops with an error** if the FTC or OSCR linkage files are
@@ -139,6 +140,42 @@ which of a CCNI organisation's recorded names becomes primary is arbitrary
 resolves at the first `charitydetails_*` download, which any real build
 includes.
 
+#### 3.1.2 Reconstructing the 2022 Companies House scrape from a published release
+
+The 2022 advanced-search scrape file is the pipeline's only source for
+companies dissolved before the monthly bulk downloads began; without any
+`ch_adv_scrape*.csv` present, a from-raw rebuild **silently drops those
+companies**. If the original file is unavailable, reconstruct it from the
+published release (same principle as §3.1.1). From the repo root:
+
+```
+python cli.py bootstrap-ch-scrape \
+    <extracted>/TSCS_spine.spine.csv \
+    <extracted>/TSCS_spine.supplementary.csv \
+    <extracted>/TSCS_spine.matches.csv \
+    <extracted>/TSCS_spine.SIC_codes.csv \
+    -o ../raw_data
+```
+
+This writes `../raw_data/CompaniesHouse/ch_adv_scrape_bootstrap.csv` in the
+2022 scraper's exact column layout. The filename deliberately carries no
+date: `preprocess-CH` stamps dateless `ch_adv_scrape` files with the
+historical iteration `2022`, so every fresh bulk download or API refresh
+wins the recency contest against these rows. Run it ONCE, then
+`preprocess-CH` as normal. (If the original 2022 file surfaces from backup,
+prefer it and delete the bootstrap file.)
+
+Validated against v1.0 (July 2026): all 425,797 GB-COH organisations are
+reproduced (325,169 with their own spine row + 100,628 that were merged
+into another organisation during linkage), with 100% identical names,
+cities and postcodes and every date difference in a designed category
+(the company's own displaced incorporation/dissolution dates recovered
+from the supplementary file: 73 + 207 companies); CIC flags are exact
+(72,881, plus 63 inherited by absorbed companies). Reconstruction rules
+and permanent losses (company_type detail beyond the CIC flag — unused by
+the pipeline; name/address history; SIC codes recorded as "None Supplied")
+are in the `spine/bootstrap_ch_scrape.py` docstring.
+
 ### 3.2 Fresh downloads, per source
 
 | Source | Download from | Save as (exact pattern) | Notes |
@@ -147,7 +184,7 @@ includes.
 | OSCR (Scottish Charity Register) | oscr.org.uk charity register download (updated daily) | keep native names: `../raw_data/oscr/CharityExport-DD-Mon-YYYY.csv` and `CharityExport-Removed-DD-Mon-YYYY.csv` | Two files: current + removed |
 | CCNI (NI) | run `archive/ccni-scrape-2025-05-20.py` | register → `../raw_data/ccni/<anything>charitydetails_YYYY_MM_DD.csv`; removals → `../raw_data/ccni/ni-removals-YYYY-MM-DD.csv` | The scraper also recovers removal dates (CCNI's own download omits them). Fragile HTML scrape — verify output row counts against the CCNI website total |
 | Companies House bulk | download.companieshouse.gov.uk/en_output.html | `../raw_data/CompaniesHouse/BasicCompanyDataAsOneFile-YYYY-MM-DD.csv` | Free monthly product; covers live companies only |
-| Companies House API scrape | one-off 2022 output of github.com/uk-third-sector-database/ch_adv_scraper | `../raw_data/CompaniesHouse/ch_adv_scrape*.csv` | Covers companies dissolved before bulk downloads began. PRESERVE the 2022 output; re-running needs a Companies House API key |
+| Companies House API scrape | one-off 2022 output of github.com/uk-third-sector-database/ch_adv_scraper | `../raw_data/CompaniesHouse/ch_adv_scrape*.csv` | Covers companies dissolved before bulk downloads began. PRESERVE the 2022 output; if lost, reconstruct with `bootstrap-ch-scrape` (§3.1.2) |
 | CQC (Care Quality Commission) | cqc.org.uk → "Using CQC data" → care directory | `../raw_data/CareQualityCommission/DD_MonthName_YYYY_<anything>.csv` e.g. `01_January_2023_directory.csv` | File has 4 preamble rows (handled). Matches only — CQC records never form spine rows |
 | Care Inspectorate Scotland | careinspectorate.com → statistics → datastore (MDSF) | `../raw_data/CareInspectScot/MDSF_data_<year>.csv` or `<name>.<MonYYYY>.csv` | Matches only. Column names have varied across years; new variants need edits in `handler/preprocess.py` |
 | Co-operatives UK | uk.coop/resources/open-data | `../raw_data/co_ops/<anything>_YYYY_MM.csv` | |

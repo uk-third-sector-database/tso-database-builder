@@ -16,6 +16,7 @@ from handler.ccni import CCNIDataHandler
 from handler.oscr import OSCRDataHandler
 from handler.preprocess_charity_regulators import process_ccew,process_ccni,process_oscr
 from spine.bootstrap_base_files import write_base_files, AS_OF_ITERATION
+from spine.bootstrap_ch_scrape import write_ch_scrape_bootstrap
 from spine.build_public_spine import process_csvs_to_build_spine
 from spine.verify_build import verify_representation,create_tex_table
 from spine.add_cso_type import add_cso_type_to_spine
@@ -95,6 +96,26 @@ def bootstrap_base_files(spine_csv, supplementary_csv, matches_csv, raw_data_roo
     are unavailable - see RUNBOOK.md section 3.1.
     """
     write_base_files(spine_csv, supplementary_csv, matches_csv, raw_data_root, as_of=as_of)
+
+
+@cli.command()
+@click.argument("spine_csv")
+@click.argument("supplementary_csv")
+@click.argument("matches_csv")
+@click.argument("sic_csv")
+@click.option("-o", "raw_data_root", default="../raw_data",
+              help="Folder to write the reconstructed scrape file under (default ../raw_data).")
+def bootstrap_ch_scrape(spine_csv, supplementary_csv, matches_csv, sic_csv, raw_data_root):
+    """
+    Reconstruct the lost 2022 Companies House advanced-search scrape file
+    (CompaniesHouse/ch_adv_scrape_bootstrap.csv) from a published Spine
+    release (its spine, supplementary, matches and SIC_codes CSVs).
+    Run this ONCE before preprocess-CH when the 2022 file is unavailable -
+    without it a from-raw rebuild silently drops companies dissolved
+    before the bulk downloads began. See RUNBOOK.md section 3.
+    """
+    write_ch_scrape_bootstrap(spine_csv, supplementary_csv, matches_csv,
+                              sic_csv, raw_data_root)
 
 
 @cli.command()
