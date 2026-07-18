@@ -922,6 +922,204 @@ def test_same_name_record_merged_into_one_org_only():
                for r in other_ccew[0].sorted_matches)
 
 
+# ---------------------------------------------------------------------------
+# CQC identifier-based matching (CQC API data carries Companies House and
+# charity numbers - see acquire/cqc_api.py and handler/careQC.py)
+# ---------------------------------------------------------------------------
+
+def make_cqc_row(**overrides):
+    row = sub_spine_entry_creator({
+        "uid" : "GB-CQC-1-101601999",
+        "organisationname" : "Sunrise Care Provider",
+        "normalisedname" : "SUNRISE CARE PROVIDER",
+        "source" : "carequalitycommission",
+        "id_in_source" : "1-101601999",})
+    row['charitynumber'] = ''
+    row.update(**overrides)
+    return row
+
+
+def write_spine_and_read(main_orgs):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        main_orgs.write_out(f"{temp_dir}/main.csv", f"{temp_dir}/extra.csv", f"{temp_dir}/match.csv")
+        with open(f"{temp_dir}/main.csv") as f: main_csv = f.read()
+        with open(f"{temp_dir}/match.csv") as f: match_csv = f.read()
+    return main_csv, match_csv
+
+
+def test_cqc_companyid_match():
+    # a CQC provider carrying a Companies House number links to the Companies House
+    # organisation via the 'companyid - cqc' rule, even though the names differ
+    ch_row = sub_spine_entry_creator({
+        "uid" : "GB-COH-04378206",
+        "organisationname" : "Sunrise Care Ltd",
+        "normalisedname" : "SUNRISE CARE LTD",
+        "source" : "CH",
+        "id_in_source" : "04378206",})
+    cqc_row = make_cqc_row(companyid='04378206')
+
+    ch_file = write_input_data_to_tmp_file([ch_row],[],SUB_SPINE_CSV_FIELDS)
+    cqc_file = write_input_data_to_tmp_file([cqc_row],[],SUB_SPINE_CSV_FIELDS+['charitynumber'])
+
+    main_orgs = build_spine_for_test([ch_file,cqc_file])
+
+    ch_org = main_orgs._store['GB-COH-04378206']
+    assert [(m.uid,mt) for m,mt in ch_org.matched_orgs] == [('GB-CQC-1-101601999','companyid - cqc')]
+    # the CQC record was merged, not added as its own organisation
+    assert 'GB-CQC-1-101601999' not in main_orgs._store
+
+    main_csv, match_csv = write_spine_and_read(main_orgs)
+    assert 'GB-CQC' not in main_csv          # CQC records are match-only, never spine rows
+    match_rows = [r for r in csv.DictReader(match_csv.splitlines())]
+    assert any(r['match_type'] == 'companyid - cqc' and r['uid'] == 'GB-COH-04378206'
+               and r['orgB_uid'] == 'GB-CQC-1-101601999' for r in match_rows)
+
+
+def test_cqc_companyid_match_when_company_absorbed_into_charity():
+    # the production build order ingests ccew before CH, so a company matching a charity
+    # (via 'companyid - id_in_source') is absorbed into the charity and GB-COH-<number>
+    # is no longer a spine entry of its own. A CQC provider carrying that company number
+    # must still link - to the charity that absorbed the company.
+    ccew_row = sub_spine_entry_creator({
+        "uid" : "GB-CHC-5001",
+        "organisationname" : "Helping Hands",
+        "normalisedname" : "HELPING HANDS",
+        "companyid" : "05001000",
+        "source" : "ccew",
+        "id_in_source" : "5001",})
+    ch_row = sub_spine_entry_creator({
+        "uid" : "GB-COH-05001000",
+        "organisationname" : "Helping Hands Ltd",
+        "normalisedname" : "HELPING HANDS LTD",
+        "source" : "CH",
+        "id_in_source" : "05001000",})
+    cqc_row = make_cqc_row(companyid='05001000')
+
+    ccew_file = write_input_data_to_tmp_file([ccew_row],[],SUB_SPINE_CSV_FIELDS)
+    ch_file = write_input_data_to_tmp_file([ch_row],[],SUB_SPINE_CSV_FIELDS)
+    cqc_file = write_input_data_to_tmp_file([cqc_row],[],SUB_SPINE_CSV_FIELDS+['charitynumber'])
+
+    main_orgs = build_spine_for_test([ccew_file,ch_file,cqc_file])
+
+    # the company was absorbed into the charity first
+    assert 'GB-COH-05001000' not in main_orgs._store
+    ccew_org = main_orgs._store['GB-CHC-5001']
+    assert ('GB-COH-05001000','companyid - id_in_source') in [(m.uid,mt) for m,mt in ccew_org.matched_orgs]
+    # and the CQC provider then linked to the charity through the company number
+    assert ('GB-CQC-1-101601999','companyid - cqc') in [(m.uid,mt) for m,mt in ccew_org.matched_orgs]
+    assert 'GB-CQC-1-101601999' not in main_orgs._store
+
+    main_csv, match_csv = write_spine_and_read(main_orgs)
+    assert 'GB-CQC' not in main_csv
+    match_rows = [r for r in csv.DictReader(match_csv.splitlines())]
+    assert any(r['match_type'] == 'companyid - cqc' and r['uid'] == 'GB-CHC-5001'
+               and r['orgB_uid'] == 'GB-CQC-1-101601999' for r in match_rows)
+
+
+def test_cqc_charityno_match():
+    # a CQC provider carrying a charity number links to the CCEW charity via the
+    # 'charityno - cqc' rule, even though the names differ
+    ccew_row = sub_spine_entry_creator({
+        "uid" : "GB-CHC-1103190",
+        "organisationname" : "The Sunshine Charity",
+        "normalisedname" : "THE SUNSHINE CHARITY",
+        "source" : "ccew",
+        "id_in_source" : "1103190",})
+    cqc_row = make_cqc_row(charitynumber='1103190')
+
+    ccew_file = write_input_data_to_tmp_file([ccew_row],[],SUB_SPINE_CSV_FIELDS)
+    cqc_file = write_input_data_to_tmp_file([cqc_row],[],SUB_SPINE_CSV_FIELDS+['charitynumber'])
+
+    main_orgs = build_spine_for_test([ccew_file,cqc_file])
+
+    ccew_org = main_orgs._store['GB-CHC-1103190']
+    assert [(m.uid,mt) for m,mt in ccew_org.matched_orgs] == [('GB-CQC-1-101601999','charityno - cqc')]
+    assert 'GB-CQC-1-101601999' not in main_orgs._store
+
+    main_csv, match_csv = write_spine_and_read(main_orgs)
+    assert 'GB-CQC' not in main_csv
+    match_rows = [r for r in csv.DictReader(match_csv.splitlines())]
+    assert any(r['match_type'] == 'charityno - cqc' and r['uid'] == 'GB-CHC-1103190'
+               and r['orgB_uid'] == 'GB-CQC-1-101601999' for r in match_rows)
+
+
+def test_cqc_name_only_still_uses_name_rule():
+    # a CQC provider with neither number falls back to the name rules as before
+    ccew_row = sub_spine_entry_creator({
+        "uid" : "GB-CHC-3001",
+        "organisationname" : "Rose Cottage Care",
+        "normalisedname" : "ROSE COTTAGE CARE",
+        "source" : "ccew",
+        "id_in_source" : "3001",})
+    ccew_row['cqc_reg'] = '1'
+    cqc_row = make_cqc_row(
+        organisationname="Rose Cottage Care",
+        normalisedname="ROSE COTTAGE CARE")
+
+    ccew_file = write_input_data_to_tmp_file([ccew_row],[],SUB_SPINE_CSV_FIELDS+['cqc_reg'])
+    cqc_file = write_input_data_to_tmp_file([cqc_row],[],SUB_SPINE_CSV_FIELDS+['charitynumber'])
+
+    main_orgs = build_spine_for_test([ccew_file,cqc_file])
+
+    ccew_org = main_orgs._store['GB-CHC-3001']
+    matched = [(m.uid,mt) for m,mt in ccew_org.matched_orgs]
+    assert ('GB-CQC-1-101601999','name - cqc') in matched
+    assert 'GB-CQC-1-101601999' not in main_orgs._store
+
+
+def test_cqc_same_name_best_candidate_and_never_a_spine_row():
+    # a name-only CQC provider whose name is shared by TWO charities follows the standard
+    # same-name behaviour: merged into exactly one (the best match), with the runner-up
+    # keeping an association-only match row (blank uid). And no CQC record ever becomes a
+    # public spine row - whether matched or wholly unmatched.
+    ccew_rows = []
+    for i in ('4001','4002'):
+        r = sub_spine_entry_creator({
+            "uid" : f"GB-CHC-{i}",
+            "organisationname" : "United Charities",
+            "normalisedname" : "UNITED CHARITIES",
+            "source" : "ccew",
+            "id_in_source" : i,})
+        r['cqc_reg'] = '1'
+        ccew_rows.append(r)
+    cqc_same_name = make_cqc_row(
+        organisationname="United Charities",
+        normalisedname="UNITED CHARITIES")
+    cqc_unmatched = make_cqc_row(
+        uid="GB-CQC-1-999",
+        id_in_source="1-999",
+        organisationname="Wholly Unmatched Care",
+        normalisedname="WHOLLY UNMATCHED CARE",
+        companyid='09999999')  # a company number matching nothing in the spine
+
+    ccew_file = write_input_data_to_tmp_file(ccew_rows,[],SUB_SPINE_CSV_FIELDS+['cqc_reg'])
+    cqc_file = write_input_data_to_tmp_file([cqc_same_name,cqc_unmatched],[],SUB_SPINE_CSV_FIELDS+['charitynumber'])
+
+    main_orgs = build_spine_for_test([ccew_file,cqc_file])
+
+    # merged into exactly one organisation, and it is a CCEW charity
+    absorbed_into = [org for org in main_orgs._store.values()
+                     if any(m.uid == 'GB-CQC-1-101601999' for m,mt in org.matched_orgs)]
+    assert len(absorbed_into) == 1
+    assert absorbed_into[0].source.lower() == 'ccew'
+    # the CQC record does not become its own store entry via a name match
+    assert 'GB-CQC-1-101601999' not in main_orgs._store
+    # the runner-up charity keeps an association-only match row (blank uid)
+    runner_up = [org for org in main_orgs._store.values()
+                 if org.source.lower() == 'ccew' and org.uid != absorbed_into[0].uid]
+    assert len(runner_up) == 1
+    assert any(r.orgB_uid == 'GB-CQC-1-101601999' and r.uid == '' and r.match_type == 'name - cqc'
+               for r in runner_up[0].sorted_matches)
+
+    main_csv, match_csv = write_spine_and_read(main_orgs)
+    # the match-only invariant: no CQC record in the public spine, ever - the matched
+    # provider was absorbed, and the wholly unmatched provider is excluded at write-out
+    assert 'GB-CQC' not in main_csv
+    assert 'carequalitycommission' not in main_csv.lower()
+    # the name link is recorded in the matches file
+    assert 'name - cqc' in match_csv
+
+
     
 	
 	

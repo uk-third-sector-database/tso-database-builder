@@ -285,8 +285,11 @@ def compress_extras_per_uid(values):
 
     
 # precedence of match rules, strongest first: used by sort_matches() and by merge() when an
-# incoming record matches more than one organisation and only the best match may absorb it
-MATCHTYPE_ORDER = ['ftc', 'oscr', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source' , 'name - housing', 'name - care', 'companyid - companyid']
+# incoming record matches more than one organisation and only the best match may absorb it.
+# 'companyid - cqc' / 'charityno - cqc' are the identifier-based rules for CQC providers
+# fetched from the CQC API (acquire/cqc_api.py), which supply Companies House and charity
+# numbers: identifiers are stronger evidence than any name rule.
+MATCHTYPE_ORDER = ['ftc', 'oscr', 'companyid - cqc', 'charityno - cqc', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source' , 'name - housing', 'name - care', 'companyid - companyid']
 
 
 class MatchInfo(BaseModel):
@@ -359,7 +362,8 @@ class CoreOrganisation(BaseModel): # orgs for public spine
         when two organisations are mapped to the same companyid, which creates a link in the match table but not an identical
         organisation UNLESS also in the ftc mappings.
         self.matches is a list of (CoreOrganisation,matchtype) tuples
-        matchtype is in ['companyid - companyid', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source', 'ftc']
+        matchtype is one of MATCHTYPE_ORDER (identifier rules such as 'companyid - cqc' /
+        'charityno - cqc' included)
         '''
 
         matchtype_order = MATCHTYPE_ORDER
@@ -557,6 +561,9 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
     crossborder: str = ""
     cqc_reg: str = ""
     is_cic: str = ""
+    # charity number reported by the source itself (currently only populated by the CQC
+    # API data, via handler/careQC.py): used by the 'charityno - cqc' match rule
+    charitynumber: str = ""
 
     extras: list[ExtraInfo] = Field(default_factory=list)
 
@@ -630,6 +637,34 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
                 matches_here.extend([(i, 'companyid - coop mutual') for i in match])
 
                 
+        # identifier-based rules for CQC providers (CQC API data): a provider's
+        # Companies House number / charity number identifies the spine organisation
+        # directly, which is far stronger evidence than a shared name.
+        if self.source.lower() == 'carequalitycommission':
+            if self.companyid and self.companyid in bysourceid:
+                # the Companies House organisation itself (uid GB-COH-<number>), found
+                # either directly or through an organisation that absorbed it; the uid
+                # check stops id_in_source collisions with other registers (e.g. an
+                # OSCR charity number that looks like a Scottish company number)
+                coh_uid = 'GB-COH-' + self.companyid
+                candidates = [x for x in bysourceid[self.companyid]
+                              if x.uid == coh_uid
+                              or any(m.uid == coh_uid for m, _ in getattr(x, 'matched_orgs', []))]
+                matches_here.extend((x, 'companyid - cqc') for x in candidates)
+            if self.charitynumber:
+                # the charity organisation itself (uid GB-CHC-<number>, or GB-SC-<number>
+                # for a Scottish charity number), found either directly or - as for the
+                # companyid rule above - through an organisation that absorbed it; the uid
+                # check stops id_in_source collisions with other registers
+                chc_uid = ('GB-SC-' if self.charitynumber.upper().startswith('SC')
+                           else 'GB-CHC-') + self.charitynumber
+                if chc_uid in spinelist:
+                    matches_here.append((spinelist[chc_uid], 'charityno - cqc'))
+                elif self.charitynumber in bysourceid:
+                    candidates = [x for x in bysourceid[self.charitynumber]
+                                  if any(m.uid == chc_uid for m, _ in getattr(x, 'matched_orgs', []))]
+                    matches_here.extend((x, 'charityno - cqc') for x in candidates)
+
         if self.id_in_source in bycompanyid:
             match = bycompanyid[self.id_in_source]
             if self.source.lower() == 'ch':
