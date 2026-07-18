@@ -17,6 +17,7 @@ from handler.oscr import OSCRDataHandler
 from handler.preprocess_charity_regulators import process_ccew,process_ccni,process_oscr
 from spine.bootstrap_base_files import write_base_files, AS_OF_ITERATION
 from spine.bootstrap_ch_scrape import write_ch_scrape_bootstrap
+from spine.seed_supplementary import seed_supplementary as run_seed_supplementary
 from spine.build_public_spine import process_csvs_to_build_spine
 from spine.verify_build import verify_representation,create_tex_table
 from spine.add_cso_type import add_cso_type_to_spine
@@ -116,6 +117,27 @@ def bootstrap_ch_scrape(spine_csv, supplementary_csv, matches_csv, sic_csv, raw_
     """
     write_ch_scrape_bootstrap(spine_csv, supplementary_csv, matches_csv,
                               sic_csv, raw_data_root)
+
+
+@cli.command()
+@click.argument("built_supplementary_csv")
+@click.argument("built_spine_csv")
+@click.argument("built_matches_csv")
+@click.argument("prior_supplementary_csv")
+def seed_supplementary(built_supplementary_csv, built_spine_csv,
+                       built_matches_csv, prior_supplementary_csv):
+    """
+    Union a published release's supplementary rows into a freshly built
+    supplementary file, so historical name/address variants that only exist
+    in the published release are not lost by a from-raw rebuild. Keeps only
+    rows whose organisation is represented in the freshly built release
+    (spine uids plus matches uids - absorbed organisations keep their own
+    uid in the supplementary file); skips rows the rebuild already produced.
+    Run AFTER build-spine, before packaging. The pre-seed file is kept as
+    <name>.preseed.csv.
+    """
+    run_seed_supplementary(built_supplementary_csv, built_spine_csv,
+                           built_matches_csv, prior_supplementary_csv)
 
 
 @cli.command()

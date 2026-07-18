@@ -288,6 +288,17 @@ These are the commands in `spine_bash_script.sh`, in order:
    Appends the `cso_type` and `cso_subtype` classification columns
    (rewrites the spine CSV in place). Historically this ran outside the
    repo; it is now step 8 of the standard build.
+9. `python3 cli.py seed-supplementary ../public_spine_data/TSCS_spine.supplementary.csv ../public_spine_data/TSCS_spine.spine.csv ../public_spine_data/TSCS_spine.matches.csv <prior_release>/TSCS_spine.supplementary.csv`
+   Unions the prior published release's supplementary rows into the fresh
+   build, so historical name/address variants that only survive in the
+   published release (they came from register snapshots that can no longer
+   be re-downloaded) are never lost by a from-raw rebuild. Only rows whose
+   uid is represented in the new release (spine or matches) are carried;
+   rows the build already produced are skipped. The pre-seed file is kept
+   as `TSCS_spine.supplementary.preseed.csv` and the step refuses to run
+   twice. On the July 2026 trial rebuild this restored 393,833 of v1.0's
+   872,084 rows (697,656 built + 393,833 seeded = 1,091,489; only 8,581
+   v1.0 rows — organisations no longer representable — were not carried).
 
 ## 5. Validating a build before release
 
