@@ -37,7 +37,9 @@ def parse_iteration_tag(value):
 
 def drop_duplicates(filename):
     print(f"dropping duplicates in {filename}")
-    df = pd.read_csv(filename,encoding = 'utf-8-sig')
+    # dtype=str: identifier columns (company/charity numbers) must round-trip
+    # untouched -- numeric inference strips leading zeros and appends '.0'
+    df = pd.read_csv(filename,encoding = 'utf-8-sig',dtype=str)
     print(f' -- {df.shape[0]} rows before dropping duplicates')
     cols = list(df.columns)
     cols.remove('Iteration')
@@ -311,6 +313,13 @@ CQC_fields = [
 'Provider name',
 'Local authority',
 'CQC Provider ID (for office use only)',
+# identifier/date columns present only in the API-derived files
+# (acquire/cqc_api.py); blank for the old care-directory downloads
+'Companies House Number',
+'Charity Number',
+'City',
+'Registration Date',
+'Deregistration Date',
 'Iteration'
 ]
 def fix_CQC_files():
