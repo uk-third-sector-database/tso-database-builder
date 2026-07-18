@@ -13,9 +13,17 @@ import pandas as pd
 
 from .base import iter_csv_rows
 
+def api_scrape_iteration(file):
+    # ch_adv_scrape_api_refresh_2026-07-18.csv -> '07/2026'; files with no
+    # date in the name are the historical 2022 advanced-search scrape
+    import re
+    m = re.search(r'(\d{4})-(\d{2})-(\d{2})', os.path.basename(file))
+    return f'{m.group(2)}/{m.group(1)}' if m else '2022'
+
 def process_api_scrape(file,ofile):
     print(file)
     data_handler = CH_APIScrape_DataHandler()
+    data_handler.iteration_tag = api_scrape_iteration(file)
     for new_row in filter(
         data_handler.all_filters, iter_csv_rows(file,data_handler)):
         ofile.writerows(data_handler.transform_row(new_row))

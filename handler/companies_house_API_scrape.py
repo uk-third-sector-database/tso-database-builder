@@ -65,6 +65,9 @@ exclude_filters = {}
 class CH_APIScrape_DataHandler(DataHandler):
     fileencoding='UTF8'
     tmp_fields = ['SIC']
+    # overwritten per-file by all_companies_house.process_api_scrape with a
+    # date parsed from the filename; '2022' = the historical scrape's stamp
+    iteration_tag = '2022'
     
     def all_filters(self,row: dict) -> bool:
 
@@ -110,7 +113,7 @@ class CH_APIScrape_DataHandler(DataHandler):
         new_row["companytype"] = ' '.join([row['company_type'],row['company_subtype']]).strip()
         new_row["removeddate"] = self.map_date(row['date_of_cessation'])
         new_row["registerdate"] = self.map_date(row['date_of_creation'])
-        new_row["iteration"] = '2022'
+        new_row["iteration"] = self.iteration_tag
         new_row['is_cic'] = bool(row['company_subtype'] == 'community-interest-company')
         new_row['SIC'] = row['sic_codes'].strip('[').strip(']').replace("'",'')
         
