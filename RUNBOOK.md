@@ -55,6 +55,11 @@ wrong.
   should pass; investigate any failure before proceeding.
 - On Windows, run `spine_bash_script.sh` under **Git Bash** (it uses bash
   redirection). PowerShell will not run it unmodified.
+- On Windows, set `PYTHONUTF8=1` (e.g. `export PYTHONUTF8=1` in Git Bash)
+  before running any build step. Parts of the pipeline write intermediate
+  files as UTF-8 but read them back with the system default encoding, which
+  on Windows is cp1252 — without UTF-8 mode, `process-source` fails with a
+  `UnicodeDecodeError` on the first non-cp1252 character.
 
 ## 3. Step 0 — acquire the raw data
 
@@ -64,23 +69,75 @@ its filename**, so files must be named exactly as shown. Get a pattern
 wrong and the file is silently skipped or its details lose the recency
 contest.
 
-### 3.1 Files that must be PRESERVED (cannot be re-downloaded)
+### 3.1 Files that must be PRESERVED (or reconstructed)
 
-Four inputs are irreplaceable or curated. They must be restored from
-backup before any rebuild — as of July 2026 they were **not present** on
-the current machine and must be recovered (from the previous maintainer's
-environment, the university team, or a backup):
+Four inputs are irreplaceable or curated:
 
 | File | Role | If lost |
 |---|---|---|
-| `../raw_data/ccew/ccew_spine_public.csv` | Historical CCEW base (2001–2023), built once by `archive/ccew_publicspine_prep.do` from private snapshots | Spine loses pre-2023 E&W charity history; base cannot be rebuilt from public sources |
-| `../raw_data/oscr/oscr_spine_public.csv` | Historical OSCR base (2012–2023), from `archive/oscr_publicspine_prep.do` | Same, for Scotland |
-| `../raw_data/ccni/ccni_spine.csv` | Historical CCNI base (April 2023), from `archive/ccni_spine_prep.do` | Same, for Northern Ireland |
+| `../raw_data/ccew/ccew_spine_public.csv` | Historical CCEW base (2001–2023), built once by `archive/ccew_publicspine_prep.do` from private snapshots | Reconstruct from the published Spine — see §3.1.1 |
+| `../raw_data/oscr/oscr_spine_public.csv` | Historical OSCR base (2012–2023), from `archive/oscr_publicspine_prep.do` | Reconstruct from the published Spine — see §3.1.1 |
+| `../raw_data/ccni/ccni_spine.csv` | Historical CCNI base (April 2023), from `archive/ccni_spine_prep.do` | Reconstruct from the published Spine — see §3.1.1 |
 | `../raw_data/FTC_data/dkane_relationships_sameas.csv` | Find that Charity "same-as" lookup; supplies the majority of cross-register links and the charity-merger logic | Can be re-derived from David Kane's public Find that Charity data (findthatcharity.uk; drkane on GitHub — includes CCEW Register of Mergers). Document the derivation when refreshed |
 
 The build now **stops with an error** if the FTC or OSCR linkage files are
 missing (pass `--allow-missing-linkage` to `build-spine` only if you
 deliberately want a spine without them).
+
+#### 3.1.1 Reconstructing the three charity base files from a published release
+
+The original Stata-built base files were lost in 2026 and cannot be rebuilt
+from public register downloads. The **standard way to seed them** is now to
+reconstruct them from the most recent published Spine release, whose
+spine + supplementary + matches files together carry almost all of the base
+files' content. Future builds then equal "published Spine (as the carrier
+of the 2001–2023 history) + fresh register downloads". From the repo root:
+
+```
+python cli.py bootstrap-base-files \
+    <extracted>/TSCS_spine.spine.csv \
+    <extracted>/TSCS_spine.supplementary.csv \
+    <extracted>/TSCS_spine.matches.csv \
+    -o ../raw_data
+```
+
+`<extracted>` is the unzipped published release (v1.0 = `tcss-spine-Mar2026.zip`).
+`--as-of mm/yyyy` states the currency of the release's details (default
+`01/2026`, correct for v1.0 which is the January 2026 build); change it if
+reconstructing from a later release. Run this ONCE, then run
+`process-charity-source` and the rest of the build as normal.
+
+Validated against v1.0 (July 2026): 100.0000% of published organisations
+are reproduced on all three registers, plus the organisations that were
+merged into another during the original linkage (5,364 CCEW, 1,421 OSCR)
+are recovered so the next build re-merges them identically; every date
+difference falls into designed categories (regulator-own registration
+dates preferred over a matched company's incorporation date; removals the
+published spine suppressed are recovered). Full numbers and the
+reconstruction rules are in the `spine/bootstrap_base_files.py` docstring.
+
+**Permanently lost in reconstruction** (all filled with neutral values the
+pipeline treats as "no special handling"):
+
+- CCEW: the `cqc_reg` flag ("should also be CQC-registered"); the
+  per-snapshot origin years of historical name/address/date variants; the
+  linked-charity substructure (which `-1`/`-2` sub-charity a historical
+  name belonged to — flattened to name variants of the parent charity).
+- OSCR: the `name_origin` provenance text of historical names ("Known As",
+  "Former Name", …); the `localauthority` column and the split address
+  lines (the consolidated address string is carried instead); 2012-register
+  linkage rows whose counterpart never entered the published spine.
+- CCNI: name/address variants of organisations already removed in the
+  published release (472 organisations — kept out so an arbitrary variant
+  cannot become the primary name; their removal *dates* are kept, and the
+  variants remain available in the published v1.0 supplementary file);
+  company numbers where the published matches carry no link.
+
+One behaviour to expect: until the first fresh CCNI download is added,
+which of a CCNI organisation's recorded names becomes primary is arbitrary
+(the CCNI step stamps all base rows with one shared snapshot date). It
+resolves at the first `charitydetails_*` download, which any real build
+includes.
 
 ### 3.2 Fresh downloads, per source
 
