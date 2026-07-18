@@ -178,11 +178,18 @@ are in the `spine/bootstrap_ch_scrape.py` docstring.
 
 ### 3.2 Fresh downloads, per source
 
+**Every source below is scripted**: `python -m acquire.<module> --outdir
+../raw_data` downloads it and saves it under the exact expected filename
+(module-per-source detail, API-key requirements and the July 2026
+live-test record are in `acquire/README.md`). The table documents where
+the data comes from and the filename contract the preprocess step parses
+— useful as the manual fallback if a website changes and a module breaks.
+
 | Source | Download from | Save as (exact pattern) | Notes |
 |---|---|---|---|
-| CCEW (Charity Commission E&W) | register-of-charities.charitycommission.gov.uk → full register download ("charity" table) | `../raw_data/ccew/ccew-publicextract.<monyyyy>.csv` e.g. `ccew-publicextract.feb2025.csv` | Download is JSON/txt; convert to CSV first (the original `reformat_ccew.ipynb` is lost — an 8-line recipe survives in a comment in `handler/preprocess_charity_regulators.py`; recreate and commit the converter) |
+| CCEW (Charity Commission E&W) | register-of-charities.charitycommission.gov.uk → full register download ("charity" table) | `../raw_data/ccew/ccew-publicextract.<monyyyy>.csv` e.g. `ccew-publicextract.feb2025.csv` | Download is JSON/txt; `acquire.ccew` converts to CSV (recreates the lost `reformat_ccew.ipynb` from the recipe preserved in `handler/preprocess_charity_regulators.py`) |
 | OSCR (Scottish Charity Register) | oscr.org.uk charity register download (updated daily) | keep native names: `../raw_data/oscr/CharityExport-DD-Mon-YYYY.csv` and `CharityExport-Removed-DD-Mon-YYYY.csv` | Two files: current + removed |
-| CCNI (NI) | run `archive/ccni-scrape-2025-05-20.py` | register → `../raw_data/ccni/<anything>charitydetails_YYYY_MM_DD.csv`; removals → `../raw_data/ccni/ni-removals-YYYY-MM-DD.csv` | The scraper also recovers removal dates (CCNI's own download omits them). Fragile HTML scrape — verify output row counts against the CCNI website total |
+| CCNI (NI) | `acquire.ccni` (supersedes `archive/ccni-scrape-2025-05-20.py`) | register → `../raw_data/ccni/<anything>charitydetails_YYYY_MM_DD.csv`; removals → `../raw_data/ccni/ni-removals-YYYY-MM-DD.csv` | The scraper also recovers removal dates (CCNI's own download omits them). Removals scrape is incremental across earlier `ni-removals-*` files — never seed a partial/test file as the first one. Fragile HTML scrape — verify output row counts against the CCNI website total |
 | Companies House bulk | download.companieshouse.gov.uk/en_output.html | `../raw_data/CompaniesHouse/BasicCompanyDataAsOneFile-YYYY-MM-DD.csv` | Free monthly product; covers live companies only |
 | Companies House API scrape | one-off 2022 output of github.com/uk-third-sector-database/ch_adv_scraper | `../raw_data/CompaniesHouse/ch_adv_scrape*.csv` | Covers companies dissolved before bulk downloads began. PRESERVE the 2022 output; if lost, reconstruct with `bootstrap-ch-scrape` (§3.1.2) |
 | CQC (Care Quality Commission) | cqc.org.uk → "Using CQC data" → care directory | `../raw_data/CareQualityCommission/DD_MonthName_YYYY_<anything>.csv` e.g. `01_January_2023_directory.csv` | File has 4 preamble rows (handled). Matches only — CQC records never form spine rows |
@@ -195,6 +202,58 @@ are in the `spine/bootstrap_ch_scrape.py` docstring.
 Keep every previously used download in place — the preprocess step
 concatenates **all** files in each folder, and history (e.g. an
 organisation's removal) is inferred across snapshots.
+
+### 3.3 Assembling `../raw_data` from scratch, in order
+
+The full scripted sequence for an empty `../raw_data` (new machine, or
+rebuilding after loss). `<extracted>` is the unzipped published release;
+`<env>` is a `.env` file carrying `COH_API_KEYS` and
+`CQC_PRIMARY_KEY`/`CQC_SECONDARY_KEY`. Order matters only where stated.
+
+1. **Seed the reconstructed historical inputs** (one-off; §3.1.1 and §3.1.2 —
+   skip either if the original file is restored from backup instead):
+
+   ```
+   python cli.py bootstrap-base-files <extracted>/TSCS_spine.spine.csv \
+       <extracted>/TSCS_spine.supplementary.csv \
+       <extracted>/TSCS_spine.matches.csv -o ../raw_data
+   python cli.py bootstrap-ch-scrape <extracted>/TSCS_spine.spine.csv \
+       <extracted>/TSCS_spine.supplementary.csv \
+       <extracted>/TSCS_spine.matches.csv \
+       <extracted>/TSCS_spine.SIC_codes.csv -o ../raw_data
+   ```
+
+2. **Register downloads** (independent of each other; minutes each):
+   `python -m acquire.<module> --outdir ../raw_data` for `ccew`, `oscr`,
+   `ccni`, `co_ops`, `mutuals`, `care_inspectorate`, `ftc`,
+   `social_housing_england`, `scot_housing_reg`. The first-ever `ccni` run
+   scrapes every removed charity's page (~1,300 pages ≈ 45 min); later
+   runs are incremental (seconds–minutes).
+
+3. **Companies House bulk** (~500 MB; `--verify-only` first if unsure):
+   `python -m acquire.companies_house_bulk --outdir ../raw_data`
+
+4. **Companies House dissolution refresh** — AFTER step 3; needs `<env>`
+   and a spine file:
+
+   ```
+   python -m acquire.ch_dissolution_check \
+       --spine <extracted>/TSCS_spine.spine.csv --env-file <env> --dry-run
+   ```
+
+   then without `--dry-run`. Writes
+   `CompaniesHouse/ch_adv_scrape_api_refresh_<date>.csv` (July 2026 first
+   run: 7,678 candidates ≈ 7 min with 12 keys).
+
+5. **CQC full API fetch** (~64k providers ≈ 2 h; resumable within the
+   calendar month): `python -m acquire.cqc_api --out
+   ../raw_data/CareQualityCommission --env <env>`. Also restore any
+   historical CQC care-directory snapshots you hold (filename pattern in
+   §3.2) — they carry the CQC match history.
+
+Steps 2, 3→4 and 5 have no dependencies on each other and can run in
+parallel shells. First full assembly on this layout: July 2026 (all
+steps verified live).
 
 ## 4. Steps 1–8 — the build
 

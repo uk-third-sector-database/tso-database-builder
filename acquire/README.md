@@ -36,10 +36,13 @@ own docstring.
 
 ## What still cannot be re-downloaded
 
-The four preserved inputs in RUNBOOK §3.1 (the ccew/oscr/ccni historical
-base files) remain restore-from-backup only — except
-`FTC_data/dkane_relationships_sameas.csv`, which `acquire.ftc` now
-re-derives.
+Nothing, any longer — every input is now either re-downloadable (this
+package), re-derivable (`acquire.ftc`), or reconstructable from the
+published release: the three charity base files via
+`cli.py bootstrap-base-files` (RUNBOOK §3.1.1) and the 2022
+`ch_adv_scrape` file via `cli.py bootstrap-ch-scrape` (RUNBOOK §3.1.2).
+Originals restored from backup are still preferred over reconstructions
+where they exist. The full from-scratch assembly order is RUNBOOK §3.3.
 
 ## Live-test record (17 July 2026)
 
