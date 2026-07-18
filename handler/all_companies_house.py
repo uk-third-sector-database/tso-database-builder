@@ -114,13 +114,16 @@ def main_process(ofilename):
 def sic_codes_lookup(ch_file,matches_file,ofile):
     """Create a lookup file of uid:sic_codes. Map uids to spine using matches.csv """
     try:
-        matches_df = pd.read_csv(matches_file,usecols=['uid','orgB_uid'])
+        matches_df = pd.read_csv(matches_file,usecols=['uid','orgB_uid'],dtype=str)
     except ValueError as e:
         print(f'Error loading matches data from {matches_file} : {e}')
     match_dict = matches_df.groupby('orgB_uid')['uid'].first().to_dict()
 
     try:
-        ch_data = pd.read_csv(ch_file,usecols=['uid','SIC'])
+        # dtype=str: SIC mixes bare codes ('82990') with descriptive text
+        # ('94120 - ...'), and letting pandas infer per-chunk dtypes trips a
+        # pandas usecols/DtypeWarning crash (IndexError) besides being wrong
+        ch_data = pd.read_csv(ch_file,usecols=['uid','SIC'],dtype=str)
     except ValueError as e:
         print(f'Error loading companies house data from {ch_file} : {e}')
         return
