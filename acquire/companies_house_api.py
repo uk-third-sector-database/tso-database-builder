@@ -56,6 +56,14 @@ FIELDNAMES = ['etag', 'hits', 'company_name', 'company_number',
 RATE_LIMIT_SLEEP = 60          # initial back-off after a 429 on a key
 PER_KEY_DELAY = 0.55           # seconds between one key's requests
                                # (~1.8/s, inside the 2/s per-key limit)
+MAX_403_RETRIES = 2            # 403 can be an IP/anti-abuse block, not just a
+                               # bad key: back off and retry before skipping
+                               # (observed 18 Jul 2026: sustained ~20 req/s
+                               # got every key 403-blocked mid-run)
+ABORT_AFTER_CONSECUTIVE = 30   # a run of consecutive failures across all
+                               # keys means the source is blocking us: stop
+                               # the whole fetch (it is resumable) instead of
+                               # burning the rest of the candidate list
 
 
 def load_api_keys(env_file=None, env_var='COH_API_KEYS'):
@@ -146,7 +154,8 @@ def fetch_companies(numbers, keys=None, outdir=None, outfile=None,
     for n in todo:
         todo_q.put(n.strip())
     write_lock = threading.Lock()   # one writer: csv + counters + prints
-    counts = {'done': 0, 'ok': 0, 'missing': 0}
+    counts = {'done': 0, 'ok': 0, 'missing': 0, 'consecutive_failures': 0}
+    aborted = threading.Event()
 
     mode = 'a' if outfile.exists() else 'w'
     with open(outfile, mode, newline='', encoding='utf-8') as f:
@@ -155,12 +164,13 @@ def fetch_companies(numbers, keys=None, outdir=None, outfile=None,
             writer.writeheader()
 
         def worker(key):
-            while True:
+            while not aborted.is_set():
                 try:
                     number = todo_q.get_nowait()
                 except queue.Empty:
                     return
                 backoff = RATE_LIMIT_SLEEP
+                retries_403 = 0
                 while True:
                     try:
                         status, row = fetch_company(number, key)
@@ -172,6 +182,14 @@ def fetch_companies(numbers, keys=None, outdir=None, outfile=None,
                         time.sleep(backoff)
                         backoff = min(backoff * 2, 300)
                         continue
+                    if status == 403 and retries_403 < MAX_403_RETRIES:
+                        # possibly a transient IP/anti-abuse block, not a
+                        # bad key: back off like a 429, a bounded number
+                        # of times
+                        retries_403 += 1
+                        time.sleep(backoff)
+                        backoff = min(backoff * 2, 300)
+                        continue
                     break
                 with write_lock:
                     counts['done'] += 1
@@ -179,12 +197,25 @@ def fetch_companies(numbers, keys=None, outdir=None, outfile=None,
                         writer.writerow(row)
                         f.flush()
                         counts['ok'] += 1
+                        counts['consecutive_failures'] = 0
                     elif status == 404:
+                        # a real answer (the number no longer resolves),
+                        # not a sign we are being blocked
                         print(f'  {number}: not found (404)')
                         counts['missing'] += 1
+                        counts['consecutive_failures'] = 0
                     else:
                         print(f'  {number}: HTTP {status} - skipped')
                         counts['missing'] += 1
+                        counts['consecutive_failures'] += 1
+                        if counts['consecutive_failures'] >= ABORT_AFTER_CONSECUTIVE:
+                            print(f'ABORTING: {ABORT_AFTER_CONSECUTIVE} '
+                                  f'consecutive failures across all keys - '
+                                  f'the API is refusing this machine (rate/'
+                                  f'anti-abuse block). The fetch is '
+                                  f'resumable: re-run later and it will '
+                                  f'skip what is already in {outfile.name}.')
+                            aborted.set()
                     if counts['done'] % 100 == 0:
                         print(f"  {counts['done']}/{len(todo)} done "
                               f"({counts['ok']} ok)")
@@ -196,7 +227,9 @@ def fetch_companies(numbers, keys=None, outdir=None, outfile=None,
             t.start()
         for t in threads:
             t.join()
-    print(f"Fetched {counts['ok']} profiles ({counts['missing']} not "
+    outcome = 'ABORTED on sustained failures; partial fetch' if aborted.is_set() \
+        else 'Fetched'
+    print(f"{outcome} {counts['ok']} profiles ({counts['missing']} not "
           f"returned) -> {outfile}")
     return outfile
 

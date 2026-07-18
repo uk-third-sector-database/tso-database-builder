@@ -41,7 +41,7 @@ from datetime import date
 from pathlib import Path
 
 from .common import DEFAULT_RAW_ROOT, resolve_outdir
-from .companies_house_api import fetch_companies
+from .companies_house_api import PER_KEY_DELAY, fetch_companies
 
 COH_PREFIX = 'GB-COH-'
 
@@ -117,6 +117,12 @@ if __name__ == '__main__':
     parser.add_argument('--dry-run', action='store_true',
                         help='derive and report candidates only; no API '
                              'calls')
+    parser.add_argument('--delay', type=float, default=PER_KEY_DELAY,
+                        help='seconds between one key\'s requests (default '
+                             f'{PER_KEY_DELAY}; raise it after a 403 '
+                             'anti-abuse block - 12 keys at the default '
+                             'sustain ~20 req/s, which got this machine '
+                             'blocked on 18 Jul 2026)')
     args = parser.parse_args()
 
     bulk = args.bulk or newest_bulk_download(args.outdir)
@@ -133,4 +139,5 @@ if __name__ == '__main__':
         folder = resolve_outdir(args.outdir, 'CompaniesHouse')
         outfile = folder / (f'ch_adv_scrape_api_refresh_'
                             f'{date.today():%Y-%m-%d}.csv')
-        fetch_companies(numbers, outfile=outfile, env_file=args.env_file)
+        fetch_companies(numbers, outfile=outfile, env_file=args.env_file,
+                        delay=args.delay)
