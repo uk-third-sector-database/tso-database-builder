@@ -766,10 +766,9 @@ def test_degreg_date(setup_base_ccew_orgs,setup_base_oscr_orgs,ccew_remdate,oscr
         "city" : "Dundee",
         "postcode" : "LL1 1LL",
         "registerdate" : "23/06/1961",
-        # deliberate behaviour (March change): CCEW is the primary register, so a CCEW removal
-        # date stands in the spine even when a matched record (here OSCR) is still active.
-        # When CCEW has no removal date, the spine removal date stays blank.
-        "removeddate" : ccew_remdate,}),
+        # A final organisation is active while either consolidated regulator
+        # record is active, irrespective of which register supplies its UID.
+        "removeddate" : "",}),
     ]
 
 
@@ -789,6 +788,171 @@ def test_degreg_date(setup_base_ccew_orgs,setup_base_oscr_orgs,ccew_remdate,oscr
 def test_empty_extras():
     e = ExtraInfo(uid='1')
     assert e.isempty() == True
+
+
+def test_current_status_ignores_historical_supplementary_removal():
+    row = sub_spine_entry_creator({
+        "uid": "GB-COH-00000001",
+        "organisationname": "Restored Company",
+        "normalisedname": "RESTORED COMPANY",
+        "source": "CH",
+        "source_register": "Companies House",
+        "id_in_source": "00000001",
+        "removeddate": "",
+    })
+    org = SubSpineOrg(
+        **row,
+        extras=[
+            ExtraInfo(
+                uid=row["uid"],
+                source=row["source"],
+                source_register=row["source_register"],
+                removeddate="07/03/2023",
+            )
+        ],
+    )
+
+    assert org.removed() is False
+
+
+def test_active_matched_org_with_removal_history_blanks_parent_removal():
+    parent_row = sub_spine_entry_creator({
+        "uid": "GB-COH-00000001",
+        "organisationname": "Parent Company",
+        "normalisedname": "PARENT COMPANY",
+        "source": "CH",
+        "source_register": "Companies House",
+        "id_in_source": "00000001",
+        "removeddate": "07/03/2023",
+    })
+    active_row = sub_spine_entry_creator({
+        "uid": "GB-SC-SC000001",
+        "organisationname": "Active Partner",
+        "normalisedname": "ACTIVE PARTNER",
+        "source": "OSCR",
+        "source_register": "Scottish Charity Register",
+        "id_in_source": "SC000001",
+        "removeddate": "",
+    })
+    active_partner = SubSpineOrg(
+        **active_row,
+        extras=[
+            ExtraInfo(
+                uid=active_row["uid"],
+                source=active_row["source"],
+                source_register=active_row["source_register"],
+                removeddate="01/02/2020",
+            )
+        ],
+    )
+    parent = CoreOrganisation(**parent_row)
+    parent.matched_orgs = [(active_partner, "ftc")]
+
+    parent.sort_extras()
+
+    assert parent.removeddate == ""
+    assert any(
+        extra.uid == parent.uid and extra.removeddate == "07/03/2023"
+        for extra in parent.extras
+    )
+
+
+def test_ccew_status_is_authoritative_for_cio_shadow_record():
+    ccew_row = sub_spine_entry_creator({
+        "uid": "GB-CHC-1001",
+        "organisationname": "Removed CIO",
+        "normalisedname": "REMOVED CIO",
+        "source": "ccew",
+        "source_register": "Charity Commission for England and Wales",
+        "id_in_source": "1001-0",
+        "removeddate": "07/03/2023",
+    })
+    cio_row = sub_spine_entry_creator({
+        "uid": "GB-COH-CE000001",
+        "organisationname": "Removed CIO",
+        "normalisedname": "REMOVED CIO",
+        "source": "CH",
+        "source_register": "Companies House",
+        "id_in_source": "CE000001",
+        "removeddate": "",
+    })
+    parent = CoreOrganisation(**ccew_row)
+    parent.matched_orgs = [
+        (SubSpineOrg(**cio_row), "companyid - id_in_source")
+    ]
+
+    parent.sort_extras()
+
+    assert parent.removeddate == "07/03/2023"
+
+
+def test_absorbed_uid_is_not_rematerialised_by_another_association():
+    def core(uid):
+        return CoreOrganisation(**sub_spine_entry_creator({
+            "uid": uid,
+            "organisationname": uid,
+            "normalisedname": uid,
+            "source": "ccew",
+            "source_register": "Charity Commission for England and Wales",
+            "id_in_source": uid.removeprefix("GB-CHC-") + "-0",
+        }))
+
+    child_row = sub_spine_entry_creator({
+        "uid": "GB-CHC-3",
+        "organisationname": "Child",
+        "normalisedname": "CHILD",
+        "source": "ccew",
+        "source_register": "Charity Commission for England and Wales",
+        "id_in_source": "3-0",
+    })
+    child = SubSpineOrg(**child_row)
+    association_parent = core("GB-CHC-1")
+    absorbing_parent = core("GB-CHC-2")
+    association_parent.matched_orgs = [
+        (child, "companyid - companyid")
+    ]
+    absorbing_parent.matched_orgs = [(child, "ftc")]
+    organisations = MainOrgList()
+    organisations.add_to_stores(association_parent)
+    organisations.add_to_stores(absorbing_parent)
+
+    organisations.sort_matches()
+
+    assert "GB-CHC-3" not in organisations._store
+
+
+def test_same_source_status_conflict_stops_the_build(monkeypatch):
+    removed_row = sub_spine_entry_creator({
+        "uid": "GB-CHC-1",
+        "organisationname": "Earlier Removed Charity",
+        "normalisedname": "EARLIER REMOVED CHARITY",
+        "source": "ccew",
+        "source_register": "Charity Commission for England and Wales",
+        "id_in_source": "1-0",
+        "removeddate": "01/01/2020",
+    })
+    active_row = sub_spine_entry_creator({
+        "uid": "GB-CHC-2",
+        "organisationname": "Current Active Charity",
+        "normalisedname": "CURRENT ACTIVE CHARITY",
+        "source": "ccew",
+        "source_register": "Charity Commission for England and Wales",
+        "id_in_source": "2-0",
+        "removeddate": "",
+    })
+    removed = CoreOrganisation(**removed_row)
+    incoming = SubSpineOrg(**active_row)
+    organisations = MainOrgList()
+    organisations.add_to_stores(removed)
+
+    monkeypatch.setattr(
+        SubSpineOrg,
+        "matches",
+        lambda self, *_args, **_kwargs: [(removed, "ftc")],
+    )
+
+    with pytest.raises(RuntimeError, match="has no removal date"):
+        organisations.merge([incoming])
 
 
 def test_missing_linkage_files():
@@ -909,7 +1073,7 @@ def test_same_name_record_merged_into_one_org_only():
                      if any(m.uid == 'GB-SHPE-2004' for m,mt in org.matched_orgs)]
     # merged into exactly one organisation, and it is a CCEW charity
     assert len(absorbed_into) == 1
-    assert absorbed_into[0].source.lower() == 'ccew'
+    assert absorbed_into[0].uid == 'GB-CHC-2001'
     # never merged into the Companies House record
     assert not any(m.uid == 'GB-SHPE-2004' for m,mt in main_orgs._store['GB-COH-2003'].matched_orgs)
     # the record does not become its own spine organisation
@@ -920,6 +1084,77 @@ def test_same_name_record_merged_into_one_org_only():
     assert len(other_ccew) == 1
     assert any(r.orgB_uid == 'GB-SHPE-2004' and r.uid == '' and r.match_type == 'name - housing'
                for r in other_ccew[0].sorted_matches)
+
+
+def test_ftc_equal_rule_tie_uses_uid_not_set_order(tmp_path):
+    base_rows = [
+        sub_spine_entry_creator({
+            "uid": "GB-CHC-100",
+            "organisationname": "Candidate 100",
+            "normalisedname": "CANDIDATE 100",
+            "source": "ccew",
+            "id_in_source": "100",
+        }),
+        sub_spine_entry_creator({
+            "uid": "GB-CHC-200",
+            "organisationname": "Candidate 200",
+            "normalisedname": "CANDIDATE 200",
+            "source": "ccew",
+            "id_in_source": "200",
+        }),
+    ]
+    incoming = sub_spine_entry_creator({
+        "uid": "GB-COH-900",
+        "organisationname": "Incoming Company",
+        "normalisedname": "INCOMING COMPANY",
+        "source": "CH",
+        "id_in_source": "900",
+    })
+    base_file = write_input_data_to_tmp_file(
+        base_rows, [], SUB_SPINE_CSV_FIELDS
+    )
+    incoming_file = write_input_data_to_tmp_file(
+        [incoming], [], SUB_SPINE_CSV_FIELDS
+    )
+    oscr_links = write_csv(
+        str(tmp_path / "oscr-links.csv"),
+        [],
+        ["org_id_a", "org_id_b", "source"],
+    )
+
+    edges = [
+        {
+            "org_id_a": "GB-COH-900",
+            "org_id_b": "GB-CHC-200",
+            "source": "manual",
+        },
+        {
+            "org_id_a": "GB-COH-900",
+            "org_id_b": "GB-CHC-100",
+            "source": "manual",
+        },
+    ]
+
+    winners = []
+    for index, edge_order in enumerate((edges, list(reversed(edges)))):
+        sameas = write_csv(
+            str(tmp_path / f"sameas-{index}.csv"),
+            edge_order,
+            ["org_id_a", "org_id_b", "source"],
+        )
+        main_orgs = process_csvs_to_build_spine(
+            [base_file, incoming_file],
+            sameas_file=sameas,
+            oscr_links_file=oscr_links,
+        )
+        absorbed_into = [
+            org.uid for org in main_orgs._store.values()
+            if any(m.uid == "GB-COH-900" for m, _ in org.matched_orgs)
+        ]
+        assert absorbed_into == ["GB-CHC-100"]
+        winners.append(absorbed_into[0])
+
+    assert winners == ["GB-CHC-100", "GB-CHC-100"]
 
 
 # ---------------------------------------------------------------------------
@@ -1101,7 +1336,7 @@ def test_cqc_same_name_best_candidate_and_never_a_spine_row():
     absorbed_into = [org for org in main_orgs._store.values()
                      if any(m.uid == 'GB-CQC-1-101601999' for m,mt in org.matched_orgs)]
     assert len(absorbed_into) == 1
-    assert absorbed_into[0].source.lower() == 'ccew'
+    assert absorbed_into[0].uid == 'GB-CHC-4001'
     # the CQC record does not become its own store entry via a name match
     assert 'GB-CQC-1-101601999' not in main_orgs._store
     # the runner-up charity keeps an association-only match row (blank uid)
@@ -1118,6 +1353,116 @@ def test_cqc_same_name_best_candidate_and_never_a_spine_row():
     assert 'carequalitycommission' not in main_csv.lower()
     # the name link is recorded in the matches file
     assert 'name - cqc' in match_csv
+
+
+# ---------------------------------------------------------------------------
+# Association-only (companyid - companyid) handling: regression tests for the
+# RNIB/UCLH wrong cross-border match
+# (docs/spine-docs/rnib-wrong-match-investigation-2026-07-19.md).
+# ---------------------------------------------------------------------------
+
+def ccew_assoc_entry(uid, name, companyid):
+    return sub_spine_entry_creator({
+        "uid": uid,
+        "organisationname": name,
+        "normalisedname": name,
+        "source": "ccew",
+        "source_register": "Charity Commission for England and Wales",
+        "id_in_source": uid.removeprefix("GB-CHC-") + "-0",
+        "companyid": companyid,
+    })
+
+
+def test_association_only_endpoint_stays_matchable_by_name():
+    # Miniature RNIB/UCLH scenario. Two unrelated CCEW charities share a
+    # company number, which creates an association-only link. The second
+    # charity must remain a matchable organisation in its own right, so that
+    # a later cross-border OSCR record with its exact name absorbs into it
+    # and not into the association partner.
+    ccew_file = write_input_data_to_tmp_file(
+        [ccew_assoc_entry("GB-CHC-1", "UCLH CHARITY", "55555555"),
+         ccew_assoc_entry("GB-CHC-2", "RNIB CHARITY", "55555555")],
+        [], SUB_SPINE_CSV_FIELDS)
+    oscr_row = sub_spine_entry_creator({
+        "uid": "GB-SC-SC1",
+        "organisationname": "RNIB Charity",
+        "normalisedname": "RNIB CHARITY",
+        "source": "oscr",
+        "source_register": "Scottish Charity Register",
+        "id_in_source": "SC1",
+    })
+    oscr_row["crossborder"] = "1"
+    oscr_file = write_input_data_to_tmp_file(
+        [oscr_row], [], SUB_SPINE_CSV_FIELDS + ["crossborder"])
+
+    m = build_spine_for_test([ccew_file, oscr_file])
+
+    # the association endpoint is a standalone organisation during the build
+    assert "GB-CHC-2" in m._store
+    twin = m._store["GB-CHC-2"]
+    assert any(x.uid == "GB-SC-SC1" and mt == "name - crossborder"
+               for x, mt in twin.matched_orgs)
+    stranger = m._store["GB-CHC-1"]
+    assert not any(x.uid == "GB-SC-SC1" for x, _ in stranger.matched_orgs)
+
+    # write-out must keep the twin's absorption: the association partner's
+    # re-materialisation pass must not clobber the standalone store entry
+    m.sort_matches()
+    assert "GB-SC-SC1" not in m._store
+    assert any(x.uid == "GB-SC-SC1"
+               for x, _ in m._store["GB-CHC-2"].matched_orgs)
+
+
+def test_parent_not_indexed_under_association_partner_keys():
+    # An organisation must not be findable under the names/ids of its
+    # association-only partners; it must remain findable under the keys of
+    # records it genuinely absorbed (mergers depend on that).
+    parent = CoreOrganisation(**ccew_assoc_entry("GB-CHC-1", "PARENT", "11110001"))
+    assoc = SubSpineOrg(**ccew_assoc_entry("GB-CHC-2", "ASSOC PARTNER", "22220002"))
+    absorbed = SubSpineOrg(**ccew_assoc_entry("GB-CHC-3", "ABSORBED TWIN", "33330003"))
+    parent.matched_orgs = [(assoc, "companyid - companyid"), (absorbed, "ftc")]
+    m = MainOrgList()
+
+    m.add_to_stores(parent)
+
+    assert "ASSOC PARTNER" not in m.byname
+    assert "22220002" not in m.bycompanyid
+    assert "2-0" not in m.bysourceid
+    assert [o.uid for o in m.byname["ABSORBED TWIN"]] == ["GB-CHC-1"]
+    assert [o.uid for o in m.bycompanyid["33330003"]] == ["GB-CHC-1"]
+
+
+def test_placeholder_companyid_shared_by_four_is_suppressed():
+    # A company number held by four or more distinct organisations of the
+    # same source is register junk (e.g. CCEW's literal 12345678) and must
+    # not produce companyid - companyid links at all.
+    rows = [ccew_assoc_entry(f"GB-CHC-{i}", f"CHARITY NUMBER {i}", "12345678")
+            for i in range(1, 5)]
+    f = write_input_data_to_tmp_file(rows, [], SUB_SPINE_CSV_FIELDS)
+
+    m = build_spine_for_test([f])
+
+    assert len(m._store) == 4
+    for org in m._store.values():
+        assert org.matched_orgs == []
+
+
+def test_small_companyid_clusters_still_link():
+    # Two- and three-charity clusters are plausibly genuine re-registrations
+    # of the same corporate body and must keep their association links.
+    pair = [ccew_assoc_entry("GB-CHC-1", "OLD REGISTRATION", "07770001"),
+            ccew_assoc_entry("GB-CHC-2", "NEW REGISTRATION", "07770001")]
+    f = write_input_data_to_tmp_file(pair, [], SUB_SPINE_CSV_FIELDS)
+    m = build_spine_for_test([f])
+    assert any(x.uid == "GB-CHC-2" and mt == "companyid - companyid"
+               for x, mt in m._store["GB-CHC-1"].matched_orgs)
+
+    trio = [ccew_assoc_entry(f"GB-CHC-{i}", f"REREG {i}", "07770002")
+            for i in (1, 2, 3)]
+    f = write_input_data_to_tmp_file(trio, [], SUB_SPINE_CSV_FIELDS)
+    m = build_spine_for_test([f])
+    assert any(mt == "companyid - companyid"
+               for _, mt in m._store["GB-CHC-1"].matched_orgs)
 
 
     

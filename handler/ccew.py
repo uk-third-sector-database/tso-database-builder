@@ -71,6 +71,8 @@ class CCEWDataHandler(DataHandler):
         return new_row
         
     def iteration_datetime(self,d):
+        if not d:
+            return None
         try:
             if len(d)==4:
                 iteration = datetime.strptime(d, "%Y")
@@ -80,7 +82,6 @@ class CCEWDataHandler(DataHandler):
             if d=='Other':
                 iteration = datetime(2000, 1, 1)
             else:
-                print(f"Invalid date format: {d}")
                 return None
         return iteration
 
@@ -94,17 +95,18 @@ class CCEWDataHandler(DataHandler):
         Original (historic) ccew data had 'primary_flag' set to determine the details 
         for the spine. This needs to be superseded if there are more recent data for an org.
         """
+        def stable_data_key(data_tuple):
+            return tuple('' if value is None else str(value) for value in data_tuple)
+
         s = list(s)
-        new_s = set()
-        primary = None
-        primary_iteration = None
-        fallback_candidates = []
+        candidates = []
+        data_width = max((len(item) - 2 for item in s), default=0)
         for item in s:
             *item_data, primary_flag, iteration_str = item
             item_data = tuple(item_data)
             if all(f in nulls for f in item_data):
                 continue
-            
+
             iteration = None
             if iteration_str:
                 iteration = self.iteration_datetime(iteration_str)
@@ -114,35 +116,32 @@ class CCEWDataHandler(DataHandler):
                 # blank or invalid iteration tag: treat as the oldest possible,
                 # so any properly dated entry takes precedence
                 iteration = datetime(1900, 1, 1)
-            fallback_candidates.append((iteration, item_data))
-            if primary_flag == '1':
-                #if primary is None and any(f != '' for f in item_data):
-                if primary_flag =='1' and any(f != '' for f in item_data):
-                    primary = item_data
-                    primary_iteration = iteration
-                else:
-                    new_s.add(item_data)  # demote previous or bad primary
-            else:
-                new_s.add(item_data)
-        # Determine the most recent iteration among all candidates
-        if fallback_candidates:
-            most_recent_iteration, most_recent_data = max(fallback_candidates, key=lambda x: x[0])
-            # Replace primary if its iteration is older
-            if primary_iteration is None or (most_recent_iteration and primary_iteration and primary_iteration < most_recent_iteration):
-                if primary is not None:
-                    new_s.add(primary)  # move old primary to extras
-                primary = most_recent_data
-                primary_iteration = most_recent_iteration
-        # Fallback to most recent iteration if needed
-        if primary is None or all(f == '' for f in primary):
-            if fallback_candidates:
-                # Sort by latest iteration first
-                fallback_candidates.sort(reverse=True)
-                primary = fallback_candidates[0][1]
-            else:
-                primary = tuple('' for _ in item_data)
-        # Build list supplementary data
-        extra_rows = [i for i in new_s if i != primary and any(f != '' for f in i)]
+            candidates.append((iteration, str(primary_flag) == '1', item_data))
+
+        if candidates:
+            latest_iteration = max(iteration for iteration, _, _ in candidates)
+            latest_candidates = [
+                candidate for candidate in candidates
+                if candidate[0] == latest_iteration
+            ]
+            # At the newest iteration, retain the register's primary flag when
+            # available. Equal candidates are resolved by their data, not set
+            # iteration order.
+            flagged_candidates = [
+                data for _, is_primary, data in latest_candidates if is_primary
+            ]
+            primary_pool = flagged_candidates or [
+                data for _, _, data in latest_candidates
+            ]
+            primary = min(primary_pool, key=stable_data_key)
+        else:
+            primary = tuple('' for _ in range(data_width))
+
+        extra_rows = sorted(
+            {data for _, _, data in candidates
+             if data != primary and any(f not in nulls for f in data)},
+            key=stable_data_key,
+        )
 
         return primary, extra_rows
 
@@ -157,7 +156,36 @@ class CCEWDataHandler(DataHandler):
 
         # date selection uses handler.base.fix_dates_set (chronological sort)
 
-        def create_umbrella_rows(umbrella_rows,cqc_reg,company_id):
+        def newest_umbrella_is_active(umbrella_rows):
+            """Return current status from the newest primary ``-0`` row.
+
+            A blank removal date on the newest regulator snapshot means the
+            charity is active.  Historical rows may still carry genuine
+            removal dates from an earlier registration period; those values
+            belong in supplementary history and must not mark the current
+            umbrella record as removed.
+            """
+            def iteration_key(row):
+                value = row.get('iteration', '')
+                if not value:
+                    return datetime.min
+                return self.iteration_datetime(value) or datetime.min
+
+            newest = max(iteration_key(row) for row in umbrella_rows)
+            latest_rows = [
+                row for row in umbrella_rows
+                if iteration_key(row) == newest
+            ]
+            primary_rows = [
+                row for row in latest_rows
+                if str(row.get('primary_name', '')) == '1'
+                or str(row.get('primary_address', '')) == '1'
+            ]
+            status_rows = primary_rows or latest_rows
+            return all(not row.get('removeddate') for row in status_rows)
+
+        def create_umbrella_rows(umbrella_rows, cqc_reg, company_id,
+                                 current_active):
             # collect most recent data from umbrella_rows for subspine entry,
             # and create extra_csv_entries for any additional (previous) data.
 
@@ -165,9 +193,6 @@ class CCEWDataHandler(DataHandler):
             addresses = {(r['fulladdress'],r['city'],r['postcode'],'', r['iteration']) for r in umbrella_rows}
             regdates = {r['registerdate'] for r in umbrella_rows}
             remdates = {r['removeddate'] for r in umbrella_rows}
-
-            print('In create_umbrella_rows: ')
-            print(f"names = {names}\naddresses = {addresses}\nregdates = {regdates}\nremdates = {remdates}\n")
 
             # take identifiers from the umbrella rows themselves (previously this
             # used the outer loop variable, i.e. whichever row happened to be last)
@@ -180,14 +205,28 @@ class CCEWDataHandler(DataHandler):
                 "source" : base['source'],})
             if cqc_reg: new_sub_spine_row['cqc_reg'] = 1
 
-            return generate_subspine_and_extras(new_sub_spine_row,names,addresses,regdates,remdates)
+            return generate_subspine_and_extras(
+                new_sub_spine_row, names, addresses, regdates, remdates,
+                force_active=current_active,
+            )
 
-        def generate_subspine_and_extras(new_sub_spine_row,names,addresses,regdates,remdates):
+        def generate_subspine_and_extras(new_sub_spine_row, names, addresses,
+                                         regdates, remdates,
+                                         force_active=False):
 
             primary_name, extra_names = self.find_primary_info(names)
             primary_address, extra_addresses = self.find_primary_info(addresses)
             primary_regdate, extra_regdates = fix_dates_set(regdates,0) 
             primary_remdate, extra_remdates = fix_dates_set(remdates,-1)
+            if force_active and primary_remdate:
+                # The current regulator row is active.  Keep every historical
+                # removal value, including the value that ordinary "latest
+                # removal" selection would have made primary, as an extra.
+                extra_remdates = sorted(
+                    set([primary_remdate] + list(extra_remdates)),
+                    key=str,
+                )
+                primary_remdate = ''
 
 
             if primary_name:
@@ -242,10 +281,13 @@ class CCEWDataHandler(DataHandler):
 
         def generate_extra_rows_umbrella(names, addresses, regdates, remdates):
 
-            names = list(names)
-            addresses = list(addresses)
-            regdates = list(regdates)
-            remdates = list(remdates)
+            tuple_key = lambda value: tuple(
+                '' if part is None else str(part) for part in value
+            )
+            names = sorted(set(names), key=tuple_key)
+            addresses = sorted(set(addresses), key=tuple_key)
+            regdates = sorted(set(regdates), key=str)
+            remdates = sorted(set(remdates), key=str)
 
             new_extras_rows = []
             max_len = max(len(names), len(addresses), len(regdates), len(remdates), 1)
@@ -317,7 +359,7 @@ class CCEWDataHandler(DataHandler):
                 True if r1 and r2 can be merged without losing or overwriting info.
                 (Shared keys must either match or one must be empty)
                 """
-                for k in set(r1) | set(r2):
+                for k in sorted(set(r1) | set(r2)):
                     v1 = clean(r1.get(k))
                     v2 = clean(r2.get(k))
 
@@ -331,7 +373,7 @@ class CCEWDataHandler(DataHandler):
                 """
                 merged = {}
 
-                for k in set(r1) | set(r2):
+                for k in sorted(set(r1) | set(r2)):
                     v1 = clean(r1.get(k))
                     v2 = clean(r2.get(k))
 
@@ -497,8 +539,12 @@ class CCEWDataHandler(DataHandler):
 
         if umbrella_charity_found: 
             # if there's an umbrella charity, we want to prioritise its name and details for the spine 
-            new_sub_spine_row, extra_rows = create_umbrella_rows(source_id_dict[umbrella_id],cqc_reg,company_id)
-            if charity_removed:
+            umbrella_rows = source_id_dict[umbrella_id]
+            umbrella_current_active = newest_umbrella_is_active(umbrella_rows)
+            new_sub_spine_row, extra_rows = create_umbrella_rows(
+                umbrella_rows, cqc_reg, company_id, umbrella_current_active
+            )
+            if charity_removed and not umbrella_current_active:
                 # if it's been removed, we might only have its details from older data, which might not have the '-0' tag.
                 # here we need to find the old data for new_sub_spine_row, as it might not be in the downloads 
                 base_uid = umbrella_id.split('-0')[0]

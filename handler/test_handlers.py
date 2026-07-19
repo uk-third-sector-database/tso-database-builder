@@ -2,17 +2,33 @@
 # All fixtures are tiny synthetic rows - no real data files are read.
 
 import csv
+from copy import deepcopy
 from datetime import datetime
 
 import pandas as pd
 import pytest
 
-from handler.base import DataHandler, fix_dates_set, compress_org_details
+from handler.base import (
+    DataHandler,
+    compress_org_details,
+    dict_indexed_by_field,
+    fix_dates_set,
+    parse_iteration_date,
+)
 from handler.ccew import CCEWDataHandler
 from handler.oscr import OSCRDataHandler
 from handler.companies_house import CompaniesHouseDataHandler
 from handler.preprocess import drop_duplicates, parse_iteration_tag
 from handler.preprocess_charity_regulators import format_date_strings, find_postcode
+
+
+def test_utf8_intermediate_csv_is_read_without_platform_default(tmp_path):
+    path = tmp_path / "unicode.csv"
+    path.write_text("uid,name\nGB-COH-1,ČARITY\n", encoding="utf-8")
+
+    result = dict_indexed_by_field(path, "uid")
+
+    assert result["GB-COH-1"][0]["name"] == "ČARITY"
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +156,138 @@ class TestFixDatesSet:
 
 
 # ---------------------------------------------------------------------------
+# Deterministic generic primary/extras selection
+# ---------------------------------------------------------------------------
+
+class TestGenericConsolidationDeterminism:
+
+    @staticmethod
+    def make_row(**overrides):
+        row = {
+            'uid': 'GB-COH-1',
+            'id_in_source': '1',
+            'organisationname': 'Example Org',
+            'normalisedname': 'EXAMPLE ORG',
+            'companyid': '',
+            'fulladdress': '1 EXAMPLE STREET',
+            'city': 'LONDON',
+            'postcode': 'AA1 1AA',
+            'registerdate': '01/01/2020',
+            'removeddate': '',
+            'source': 'CH',
+            'source_register': 'Companies House',
+            'is_cic': '',
+            'iteration': '07/2026',
+        }
+        row.update(overrides)
+        return row
+
+    def test_equal_iteration_variants_ignore_input_order(self):
+        rows = [
+            {
+                'uid': 'GB-COH-1',
+                'id_in_source': '1',
+                'organisationname': 'Zulu Org',
+                'normalisedname': 'ZULU ORG',
+                'companyid': '',
+                'fulladdress': '9 ZULU STREET',
+                'city': 'LONDON',
+                'postcode': 'ZZ1 1ZZ',
+                'registerdate': '01/01/2020',
+                'removeddate': '',
+                'source': 'CH',
+                'source_register': 'Companies House',
+                'is_cic': '',
+                'iteration': '07/2026',
+            },
+            {
+                'uid': 'GB-COH-1',
+                'id_in_source': '1',
+                'organisationname': 'Alpha Org',
+                'normalisedname': 'ALPHA ORG',
+                'companyid': '',
+                'fulladdress': '1 ALPHA STREET',
+                'city': 'LONDON',
+                'postcode': 'AA1 1AA',
+                'registerdate': '01/01/2020',
+                'removeddate': '',
+                'source': 'CH',
+                'source_register': 'Companies House',
+                'is_cic': '',
+                'iteration': '07/2026',
+            },
+        ]
+        handler = DataHandler()
+        handler.tmp_fields = []
+
+        forward = handler.combine_org_details_per_source(deepcopy(rows))
+        reverse = handler.combine_org_details_per_source(
+            list(reversed(deepcopy(rows)))
+        )
+
+        assert forward == reverse
+        assert forward[0]['organisationname'] == 'Alpha Org'
+        assert forward[0]['fulladdress'] == '1 ALPHA STREET'
+
+    def test_latest_active_snapshot_keeps_historical_removal_as_extra(self):
+        rows = [
+            self.make_row(iteration='2022', removeddate='07/03/2023'),
+            self.make_row(iteration='07/2026', removeddate=''),
+        ]
+        handler = DataHandler()
+        handler.tmp_fields = []
+
+        sub_spine, extras = handler.combine_org_details_per_source(rows)
+
+        assert sub_spine['removeddate'] == ''
+        assert [row['removeddate'] for row in extras if row['removeddate']] == [
+            '07/03/2023'
+        ]
+
+    def test_daily_refresh_beats_monthly_bulk_status(self):
+        rows = [
+            self.make_row(iteration='07/2026', removeddate=''),
+            self.make_row(
+                iteration='18/07/2026',
+                removeddate='17/07/2026',
+                organisationname='Daily Refresh Org',
+                normalisedname='DAILY REFRESH ORG',
+                fulladdress='18 REFRESH STREET',
+            ),
+        ]
+        handler = DataHandler()
+        handler.tmp_fields = []
+
+        sub_spine, extras = handler.combine_org_details_per_source(rows)
+
+        assert sub_spine['removeddate'] == '17/07/2026'
+        assert sub_spine['organisationname'] == 'Daily Refresh Org'
+        assert sub_spine['fulladdress'] == '18 REFRESH STREET'
+        assert not [row for row in extras if row['removeddate']]
+
+    def test_daily_active_refresh_can_supersede_monthly_removed_status(self):
+        rows = [
+            self.make_row(
+                iteration='07/2026',
+                removeddate='07/03/2023',
+            ),
+            self.make_row(iteration='18/07/2026', removeddate=''),
+        ]
+        handler = DataHandler()
+        handler.tmp_fields = []
+
+        sub_spine, extras = handler.combine_org_details_per_source(rows)
+
+        assert sub_spine['removeddate'] == ''
+        assert any(row['removeddate'] == '07/03/2023' for row in extras)
+
+    def test_iteration_precision_order(self):
+        assert parse_iteration_date('2022') == datetime(2022, 1, 1)
+        assert parse_iteration_date('07/2026') == datetime(2026, 7, 1)
+        assert parse_iteration_date('18/07/2026') == datetime(2026, 7, 18)
+
+
+# ---------------------------------------------------------------------------
 # CCEW consolidation fixtures (items 6, 7, 12)
 # ---------------------------------------------------------------------------
 
@@ -185,6 +333,58 @@ class TestCCEWUmbrellaIdInSource:
         assert sub_spine['uid'] == 'GB-CHC-123456'
 
 
+class TestCCEWCurrentUmbrellaStatus:
+
+    def test_newest_active_registration_keeps_historical_dates_as_extras(self):
+        handler = CCEWDataHandler()
+        current = make_ccew_row(
+            uid='GB-CHC-800882',
+            id_in_source='800882-0',
+            organisationname='RE-REGISTERED TRUST',
+            normalisedname='RE REGISTERED TRUST',
+            registerdate='28/02/2012',
+            removeddate='',
+            iteration='07/2026',
+        )
+        historical = make_ccew_row(
+            uid='GB-CHC-800882',
+            id_in_source='800882',
+            organisationname='OLD TRUST',
+            normalisedname='OLD TRUST',
+            registerdate='03/02/1989',
+            removeddate='27/08/2009',
+            primary_name='',
+            primary_address='',
+            iteration='',
+        )
+
+        sub_spine, extras = handler.combine_org_details_per_source(
+            [historical, current]
+        )
+
+        assert sub_spine['registerdate'] == '28/02/2012'
+        assert sub_spine['removeddate'] == ''
+        assert '03/02/1989' in {row['registerdate'] for row in extras}
+        assert '27/08/2009' in {row['removeddate'] for row in extras}
+
+    def test_newest_removed_registration_remains_removed(self):
+        handler = CCEWDataHandler()
+        older = make_ccew_row(
+            registerdate='01/01/2000', removeddate='',
+            iteration='01/2020',
+        )
+        newest = make_ccew_row(
+            registerdate='01/01/2000', removeddate='02/02/2025',
+            iteration='07/2026',
+        )
+
+        sub_spine, _ = handler.combine_org_details_per_source(
+            [older, newest]
+        )
+
+        assert sub_spine['removeddate'] == '02/02/2025'
+
+
 class TestCCEWCqcRegCarriedThrough:
     """Item 12 (CCEW half): cqc_reg must survive consolidation in the
     non-umbrella branch too."""
@@ -205,6 +405,33 @@ class TestCCEWCqcRegCarriedThrough:
                                primary_name='', primary_address='')
         sub_spine, extras = handler.combine_org_details_per_source([umbrella, linked])
         assert str(sub_spine['cqc_reg']) == '1'
+
+
+class TestCCEWConsolidationDeterminism:
+
+    def test_equal_iteration_primary_variants_ignore_input_order(self):
+        handler = CCEWDataHandler()
+        rows = [
+            make_ccew_row(
+                organisationname='Zulu Charity',
+                normalisedname='ZULU CHARITY',
+                fulladdress='9 ZULU STREET',
+            ),
+            make_ccew_row(
+                organisationname='Alpha Charity',
+                normalisedname='ALPHA CHARITY',
+                fulladdress='1 ALPHA STREET',
+            ),
+        ]
+
+        forward = handler.combine_org_details_per_source(deepcopy(rows))
+        reverse = handler.combine_org_details_per_source(
+            list(reversed(deepcopy(rows)))
+        )
+
+        assert forward == reverse
+        assert forward[0]['organisationname'] == 'Alpha Charity'
+        assert forward[0]['fulladdress'] == '1 ALPHA STREET'
 
 
 # ---------------------------------------------------------------------------
@@ -274,6 +501,30 @@ class TestOSCRConsolidation:
         sub_spine, extras = handler.combine_org_details_per_source([r1, r2])
         assert sub_spine['organisationname'] == 'Scottish Charity'
 
+    def test_equal_iteration_variants_ignore_input_order(self):
+        handler = OSCRDataHandler()
+        rows = [
+            make_oscr_row(
+                organisationname='Zulu Scottish Charity',
+                normalisedname='ZULU SCOTTISH CHARITY',
+                fulladdress='9 ZULU STREET',
+            ),
+            make_oscr_row(
+                organisationname='Alpha Scottish Charity',
+                normalisedname='ALPHA SCOTTISH CHARITY',
+                fulladdress='1 ALPHA STREET',
+            ),
+        ]
+
+        forward = handler.combine_org_details_per_source(deepcopy(rows))
+        reverse = handler.combine_org_details_per_source(
+            list(reversed(deepcopy(rows)))
+        )
+
+        assert forward == reverse
+        assert forward[0]['organisationname'] == 'Alpha Scottish Charity'
+        assert forward[0]['fulladdress'] == '1 ALPHA STREET'
+
 
 # ---------------------------------------------------------------------------
 # Item 9: address must only lose a TRAILING city, never be split mid-address
@@ -317,6 +568,15 @@ class TestSortAddressFields:
         DataHandler().sort_address_fields(row)
         assert row['fulladdress'] == '12 HIGH STREET'
 
+    @pytest.mark.parametrize(
+        "corrupt_prefix",
+        ['\x84\n ', '\xc2\x84\n ', '\xc2\u201e\u2026 '],
+    )
+    def test_confirmed_legacy_care_of_prefix_is_normalised(self, corrupt_prefix):
+        row = self.make_row(corrupt_prefix + '10 High Street', '')
+        DataHandler().sort_address_fields(row)
+        assert row['fulladdress'] == '℅ 10 HIGH STREET'
+
 
 # ---------------------------------------------------------------------------
 # Item 1: consolidation failures must not silently drop organisations
@@ -357,6 +617,11 @@ class TestIterationDedup:
     def test_bare_year_is_oldest_point_in_year(self):
         assert parse_iteration_tag('2022') == datetime(2022, 1, 1)
         assert parse_iteration_tag('2022') < parse_iteration_tag('02/2022')
+
+    def test_daily_refresh_beats_monthly_snapshot(self):
+        assert parse_iteration_tag('18/07/2026') > parse_iteration_tag(
+            '07/2026'
+        )
 
     def test_blank_and_garbage_treated_as_oldest(self):
         assert parse_iteration_tag('') == datetime(1900, 1, 1)

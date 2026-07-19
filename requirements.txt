@@ -1,8 +1,8 @@
-click
-pandas
-upsetplot
-matplotlib
-matplotlib_venn
-tqdm
-pydantic
-memory_profiler
+beautifulsoup4==4.14.3
+click==8.3.2
+numpy==2.2.6
+openpyxl==3.1.5
+pandas==2.2.2
+pydantic==2.12.5
+requests==2.32.3
+tqdm==4.65.0

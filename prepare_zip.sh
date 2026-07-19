@@ -1,26 +1,41 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
-# prepare zipped spine files:
+# Compatibility wrapper for the safe Python release packager.
+# All five paths are resolved relative to this repository directory when they
+# are not absolute. The output directory must not already exist.
 
-jupyter nbconvert --to pdf --execute visualise/stats_and_visuals.ipynb
-pdflatex builder.tex
-zip tso-spine-files.zip ../public_spine_data/TSCS_spine.*csv builder.pdf  -j
-git add tso-spine-files.zip
-git commit -m 'updated spine zip file for downloads'
-git push origin new-build-spine
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
+usage() {
+    cat <<'EOF'
+Usage:
+  ./prepare_zip.sh DATA_DIR GUIDANCE_HTML GUIDANCE_PDF LICENCE_FILE OUTPUT_DIR
 
-# prepare zipped financial history files:
+The command validates the four canonical TSCS CSVs, checks the guidance, and
+creates an exact-whitelist release directory plus deterministic transport ZIP.
+It never runs notebooks, Git commands, pushes, deploys, or shell wildcards.
 
-zip finhist_files.zip ../processed_data/payload_data/public_spine.finhist.csv -j
-git add finhist_files.zip
-git commit -m 'updated finhist zip for downloads'
-git push origin new-build-spine
+Set PYTHON_BIN to override the interpreter. By default the script uses the
+Windows project venv when present, otherwise python3.
+EOF
+}
 
+if [[ $# -ne 5 ]]; then
+    usage >&2
+    exit 2
+fi
 
+if [[ -z "${PYTHON_BIN:-}" ]]; then
+    if [[ -x ".tso/Scripts/python.exe" ]]; then
+        PYTHON_BIN=".tso/Scripts/python.exe"
+    else
+        PYTHON_BIN="python3"
+    fi
+fi
 
+export PYTHONUTF8=1
+export PYTHONHASHSEED=0
 
-
-
-
-
+"$PYTHON_BIN" cli.py prepare-release "$1" "$2" "$3" "$4" "$5"

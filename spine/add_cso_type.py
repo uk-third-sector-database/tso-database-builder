@@ -4,9 +4,12 @@ Add cso_type and cso_subtype fields to the TSCS Spine dataset.
 This is the final post-processing step of the spine build: it takes the
 built spine CSV plus the SIC codes lookup and appends the two
 classification columns documented in the Organisation Register guidance.
-Classification logic ported from dcms-report/dcms-report-v3.R (Step 2);
-verified July 2026 to reproduce the published v1.0 (March 2026) values
-exactly (0 mismatches across 770,923 rows).
+Classification logic was ported from dcms-report/dcms-report-v3.R (Step 2).
+The July 2026 review found that the earlier vectorised implementation allowed
+later rules to overwrite earlier rules even though the documented method is
+first-match-wins. The corrected implementation below enforces that priority;
+its one-off subtype delta is therefore a deliberate methodology correction,
+not an attempt to reproduce the affected v1.0 subtype values.
 
 Do not reorder the subtype rules: classification uses sequential masking
 (first matching rule wins), so rule order is part of the method.
@@ -172,7 +175,15 @@ def add_cso_subtype(
         ("Membership Organisation", unclassified & (div == 94)),
     ]
 
-    for label, mask in rules:
+    for label, rule_mask in rules:
+        # ``rules`` is constructed before this loop, so every stored mask was
+        # evaluated against the initial unclassified set. Narrow it again here
+        # to preserve the documented first-match-wins precedence. SIC columns
+        # use pandas' nullable dtypes, so a missing five-digit SIC can produce
+        # ``pd.NA`` here. Treat that as "this SIC condition did not match";
+        # otherwise the unknown value poisons ``unclassified`` and prevents
+        # later name-only rules from firing.
+        mask = (unclassified & rule_mask).fillna(False)
         subtype = subtype.where(~mask, label)
         unclassified = unclassified & ~mask
 
@@ -186,6 +197,28 @@ def add_cso_subtype(
     # Drop temporary SIC columns
     spine = spine.drop(columns=["primary_sic", "sic_div"])
     return spine
+
+
+def prepare_primary_sic(sic_raw: pd.DataFrame) -> pd.DataFrame:
+    """Choose the first SIC-2007 (five-digit) code for each uid.
+
+    Four-digit legacy codes remain useful provenance in the published SIC
+    lookup but must not be interpreted as SIC-2007 divisions.
+    """
+    candidates = sic_raw[["uid", "SIC"]].copy()
+    candidates["primary_sic"] = pd.to_numeric(
+        candidates["SIC"].astype(str).str.extract(
+            r"^\s*(\d{5})(?!\d)", expand=False
+        ),
+        errors="coerce",
+    )
+    candidates = candidates[candidates["primary_sic"].notna()].copy()
+    candidates["sic_div"] = (
+        candidates["primary_sic"] // 1000
+    ).astype("Int64")
+    return candidates.drop_duplicates(subset="uid", keep="first")[
+        ["uid", "primary_sic", "sic_div"]
+    ]
 
 
 def add_cso_type_to_spine(spine_path: str, sic_path: str, out_path: str = None) -> None:
@@ -203,18 +236,17 @@ def add_cso_type_to_spine(spine_path: str, sic_path: str, out_path: str = None) 
     print(f"  {len(spine):,} rows, {len(spine.columns)} columns")
 
     print("Loading SIC codes...")
-    sic_raw = pd.read_csv(sic_path, low_memory=False)
+    sic_raw = pd.read_csv(
+        sic_path,
+        low_memory=False,
+        dtype={"uid": str, "SIC": str},
+        keep_default_na=False,
+    )
     print(f"  {len(sic_raw):,} rows")
 
-    # Extract primary SIC code (first per uid)
-    sic_raw["primary_sic"] = pd.to_numeric(
-        sic_raw["SIC"].astype(str).str.extract(r"^(\d+)", expand=False),
-        errors="coerce",
-    )
-    sic_raw["sic_div"] = (sic_raw["primary_sic"] // 1000).astype("Int64")
-    sic_primary = sic_raw.drop_duplicates(subset="uid", keep="first")[
-        ["uid", "primary_sic", "sic_div"]
-    ]
+    # Extract the first five-digit SIC-2007 code per uid. Legacy four-digit
+    # codes are retained in the lookup but are not valid inputs to these rules.
+    sic_primary = prepare_primary_sic(sic_raw)
 
     # Normalise is_cic to boolean
     spine["is_cic"] = spine["is_cic"].astype(str).str.strip().str.lower() == "true"

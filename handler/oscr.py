@@ -85,15 +85,19 @@ class OSCRDataHandler(DataHandler):
 
     def find_primary_name(self,names_list):
         '''names_list is list of tuples (orgname,normname,name_origin)'''
-        primary=('','')
-        extra_names = set()
-        date = datetime(2000,1,1)
+        def stable_data_key(data_tuple):
+            return tuple('' if value is None else str(value) for value in data_tuple)
+
+        primary = ('','')
+        all_names = set()
+        dated_candidates = []
+        undated_candidates = []
+
         for name in names_list:
             name_tuple = name[:-1]
             if all(x in nulls for x in name_tuple): continue
+            all_names.add(name_tuple)
             name_origin = name[-1]
-            #print(f'name_origin = {name_origin}')
-            #print(f'name_tuple = {name_tuple}')
             if 'NAME' in name_origin.upper():
                 # name_origin is usually 'mm/yyyy Name' but can have no leading
                 # date (e.g. plain 'Name') - treat those entries as undated
@@ -101,46 +105,69 @@ class OSCRDataHandler(DataHandler):
                     d = datetime.strptime((name_origin.split(' ')[0]),'%m/%Y')
                 except ValueError:
                     d = None
-                if d is not None and d > date:
-                    date = d
-                    extra_names.add(primary)
-                    primary = name_tuple
-                    #print(f' -- primary = {primary}')
-                    #print(f' -- extra_names = {extra_names}')
-                elif d is None and primary == ('',''):
-                    # undated 'Name' entry: honour it unless a dated entry has already won
-                    primary = name_tuple
-            
-            extra_names.add(name_tuple)
+                if d is None:
+                    undated_candidates.append(name_tuple)
+                else:
+                    dated_candidates.append((d, name_tuple))
 
-        extra_names = [i for i in extra_names if i != ('','') and i != primary]
-        #print(f'primary name = {primary}')
-        #print(f'extra names = {extra_names}')
+        eligible_dated = [
+            (date, data) for date, data in dated_candidates
+            if date > datetime(2000, 1, 1)
+        ]
+        if eligible_dated:
+            latest_date = max(date for date, _ in eligible_dated)
+            primary = min(
+                (data for date, data in eligible_dated if date == latest_date),
+                key=stable_data_key,
+            )
+        elif undated_candidates:
+            primary = min(undated_candidates, key=stable_data_key)
+
+        extra_names = sorted(
+            (name for name in all_names if name != primary and any(name)),
+            key=stable_data_key,
+        )
         return primary,extra_names
     
     def find_primary_info(self,address_list):
         '''address_list is list of tuples (fulladdress,city,postcode,iteration)
         and primary address is that found in most recent iteration'''
 
+        def stable_data_key(data_tuple):
+            return tuple('' if value is None else str(value) for value in data_tuple)
+
         primary = ('','','')
-        date = datetime(2000,1,1)
-        extra_addresses = []
+        all_addresses = set()
+        dated_candidates = []
         for item in address_list:
             address_tuple = item[:-1]
             if all(x in nulls for x in address_tuple): continue
+            all_addresses.add(address_tuple)
             iteration = item[-1]
             if iteration:
-                iteration = datetime.strptime(iteration,'%m/%Y')
-                if iteration > date:
-                    date = iteration
-                    primary = address_tuple
+                try:
+                    iteration_date = datetime.strptime(iteration,'%m/%Y')
+                except ValueError:
+                    iteration_date = None
+                if iteration_date is not None:
+                    dated_candidates.append((iteration_date, address_tuple))
 
-            extra_addresses.append(address_tuple)
-            
-        extra_addresses = [i for i in extra_addresses if i != primary and i != ('','','')]
-        print(f'address_list = {address_list}')
-        print(f'primary address = {primary}')
-        print(f'extra addresses = {extra_addresses}')
+        eligible_dated = [
+            (date, data) for date, data in dated_candidates
+            if date > datetime(2000, 1, 1)
+        ]
+        if eligible_dated:
+            latest_date = max(date for date, _ in eligible_dated)
+            primary = min(
+                (data for date, data in eligible_dated if date == latest_date),
+                key=stable_data_key,
+            )
+
+        extra_addresses = sorted(
+            (address for address in all_addresses
+             if address != primary and any(address)),
+            key=stable_data_key,
+        )
         return primary, extra_addresses
 
 
@@ -172,8 +199,6 @@ class OSCRDataHandler(DataHandler):
             if primary_remdate:
                 new_sub_spine_row["removeddate"] =  primary_remdate 
             new_extra_rows = generate_extra_rows(extra_names,extra_addresses,extra_regdates,extra_remdates)
-            print(f'in generate_subspine_and_extras. {len(new_extra_rows)} rows created.')
-            print(f'in generate_subspine_and_extras. new subspine row: {new_sub_spine_row}')
             return new_sub_spine_row,new_extra_rows
         
         def generate_extra_rows(names,addresses,regdates,remdates):   
@@ -201,7 +226,6 @@ class OSCRDataHandler(DataHandler):
                     extra_csv_entry_creator({
                     "removeddate" : date
                 }))
-            print(f'in generate_extra_rows. {len(new_extras_rows)} rows created. \n\n{new_extras_rows}\n\n')
             return new_extras_rows
         
         def merge_extra_rows(new_extra_rows, extra_rows, key_field="uid"):
@@ -221,7 +245,7 @@ class OSCRDataHandler(DataHandler):
                 True if r1 and r2 can be merged without losing or overwriting info.
                 (Shared keys must either match or one must be empty)
                 """
-                for k in set(r1) | set(r2):
+                for k in sorted(set(r1) | set(r2)):
                     v1 = clean(r1.get(k))
                     v2 = clean(r2.get(k))
 
@@ -235,7 +259,7 @@ class OSCRDataHandler(DataHandler):
                 """
                 merged = {}
 
-                for k in set(r1) | set(r2):
+                for k in sorted(set(r1) | set(r2)):
                     v1 = clean(r1.get(k))
                     v2 = clean(r2.get(k))
 
@@ -265,17 +289,11 @@ class OSCRDataHandler(DataHandler):
                     if is_compatible(r, e):
                         new_r = merged_row(r, e)
 
-                        if new_r != r:
-                            print(f"\nMERGED for {uid}")
-                            print(f"OLD: {r}")
-                            print(f"NEW: {new_r}")
-
                         result[i] = new_r
                         placed = True
                         break
 
                 if not placed:
-                    print(f"\nNEW ROW for {uid}: {e}")
                     result.append(e)
 
             return result        
@@ -336,18 +354,12 @@ class OSCRDataHandler(DataHandler):
         if crossborder: new_sub_spine_row['crossborder'] = 1
 
         new_sub_spine_row, extra_rows = generate_subspine_and_extras(new_sub_spine_row,names,addresses,regdates,remdates)
-        print('subspine row = ',new_sub_spine_row)
-        
-        
-
         for entry in extra_rows:
             entry['uid'] = uid
             entry['source'] = source
             entry['source_register'] = source_register
-        print('extras ',extra_rows)
         new_extras_rows = merge_extra_rows(new_extras_rows, extra_rows)
 
-        print(f'returning {new_extras_rows} to base for writing to file')
         '''
         if primary_name:
             new_sub_spine_row["organisationname"] =  primary_name[0]

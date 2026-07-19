@@ -8,6 +8,24 @@ import os
 from .base_definitions import SUB_SPINE_CSV_FIELDS,EXTRA_DETAILS_CSV_FIELDS,ORG_ID_MAPPING,sub_spine_entry_creator,extra_csv_entry_creator
 
 
+def parse_iteration_date(value):
+    """Parse supported source snapshot tags at their available precision.
+
+    Bare years and month/year tags represent the first day of the period;
+    daily API refresh tags can therefore supersede a bulk snapshot from the
+    same month without relying on file or set iteration order.
+    """
+    if isinstance(value, datetime):
+        return value
+    value = str(value or '').strip()
+    for date_format in ('%d/%m/%Y', '%m/%Y', '%Y'):
+        try:
+            return datetime.strptime(value, date_format)
+        except ValueError:
+            continue
+    return None
+
+
 def fix_dates_set(datesset, order):
     '''select the earliest (order=0) or latest (order=-1) date from a set of
     dd/mm/yyyy date strings (datetime objects also accepted), comparing
@@ -27,7 +45,9 @@ def fix_dates_set(datesset, order):
         except (TypeError, ValueError):
             unparseable.append(d)
     if parseable:
-        parseable.sort(key=lambda x: x[0])
+        # A set can contain distinct representations of the same date. Include
+        # the original value in the key so equal dates do not inherit set order.
+        parseable.sort(key=lambda x: (x[0], str(x[1])))
         ordered = [d for _, d in parseable]
         primary = ordered[order]
         extra_dates = [i for i in ordered if i != primary] + sorted(unparseable, key=str)
@@ -42,7 +62,7 @@ def fix_dates_set(datesset, order):
 
 def dict_indexed_by_field(csv_in,fieldname):
     field_dict={}
-    with open(csv_in,'r') as file:
+    with open(csv_in, 'r', newline='', encoding='utf-8-sig') as file:
         reader = csv.DictReader(file)
         for row in reader:
             if not fieldname in row.keys():
@@ -117,6 +137,14 @@ class DataHandler:
         else:
             row['fulladdress'] = fulladdress_str.upper()
 
+        # Three exact mojibake/control-character prefixes occur in reconstructed
+        # legacy OSCR care-of addresses. Normalise only those confirmed leading
+        # forms so they deduplicate with the valid current "℅ " address.
+        for corrupt_prefix in ('\x84\n ', '\xc2\x84\n ', '\xc2\u201e\u2026 '):
+            if row['fulladdress'].startswith(corrupt_prefix):
+                row['fulladdress'] = '℅ ' + row['fulladdress'][len(corrupt_prefix):]
+                break
+
         try: row['fulladdress'] = row['fulladdress'].split(row['postcode'].strip())[0]
         except ValueError: pass
         
@@ -146,32 +174,43 @@ class DataHandler:
     def find_primary_info(self,details_list):
         '''details_list is list of tuples (fulladdress,city,postcode,iteration) | (name,normname,iteration)
         and primary details are that found in most recent iteration'''
-        details_list = list(details_list) 
+        details_list = list(details_list)
+        if not details_list:
+            return (), []
+
+        def stable_data_key(data_tuple):
+            return tuple('' if value is None else str(value) for value in data_tuple)
+
         primary = tuple('' for _ in range(len(details_list[0])-1))
-        date = datetime(1900,1,1)
-        extra_details = set()
-        #print(f'\n\n in find_primary_info. input = {details_list}')
+        dated_candidates = []
+        all_details = set()
+
         for item in details_list:
             data_tuple = item[:-1]
-            if len([i for i in data_tuple if i]) == 0:
+            if not any(data_tuple):
                 continue
+            all_details.add(data_tuple)
             iteration = item[-1]
-            
-            if iteration:
-                #print(f'iteration = {iteration}, date = {date}')
-                if len(iteration) == 4:
-                    iteration = datetime.strptime(iteration,'%Y')
-                else:
-                    iteration = datetime.strptime(iteration,'%m/%Y')
-                #print(f'iteration > date = {iteration > date}')
-                if iteration > date:
-                    
-                    date = iteration
-                    primary = data_tuple
-            extra_details.add(data_tuple)
-        extra_details = [i for i in extra_details if i != primary and i != ('','','')]
-        #print(f'primary = {primary}')
-        #print(f'extra = {extra_details}')
+            if not iteration:
+                continue
+            iteration_date = parse_iteration_date(iteration)
+            if iteration_date is not None:
+                dated_candidates.append((iteration_date, data_tuple))
+
+        if dated_candidates:
+            latest_iteration = max(date for date, _ in dated_candidates)
+            # Equal-iteration variants used to be selected by arbitrary set
+            # order. The lexical detail tuple is the explicit tie-break.
+            primary = min(
+                (data for date, data in dated_candidates if date == latest_iteration),
+                key=stable_data_key,
+            )
+
+        extra_details = sorted(
+            (detail for detail in all_details
+             if detail != primary and any(detail)),
+            key=stable_data_key,
+        )
         return primary, extra_details
 
 
@@ -187,7 +226,7 @@ class DataHandler:
         names = set()
         addresses = set()
         regdates = set()
-        remdates = set()
+        removal_history = []
         cic_flag = False
 
         for r in rows:
@@ -204,8 +243,12 @@ class DataHandler:
                 return []
 
 
-            for var in [(n,names),(a,addresses),(reg,regdates),(dis,remdates)]:
+            for var in [(n,names),(a,addresses),(reg,regdates)]:
                 var[1].add(var[0])
+            removal_history.append((
+                parse_iteration_date(r['iteration']) or datetime.min,
+                dis,
+            ))
             if c == 'True': 
                 cic_flag = True
 
@@ -213,7 +256,39 @@ class DataHandler:
         primary_name, extra_names = self.find_primary_info(names)
         primary_address, extra_addresses = self.find_primary_info(addresses)
         primary_regdate, extra_regdates = fix_dates_set(regdates,0) # use earliest registration date
-        primary_remdate, extra_remdates = fix_dates_set(remdates,-1) # use latest removal date
+
+        # Current status comes from the newest source snapshot, rather than
+        # from the latest historical removal date. A daily API refresh is more
+        # recent than a monthly bulk row from the same month. If duplicate rows
+        # at the exact same newest timestamp disagree, retain the nonblank
+        # removal status conservatively and deterministically.
+        latest_iteration = max(
+            (iteration for iteration, _ in removal_history),
+            default=datetime.min,
+        )
+        latest_remdates = {
+            removeddate for iteration, removeddate in removal_history
+            if iteration == latest_iteration and removeddate
+        }
+        if latest_remdates:
+            primary_remdate, _ = fix_dates_set(latest_remdates, -1)
+        else:
+            primary_remdate = ''
+
+        all_remdates = {
+            removeddate for _, removeddate in removal_history if removeddate
+        }
+
+        def removal_date_sort_key(value):
+            try:
+                return (0, datetime.strptime(value, '%d/%m/%Y'))
+            except (TypeError, ValueError):
+                return (1, str(value))
+
+        extra_remdates = sorted(
+            (date for date in all_remdates if date != primary_remdate),
+            key=removal_date_sort_key,
+        )
 
         new_sub_spine_row = sub_spine_entry_creator(
             {'uid' : r['uid'],
@@ -366,7 +441,8 @@ def compress_org_details(csv_in,
 
     # for each uid, if more than one record, find unique names and addresses
     # and write line to csv_out, with additional data to details_csv_out
-    with open(spine_csv_out,'w+',newline='') as spine_csvfile,  open(details_csv_out, 'w+', newline='') as details_csvfile:
+    with open(spine_csv_out, 'w+', newline='', encoding='utf-8') as spine_csvfile, \
+         open(details_csv_out, 'w+', newline='', encoding='utf-8') as details_csvfile:
         tmp_fields = data_handler.tmp_fields
         if 'iteration' in tmp_fields: tmp_fields.remove('iteration')
         spine_writer = csv.DictWriter(spine_csvfile, fieldnames=SUB_SPINE_CSV_FIELDS+tmp_fields, extrasaction='ignore', restval='', quoting=csv.QUOTE_ALL)

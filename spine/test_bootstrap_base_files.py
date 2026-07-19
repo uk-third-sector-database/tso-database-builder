@@ -232,6 +232,30 @@ class TestLoaders:
         assert links['companyid'].get('GB-CHC-7') == '001'     # unique -> used
         assert 'GB-CHC-8' not in links['companyid']            # ambiguous -> not
 
+    def test_association_only_match_does_not_mark_dates_as_consolidated(self, tmp_path):
+        rows = [
+            dict(uid='', orgA_uid='GB-CHC-1001064',
+                 orgA_id_in_source='GB-CHC-1001064',
+                 orgA_source='ccew',
+                 orgB_uid='GB-CQC-1-11982780181',
+                 orgB_id_in_source='1-11982780181',
+                 orgB_source='carequalitycommission',
+                 match_type='name - care'),
+            dict(uid='GB-CHC-800882', orgA_uid='GB-CHC-800882',
+                 orgA_id_in_source='800882-0', orgA_source='ccew',
+                 orgB_uid='GB-COH-08102628',
+                 orgB_id_in_source='08102628', orgB_source='CH',
+                 match_type='companyid - id_in_source'),
+        ]
+        path = str(tmp_path / 'm.csv')
+        _write_csv(path, MATCH_FIELDS, rows)
+
+        links = load_matches(path)
+
+        assert 'GB-CHC-1001064' not in links['matched_uids']
+        assert 'GB-CQC-1-11982780181' not in links['matched_uids']
+        assert {'GB-CHC-800882', 'GB-COH-08102628'} <= links['matched_uids']
+
 
 # ---------------------------------------------------------------------------
 # per-organisation date rules
@@ -313,6 +337,55 @@ class TestBuildCcewRows:
         v = rows[1]
         assert v['organisationname'] == 'ALPHA CHARITY'
         assert v['primary_name'] == '' and v['iteration'] == ''
+
+    def test_displaced_published_spine_date_is_preserved_as_variant(self):
+        stats = defaultdict(int)
+        spine = dict(organisationname='RE-REGISTERED TRUST',
+                     fulladdress='1 HIGH STREET', city='LONDON',
+                     postcode='E1 6AN', registerdate='03/02/1989',
+                     removeddate='')
+        supp = [
+            dict(organisationname='', fulladdress='', city='', postcode='',
+                 registerdate='28/02/2012', removeddate='27/08/2009'),
+        ]
+
+        rows = build_ccew_rows(
+            'GB-CHC-800882', spine, supp, True, '08102628', None, stats
+        )
+
+        # The matched primary deliberately leaves date selection to the
+        # downstream regulator rows, but neither published date is discarded.
+        assert rows[0]['registerdate'] == ''
+        assert {r['registerdate'] for r in rows} >= {
+            '03Feb1989', '28Feb2012'
+        }
+        assert stats['registerdate_spine_date_preserved_as_variant'] == 1
+
+    def test_association_only_record_keeps_published_registration_date(self):
+        stats = defaultdict(int)
+        spine = dict(organisationname='OLD CHARITY',
+                     fulladdress='1 HIGH STREET', city='LONDON',
+                     postcode='E1 6AN', registerdate='06/12/1990',
+                     removeddate='')
+        supp = [
+            dict(organisationname='', fulladdress='', city='', postcode='',
+                 registerdate='10/12/1997', removeddate='12/09/1997'),
+        ]
+
+        rows = build_ccew_rows(
+            'GB-CHC-1001064', spine, supp, False, '', None, stats
+        )
+        handler = CCEWDataHandler()
+        formatted = [
+            handler.format_row('organisationname', row) for row in rows
+        ]
+        sub_spine, extras = handler.combine_org_details_per_source(
+            formatted
+        )
+
+        assert sub_spine['registerdate'] == '06/12/1990'
+        assert sub_spine['removeddate'] == '12/09/1997'
+        assert any(r['registerdate'] == '10/12/1997' for r in extras)
 
     def test_primary_details_beat_variants_but_lose_to_fresh_download(self):
         # the downstream CCEW handler must pick the tagged primary over

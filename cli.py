@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import click
 
 from handler.base import do_csv_processing,compress_org_details,sort_csv_by_field
@@ -21,8 +23,20 @@ from spine.bootstrap_lost_registers import write_lost_register_files
 from spine.seed_supplementary import seed_supplementary as run_seed_supplementary
 from spine.suppress_echo_matches import suppress_echo_matches as run_suppress_echo_matches
 from spine.build_public_spine import process_csvs_to_build_spine
-from spine.verify_build import verify_representation,create_tex_table
+from spine.verify_build import (
+    RepresentationError,
+    create_tex_table,
+    verify_representation,
+)
 from spine.add_cso_type import add_cso_type_to_spine
+from spine.release import (
+    ReleasePackagingError,
+    ReleaseValidationError,
+    format_package_report,
+    format_validation_report,
+    prepare_release as run_prepare_release,
+    validate_release as run_validate_release,
+)
 
 
 from handler.all_companies_house import main_process, sic_codes_lookup
@@ -214,7 +228,14 @@ def build_spine(infiles, outfile_base, allow_missing_linkage):
 @click.argument("infiles", nargs =-1)
 @click.option("-o", "outfile_base", default="public_spine")
 def check_spine(infiles, outfile_base):
-    verify_representation(infiles,outfile_base)
+    """Fail unless every non-care input UID is represented in the outputs."""
+
+    if not infiles:
+        raise click.ClickException("at least one source spine input is required")
+    try:
+        verify_representation(infiles, outfile_base)
+    except RepresentationError as exc:
+        raise click.ClickException(str(exc)) from exc
     
 
 @cli.command()
@@ -243,6 +264,121 @@ def add_cso_type(spine_csv, sic_csv, outfile):
     build and must run after build-sic-codes-list.
     """
     add_cso_type_to_spine(spine_csv, sic_csv, outfile)
+
+
+@cli.command("validate-release")
+@click.argument(
+    "data_dir",
+    type=click.Path(
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        readable=True,
+        path_type=Path,
+    ),
+)
+def validate_release_command(data_dir):
+    """Validate the four canonical release CSV files in DATA_DIR.
+
+    Checks file names, exact schemas, logical CSV rows, UIDs, dates, match
+    references and SIC-code structure. Prints logical counts and SHA-256
+    hashes. Any failed check exits nonzero.
+    """
+    try:
+        result = run_validate_release(data_dir)
+    except ReleaseValidationError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(format_validation_report(result))
+
+
+@cli.command("prepare-release")
+@click.argument(
+    "data_dir",
+    type=click.Path(
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        readable=True,
+        path_type=Path,
+    ),
+)
+@click.argument(
+    "guidance_html",
+    type=click.Path(
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        path_type=Path,
+    ),
+)
+@click.argument(
+    "guidance_pdf",
+    type=click.Path(
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        path_type=Path,
+    ),
+)
+@click.argument(
+    "licence_file",
+    type=click.Path(
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        path_type=Path,
+    ),
+)
+@click.argument(
+    "output_dir",
+    type=click.Path(
+        exists=False,
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        path_type=Path,
+    ),
+)
+@click.option(
+    "--zip/--no-zip",
+    "create_zip",
+    default=True,
+    show_default=True,
+    help="Also create a deterministic transport ZIP of the seven payload files.",
+)
+def prepare_release_command(
+    data_dir,
+    guidance_html,
+    guidance_pdf,
+    licence_file,
+    output_dir,
+    create_zip,
+):
+    """Validate and create a new, exact-whitelist public release directory.
+
+    DATA_DIR supplies the four canonical TSCS CSVs. GUIDANCE_HTML,
+    GUIDANCE_PDF and LICENCE_FILE must use their canonical published names.
+    OUTPUT_DIR must not exist. This command only copies files; it never runs
+    Git, commits, pushes or deploys.
+    """
+    try:
+        result = run_prepare_release(
+            data_dir,
+            guidance_html,
+            guidance_pdf,
+            licence_file,
+            output_dir,
+            create_zip=create_zip,
+        )
+    except (ReleaseValidationError, ReleasePackagingError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(format_validation_report(result.validation))
+    click.echo("")
+    click.echo(format_package_report(result))
+
 
 if __name__ == "__main__":
     cli()

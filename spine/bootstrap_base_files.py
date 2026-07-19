@@ -237,9 +237,10 @@ def load_matches(matches_csv):
     """One pass over the published matches file.
 
     Returns a dict with:
-      matched_uids   : every uid that appears in any match row (these
-                       organisations' spine dates may have been merged
-                       across sources)
+      matched_uids   : endpoints of real consolidation rows (uid non-blank).
+                       Association-only rows (uid blank) do not merge source
+                       data, so their endpoints' spine dates remain their own
+                       regulator dates.
       absorbed_into  : orgB_uid -> orgA_uid for real (uid non-blank) matches;
                        organisations absent from the spine main file live here
       companyid      : charity uid -> company number ('companyid -
@@ -260,11 +261,8 @@ def load_matches(matches_csv):
         for row in csv.DictReader(f):
             a, b = row['orgA_uid'], row['orgB_uid']
             mt = row['match_type']
-            if a:
-                matched_uids.add(a)
-            if b:
-                matched_uids.add(b)
             if row['uid'] and a and b and a != b:
+                matched_uids.update((a, b))
                 absorbed_into.setdefault(b, a)
 
             pa, pb = _prefix_of(a), _prefix_of(b)
@@ -445,6 +443,37 @@ def _convert(datestr, stats):
     return out
 
 
+def _preserve_displaced_spine_dates(rows, blank_row, spine_row,
+                                    selected_regdate, selected_remdate, stats):
+    """Keep published main-file dates that date selection moved off primary.
+
+    A published spine date may have been consolidated from another source,
+    which is why ``choose_primary_dates`` can prefer regulator-attributed
+    supplementary dates for a matched organisation.  Discarding the main
+    value entirely is nevertheless irreversible and caused old registration
+    periods to disappear on a rebuild.  Write each displaced value as its own
+    untagged historical row; a fresh ``-0`` regulator row can then remain the
+    current primary while the prior value survives as a supplementary variant.
+    """
+    if spine_row is None:
+        return
+
+    for field, selected in (
+        ('registerdate', selected_regdate),
+        ('removeddate', selected_remdate),
+    ):
+        value = spine_row[field]
+        if not value or value == selected:
+            continue
+        converted = _convert(value, stats)
+        if not converted or any(row[field] == converted for row in rows):
+            continue
+        variant = blank_row()
+        variant[field] = converted
+        rows.append(variant)
+        stats[f'{field}_spine_date_preserved_as_variant'] += 1
+
+
 def build_ccew_rows(uid, spine_row, supp_rows, matched, companyid, absorber_row,
                     stats, as_of=AS_OF_ITERATION):
     number = uid[len('GB-CHC-'):]
@@ -477,6 +506,9 @@ def build_ccew_rows(uid, spine_row, supp_rows, matched, companyid, absorber_row,
         if any(v[f] for f in ('organisationname', 'addressline1', 'city', 'postcode',
                               'registerdate', 'removeddate')):
             rows.append(v)
+    _preserve_displaced_spine_dates(
+        rows, blank, spine_row, regdate, remdate, stats
+    )
     return rows
 
 
@@ -518,6 +550,9 @@ def build_oscr_rows(uid, spine_row, supp_rows, matched, links_2012, crossborder,
         if any(v[f] for f in ('organisationname', 'addressline1', 'city', 'postcode',
                               'registerdate', 'removeddate')):
             rows.append(v)
+    _preserve_displaced_spine_dates(
+        rows, blank, spine_row, regdate, remdate, stats
+    )
     return rows
 
 
@@ -577,6 +612,9 @@ def build_ccni_rows(uid, spine_row, supp_rows, matched, companyid, absorber_row,
         if any(v[f] for f in ('organisationname', 'address', 'city', 'postcode',
                               'registerdate', 'removeddate')):
             rows.append(v)
+    _preserve_displaced_spine_dates(
+        rows, blank, spine_row, regdate, remdate, stats
+    )
     return rows
 
 

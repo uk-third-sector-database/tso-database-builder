@@ -10,9 +10,10 @@ import pandas as pd
 
 def parse_iteration_tag(value):
     '''parse an iteration tag into a datetime for chronological comparison.
-    Accepts 'mm/yyyy'; bare years (e.g. '2022') count as the oldest point in
-    that year; 8-digit ddmmyyyy/yyyymmdd tags are also recognised. Anything
-    blank or unrecognised is treated as the oldest possible.'''
+    Accepts 'dd/mm/yyyy' and 'mm/yyyy'; bare years (e.g. '2022') count as
+    the oldest point in that year; 8-digit ddmmyyyy/yyyymmdd tags are also
+    recognised. Anything blank or unrecognised is treated as the oldest
+    possible.'''
     oldest = datetime(1900, 1, 1)
     if value is None or (not isinstance(value, str) and pd.isna(value)):
         return oldest
@@ -20,6 +21,8 @@ def parse_iteration_tag(value):
     if s.endswith('.0'):
         s = s[:-2]  # bare years read back from csv as floats, e.g. '2022.0'
     try:
+        if re.fullmatch(r'\d{2}/\d{2}/\d{4}', s):
+            return datetime.strptime(s, '%d/%m/%Y')
         if re.fullmatch(r'\d{2}/\d{4}', s):
             return datetime(int(s[3:]), int(s[:2]), 1)
         if re.fullmatch(r'\d{4}', s):

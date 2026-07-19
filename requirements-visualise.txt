@@ -1,0 +1,6 @@
+-r requirements.txt
+jupyter==1.0.0
+matplotlib==3.10.8
+matplotlib-venn==1.1.2
+nbconvert==7.2.10
+upsetplot==0.9.0

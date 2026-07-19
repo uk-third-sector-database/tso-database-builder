@@ -26,40 +26,83 @@ raw register downloads            (step 0 — manual/scripted, see §3)
         |                         (step 5)
   check-spine + SIC codes + cso_type classification
         |                         (steps 6–8)
+  seed-supplementary + suppress-echo-matches
+        |                         (steps 9–10)
   TSCS_spine.{spine,supplementary,matches,SIC_codes}.csv
+        |
+  release gates: validate-release + population source alignment (§5)
 ```
 
-All commands run **from the repo root**. Data lives in two sibling folders
+All commands run **from the repo root**. Data lives in sibling folders
 (outside the repo, so nothing large is ever committed):
 
 - `../raw_data/` — one subfolder per source (see §3 for exact names).
-- `../public_spine_data/` — all intermediate and final outputs.
+- a **new, clean staging directory per build** — all intermediates and
+  outputs of that run. The build script requires it not to exist yet.
+- `../public_spine_data/` — holds exactly the four signed CSVs of the
+  accepted release. **Never run a build in this folder.** Promote the four
+  final CSVs into it only after a build passes every gate in §5, and
+  re-hash them after copying.
 
 The whole recipe is scripted in `spine_bash_script.sh` (run under Git Bash
-on Windows). The steps below explain what each stage does and what can go
-wrong.
+on Windows). The standard invocation is:
+
+```
+./spine_bash_script.sh <prior_release_dir> <new_staging_dir> \
+    <ccew_current.csv> <oscr_current.csv> <ccni_current.csv>
+```
+
+`<prior_release_dir>` holds the prior published supplementary and matches
+CSVs (used by steps 9–10). The final three arguments are the explicitly
+selected current charity-register snapshots for the population
+source-alignment gate; when given these paths the script runs both release
+validations automatically at the end of the build. The steps below explain
+what each stage does and what can go wrong.
 
 ## 2. Environment
 
 - Python **3.11** (python.org installer on Windows; `pyenv` targets in the
   Makefile are Unix-only).
-- Create and activate a virtual environment, then install:
+- Create a virtual environment and install the pinned requirements. Three
+  requirement files exist and should be used separately: `requirements.txt`
+  (core build), `test-requirements.txt` (adds the test tooling) and
+  `requirements-visualise.txt` (optional, notebook visualisations only):
 
   ```
   python -m venv .tso
-  .tso\Scripts\activate        (Windows;  source .tso/bin/activate on Unix)
-  pip install -r test-requirements.txt
+  .tso\Scripts\python.exe -m pip install -r requirements.txt -r test-requirements.txt
   ```
 
-- Run the test suite before a build: `pytest` from the repo root. All tests
-  should pass; investigate any failure before proceeding.
+- Activation is optional: call the environment's interpreter directly, e.g.
+  `.tso/Scripts/python.exe cli.py validate-release <dir>`. This is what
+  `spine_bash_script.sh` does by default (it uses `.tso/Scripts/python.exe`
+  when present; set `PYTHON_BIN` to override), and it guarantees Windows
+  operators are on the intended interpreter without shell activation.
+- Run the test suite before a build: `.tso/Scripts/python.exe -m pytest`
+  from the repo root. All tests should pass; investigate any failure before
+  proceeding.
 - On Windows, run `spine_bash_script.sh` under **Git Bash** (it uses bash
   redirection). PowerShell will not run it unmodified.
+- The script is **fail-fast** (`set -Eeuo pipefail`): any failing step stops
+  the build and leaves the partial staging directory in place for
+  diagnosis. Do not release from a directory whose build did not print
+  `SUCCESS`.
 - On Windows, set `PYTHONUTF8=1` (e.g. `export PYTHONUTF8=1` in Git Bash)
   before running any build step. Parts of the pipeline write intermediate
   files as UTF-8 but read them back with the system default encoding, which
   on Windows is cp1252 — without UTF-8 mode, `process-source` fails with a
-  `UnicodeDecodeError` on the first non-cp1252 character.
+  `UnicodeDecodeError` on the first non-cp1252 character. The build script
+  exports this automatically.
+- The build script defaults `PYTHONHASHSEED=0` (override by exporting a
+  different value, e.g. for cross-seed QA). This is defence in depth only:
+  outputs are deterministic by construction and were verified byte-identical
+  across seeds 0 and 1 (see §5).
+- The script takes an atomic lock — the directory
+  `../raw_data/.tscs-spine-build.lock` — before touching the shared raw-data
+  folder, so two builds cannot preprocess it concurrently. **Stale-lock
+  recovery:** if a build crashed and the lock remains, first verify no build
+  or preprocess process is still running, then remove the empty lock
+  directory and retry.
 
 ## 3. Step 0 — acquire the raw data
 
@@ -322,9 +365,11 @@ Steps 2, 3→4 and 5 have no dependencies on each other and can run in
 parallel shells. First full assembly on this layout: July 2026 (all
 steps verified live).
 
-## 4. Steps 1–8 — the build
+## 4. Steps 1–10 — the build
 
-These are the commands in `spine_bash_script.sh`, in order:
+These are the commands in `spine_bash_script.sh`, in order (the script
+numbers them 1/10 … 10/10 and then runs the two release validations of §5
+automatically):
 
 1. `python3 handler/preprocess.py`
    Stamps iterations and concatenates the six non-charity sources →
@@ -366,6 +411,9 @@ These are the commands in `spine_bash_script.sh`, in order:
    twice. On the July 2026 trial rebuild this restored 393,833 of v1.0's
    872,084 rows (697,656 built + 393,833 seeded = 1,091,489; only 8,581
    v1.0 rows — organisations no longer representable — were not carried).
+   The final accepted July 2026 build, after the lost-register restoration
+   of §3.1.3 and the association-matching correction, produced 1,108,256
+   seeded supplementary rows.
 10. `python3 cli.py suppress-echo-matches ../public_spine_data/TSCS_spine.matches.csv <prior_release>/TSCS_spine.matches.csv`
     Removes bootstrap-echo `companyid - id_in_source` rows from the fresh
     matches file. Because `bootstrap-base-files` back-fills CCEW/CCNI
@@ -380,24 +428,128 @@ These are the commands in `spine_bash_script.sh`, in order:
     relative to step 9 does not matter). The input is kept as
     `TSCS_spine.matches.preecho.csv`, the removed rows as
     `TSCS_spine.matches.suppressed-echo.csv`, and the step refuses to run
-    twice. On the July 2026 trial rebuild this removed 40,427 rows
-    (40,232 involving CE company numbers), leaving 131,699.
+    twice. On the final accepted July 2026 build this removed exactly
+    40,467 rows, partitioning the 176,261-row pre-echo file into 135,794
+    kept rows plus the suppressed set. (Earlier notes quoting 40,427 /
+    131,699 or 40,428 / 135,682 describe superseded artifacts.)
 
 ## 5. Validating a build before release
+
+Every release must pass **three gates**. The build script runs the second
+and third automatically at the end of a run; each can also be run by hand.
+
+1. **Input-UID representation** (`check-spine`, step 6): every UID in the
+   ten source sub-spines must be present in the spine, supplementary or
+   matches output.
+2. **Four-file internal validation** (`python cli.py validate-release
+   <staging_dir>`): file names, exact schemas, logical row counts, UID and
+   date formats, match referential integrity, SIC structure and duplicate
+   checks, with SHA-256 hashes printed for the four CSVs. The script saves
+   this as `release-validation.txt` in the staging directory.
+3. **Population source alignment** (`python -m spine.source_alignment`;
+   the build script passes the arguments): the spine's current populations
+   are reconciled against the explicitly selected current CCEW, OSCR and
+   CCNI snapshots and the Companies House data. The gate requires **zero
+   unresolved and zero falsely-removed current source records**. Saved as
+   `source-alignment.txt`.
+
+   For Companies House, the current population is defined as the records
+   seen in the newest monthly bulk snapshot **or a later dated refresh**
+   (July 2026: 219,364 UIDs). Records seen only in the historical
+   2000/2022 bootstrap files are *not* proof of current active status —
+   a blank removal field there means "historically unknown" — and the
+   status of CE-prefix CIO records is deferred to CCEW, whose data is
+   newer and authoritative for them.
+
+   Context for this gate: the corrected legacy (pre-July-2026) baseline
+   showed **6,220 active source UIDs falsely marked removed across 5,556
+   unique spine parents** (CCEW 5,197 UIDs / 5,194 parents; OSCR 107/105;
+   CCNI 0/0; Companies House 916/916). The July 2026 rebuild reduced all
+   of these to zero. Do not quote the older figures (6,912 / 6,212, and
+   Companies House 1,608/1,605) in release documentation — they predate
+   the corrected gate.
+
+Additional checks:
 
 - `build_spine.out`: scan for ERROR lines (removal-date inconsistencies,
   organisations that failed consolidation).
 - Row counts and distributions: compare spine rows, supplementary rows,
   match counts by `match_type`, and spine counts by `source_register`
-  against the previous release (v1.0, March 2026: 770,923 spine rows;
-  872,084 supplementary; 125,624 matches; 668,280 SIC rows; full tables in
-  the guidance). Large unexplained swings in any cell mean stop and
+  against the most recent release (v1.0, March 2026: 770,923 spine rows;
+  872,084 supplementary; 125,624 matches; 668,280 SIC rows. v1.1
+  candidate, July 2026: 783,606 spine rows, of which 386,122 active;
+  1,108,256 supplementary; 135,794 matches; 474,843 SIC rows; full tables
+  in the guidance). Large unexplained swings in any cell mean stop and
   investigate.
 - uid conventions: every spine uid starts GB-CHC/GB-COH/GB-SC/GB-MPR/
   GB-NIC/GB-COOP/GB-SHPE/GB-SHR; GB-CIS and GB-CQC appear only in matches.
 - `python3 cli.py tex-table-spine` produces the release-notes counts table.
 - Update the guidance page (schema, counts, changelog, download-date
-  coverage) and `release_info.tex` for every release.
+  coverage) for every release, re-render the guidance PDF from the updated
+  HTML, and visually check the rendered pages before packaging.
+  `release_info.tex` is a deprecated historical record, not a second
+  hand-maintained source of current counts — point readers to the guidance
+  changelog and the archived validation records instead.
+
+### Determinism (cross-seed acceptance completed 19 July 2026)
+
+The pipeline's outputs are deterministic by construction: consolidation,
+linkage tie-breaks, SIC extraction, supplementary seeding and echo
+suppression all use explicit stable sort keys, so correctness does not
+depend on the hash seed. Acceptance was completed on 19 July 2026: two
+complete builds under `PYTHONHASHSEED=0` and `1` produced byte-identical
+copies of all four release CSVs and all twenty per-source outputs, and the
+full test suite (194 tests) passed under each seed. The four canonical
+v1.1 files are:
+
+| File | Logical rows | SHA-256 |
+|---|---:|---|
+| `TSCS_spine.spine.csv` | 783,606 | `f5dc33ca73b4c6287b3a4746359f1598cb3f319deb889033022ab4678344d7fa` |
+| `TSCS_spine.matches.csv` | 135,794 | `4bd4e96bbb9f90a67e5b58ef14ab522998d8b849951f7c4002dd9ef9846902c4` |
+| `TSCS_spine.supplementary.csv` | 1,108,256 | `39d1b01d4acde9009ea342e02ce7619ae6f6ec6965e311043e5f6144bd3818c2` |
+| `TSCS_spine.SIC_codes.csv` | 474,843 | `2e6b5644900f3b05d4b91e538f4866f9fd218d2cc5b9dacba709d7c70e71feb6` |
+
+These hashes are the corrected candidate of 19 July 2026 (evening): after
+the first signed candidate, an association-matching defect (the
+RNIB/UCLH wrong cross-border match) was fixed in
+`spine/build_public_spine.py` and both seed builds, all tests and all
+gates were re-run; see
+`docs/spine-docs/rnib-wrong-match-investigation-2026-07-19.md`.
+
+After promoting the four CSVs into `../public_spine_data/`, re-hash them
+and compare against this table (or the signed hashes of whichever release
+is current).
+
+### Packaging
+
+Package with the exact-whitelist command — never publish a build staging
+directory (it contains per-source intermediates, `.preseed`/`.preecho`
+backups and QA sidecars):
+
+```
+python cli.py prepare-release <staging_dir> \
+    <path>/tcss-organisation-register-guidance.html \
+    <path>/tcss-organisation-register-guidance.pdf \
+    <path>/LICENCE.txt <new_package_dir>
+```
+
+It re-validates the four CSVs, checks that the guidance HTML carries the
+release's headline counts, copies exactly the seven payload files into a
+new directory (refusing to overwrite), and writes a deterministic
+transport ZIP. Archive alongside the package: the release-validation and
+source-alignment reports, the frozen raw-input hash list, and the QA
+sign-off. (There is currently no machine-readable release manifest — do
+not refer to one; those four artefacts are the release record.)
+
+### Cleanup after sign-off
+
+Delete run intermediates (per-source sub-spines, `.tmp` files,
+`.preseed`/`.preecho` backups, sidecars, superseded trial builds) only
+after the release is signed off and the four CSVs are promoted and
+re-hashed. Always retain: the raw register snapshots, the reconstructed
+historical inputs of §3.1 (irreplaceable), the prior published release,
+the frozen input hash lists, the unit/regression tests and the QA records
+— these are reproducibility controls, not disposable build debris.
 
 ## 6. Known caveats and open items (July 2026 review)
 
@@ -413,8 +565,9 @@ These are the commands in `spine_bash_script.sh`, in order:
   rules now fire. Expect small, explainable count differences from v1.0.
 - CQC and Care Inspectorate Scotland contribute matches only, by design.
 - The supplementary file's `id_in_source` column is empty by construction.
-- `prepare_zip.sh` is out of date (wrong file names, dead branch) — release
-  packaging is currently manual: zip the four CSVs + `LICENCE.txt` + the
-  guidance PDF.
+- `prepare_zip.sh` is out of date (wrong file names, dead branch) — do not
+  use it. Release packaging is `python cli.py prepare-release` (see §5),
+  which validates, copies the exact seven-file payload and writes the
+  transport ZIP.
 - The Makefile's `setup-pyenv`/`setup-venv` targets are Unix-only and
   broken; use §2 instead.

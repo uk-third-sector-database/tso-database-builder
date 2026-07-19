@@ -5,6 +5,7 @@ from .base_definitions import sub_spine_entry_creator,SUB_SPINE_CSV_FIELDS
 import os
 import csv
 import glob
+import re
 from .companies_house import CompaniesHouseDataHandler
 from .companies_house_API_scrape import CH_APIScrape_DataHandler
 #from .companies_house_2014 import CompaniesHouse2014DataHandler
@@ -14,11 +15,11 @@ import pandas as pd
 from .base import iter_csv_rows
 
 def api_scrape_iteration(file):
-    # ch_adv_scrape_api_refresh_2026-07-18.csv -> '07/2026'; files with no
-    # date in the name are the historical 2022 advanced-search scrape
-    import re
+    # ch_adv_scrape_api_refresh_2026-07-18.csv -> '18/07/2026'. Daily
+    # precision makes this refresh newer than the July bulk snapshot, whose
+    # iteration is the first of the month. Dateless files are historical 2022.
     m = re.search(r'(\d{4})-(\d{2})-(\d{2})', os.path.basename(file))
-    return f'{m.group(2)}/{m.group(1)}' if m else '2022'
+    return f'{m.group(3)}/{m.group(2)}/{m.group(1)}' if m else '2022'
 
 def process_api_scrape(file,ofile):
     print(file)
@@ -98,40 +99,140 @@ def main_process(ofilename):
         for file in bulk_downloads:
             process_bulk_download(file,csv_writer,datahandler)
 
-    all_CICs = set()
-    for file, type_field, cic_search, encode in [(i,'company_subtype','community-interest-company','Latin-1') for i in api_scrape_files] + \
-                                        [(i,'CompanyCategory','Community Interest Company','utf8') for i in bulk_downloads]:
-        CIC_uids = find_CIC_uids(file,type_field,cic_search,encode)
-        all_CICs.update(CIC_uids)
-        print(f'found {len(CIC_uids)} CICs in {file}')
-        #print(CIC_uids[:5])
+SIC_CODE_RE = re.compile(r'(?<!\d)(\d{4,5})(?!\d)')
 
-    with open('all_CICs.txt','w') as f:
-        f.write(f"# CICs found in files {','.join(api_scrape_files + bulk_downloads)}\n\n") #{','.join([api_scrape_file,historic_data] + bulk_downloads)}\n\n")
-        f.write('\n'.join(all_CICs))
+
+def extract_sic_codes(value):
+    """Return individual four- or five-digit SIC tokens in source order."""
+    if value is None:
+        return []
+    return SIC_CODE_RE.findall(str(value))
+
+
+def iteration_rank(value):
+    """Chronological rank for CH tags (YYYY, MM/YYYY or DD/MM/YYYY)."""
+    value = str(value or '').strip()
+    if re.fullmatch(r'\d{4}', value):
+        # A bare year is the oldest point in that year.
+        return int(value) * 10000 + 101
+    match = re.fullmatch(r'(\d{1,2})/(\d{1,2})/(\d{4})', value)
+    if match:
+        day, month, year = map(int, match.groups())
+        try:
+            parsed = pd.Timestamp(year=year, month=month, day=day)
+        except ValueError:
+            return -1
+        return parsed.year * 10000 + parsed.month * 100 + parsed.day
+    match = re.fullmatch(r'(\d{1,2})/(\d{4})', value)
+    if match:
+        month, year = map(int, match.groups())
+        if 1 <= month <= 12:
+            return year * 10000 + month * 100 + 1
+    return -1
 
 
 def sic_codes_lookup(ch_file,matches_file,ofile):
-    """Create a lookup file of uid:sic_codes. Map uids to spine using matches.csv """
+    """Create a deterministic spine uid/SIC lookup from the latest CH rows.
+
+    Only match rows with one unambiguous, nonblank absorbing uid remap a
+    Companies House uid. SIC strings are split into individual four- or
+    five-digit codes, with one output row per unique uid/code pair.
+    """
     try:
-        matches_df = pd.read_csv(matches_file,usecols=['uid','orgB_uid'],dtype=str)
+        matches_df = pd.read_csv(
+            matches_file,
+            usecols=['uid','orgB_uid'],
+            dtype=str,
+            keep_default_na=False,
+        )
     except ValueError as e:
-        print(f'Error loading matches data from {matches_file} : {e}')
-    match_dict = matches_df.groupby('orgB_uid')['uid'].first().to_dict()
+        raise RuntimeError(
+            f'Error loading matches data from {matches_file}: {e}'
+        ) from e
+
+    matches_df['uid'] = matches_df['uid'].str.strip()
+    matches_df['orgB_uid'] = matches_df['orgB_uid'].str.strip()
+    mapped_rows = matches_df[
+        matches_df['uid'].ne('')
+        & matches_df['orgB_uid'].str.startswith('GB-COH-')
+    ]
+
+    parent_sets = mapped_rows.groupby('orgB_uid', sort=True)['uid'].agg(
+        lambda values: tuple(sorted(set(values)))
+    )
+    conflicts = parent_sets[parent_sets.map(len) > 1]
+    if not conflicts.empty:
+        sample = '; '.join(
+            f'{child} -> {", ".join(parents)}'
+            for child, parents in conflicts.head(10).items()
+        )
+        raise RuntimeError(
+            'Companies House SIC remapping is ambiguous: one absorbed CH uid '
+            f'maps to multiple nonblank spine parents ({sample})'
+        )
+    match_dict = {
+        child: parents[0]
+        for child, parents in parent_sets.items()
+        if parents
+    }
 
     try:
-        # dtype=str: SIC mixes bare codes ('82990') with descriptive text
-        # ('94120 - ...'), and letting pandas infer per-chunk dtypes trips a
-        # pandas usecols/DtypeWarning crash (IndexError) besides being wrong
-        ch_data = pd.read_csv(ch_file,usecols=['uid','SIC'],dtype=str)
+        ch_data = pd.read_csv(
+            ch_file,
+            usecols=['uid','SIC','iteration'],
+            dtype=str,
+            keep_default_na=False,
+        )
     except ValueError as e:
-        print(f'Error loading companies house data from {ch_file} : {e}')
-        return
-    ch_data['matched_uid'] = ch_data['uid'].map(match_dict)
+        raise RuntimeError(
+            f'Error loading Companies House data from {ch_file}: {e}'
+        ) from e
 
-    ch_data['uid'] = ch_data.apply(lambda x: x['matched_uid'] if pd.notnull(x['matched_uid']) else x['uid'], axis=1)
+    ch_data['uid'] = ch_data['uid'].str.strip()
+    ch_data['_row_order'] = range(len(ch_data))
+    ch_data['_iteration_rank'] = ch_data['iteration'].map(iteration_rank)
+    latest_rank = ch_data.groupby('uid', sort=False)['_iteration_rank'].transform('max')
+    latest_rows = ch_data[
+        ch_data['uid'].ne('')
+        & ch_data['_iteration_rank'].eq(latest_rank)
+    ].sort_values('_row_order', kind='stable')
 
-    ch_data[['uid','SIC']].drop_duplicates().to_csv(ofile,index=False)
+    code_records = []
+    for row in latest_rows.to_dict('records'):
+        source_uid = row['uid']
+        final_uid = match_dict.get(source_uid, source_uid)
+        for token_order, code in enumerate(extract_sic_codes(row['SIC'])):
+            code_records.append({
+                'uid': final_uid,
+                'source_uid': source_uid,
+                'SIC': code,
+                'own_code': source_uid == final_uid,
+                'row_order': row['_row_order'],
+                'token_order': token_order,
+            })
+
+    # Group output by final uid. If that uid is itself a Companies House
+    # organisation, its own codes precede codes inherited from absorbed CH
+    # partners; source/token order is otherwise retained.
+    code_records.sort(key=lambda row: (
+        row['uid'],
+        not row['own_code'],
+        row['row_order'],
+        row['source_uid'],
+        row['token_order'],
+        row['SIC'],
+    ))
+
+    seen_pairs = set()
+    output_rows = []
+    for row in code_records:
+        pair = (row['uid'], row['SIC'])
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
+        output_rows.append({'uid': row['uid'], 'SIC': row['SIC']})
+
+    pd.DataFrame(output_rows, columns=['uid','SIC']).to_csv(ofile,index=False)
 
 
 
