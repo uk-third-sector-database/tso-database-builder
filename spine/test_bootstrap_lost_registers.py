@@ -59,6 +59,14 @@ def setup(tmp_path):
         # supp regdate must win; spine removal blank, own removal recovered
         spine_row('GB-COOP-R300', 'Matched Coop', 'Co-operatives',
                   '3 MID ST', 'HULL', 'HU1 1AA', '01/01/1900', ''),
+        # co-op whose ONLY number evidence is a companyid-companyid link
+        # to a charity: number recovered transitively via the charity's
+        # own Companies House link
+        spine_row('GB-COOP-R500', 'Transitive Coop', 'Co-operatives',
+                  '5 FAR ST', 'DERBY', 'DE1 1AA', '02/03/1988', ''),
+        spine_row('GB-CHC-900', 'Partner Charity',
+                  'Charity Commission for England and Wales',
+                  '6 CHY RD', 'DERBY', 'DE1 2BB', '01/01/1990', ''),
         # the mutual that absorbed a co-op record (absorber lookup)
         spine_row('GB-MPR-500W', 'Absorbing Mutual', 'Mutuals Public Register',
                   '9 MUT ST', 'BATH', 'BA1 1AA', '01/01/1980', '02/02/2015'),
@@ -100,6 +108,13 @@ def setup(tmp_path):
         # matched co-op R300 also linked to the mutual (any match marks it)
         match_row('GB-MPR-500W', '500W', 'mutuals', 'GB-MPR-500W',
                   'R300', 'CoOps', 'GB-COOP-R300', 'companyid - coop mutual'),
+        # transitive chain: coop R500 <-> charity CHC-900 share a company
+        # number; the charity's own CH link exposes the number 00012345
+        match_row('', 'R500', 'CoOps', 'GB-COOP-R500',
+                  '900', 'ccew', 'GB-CHC-900', 'companyid - companyid'),
+        match_row('GB-CHC-900', '900', 'ccew', 'GB-CHC-900',
+                  '00012345', 'CH', 'GB-COH-00012345',
+                  'companyid - id_in_source'),
         # lost care service attached to the Scottish charity
         match_row('GB-SC-SC001', 'SC001', 'OSCR', 'GB-SC-SC001',
                   'CS900', 'careinspectoratescot', 'GB-CIS-CS900',
@@ -145,7 +160,11 @@ def test_full_reconstruction(setup):
     coops, _ = read_output(setup['raw'],
                            'co_ops/coops_bootstrap_2026_01.csv')
     # keyed by first column = CUK Organisation ID
-    assert set(coops) == {'R100', 'R300', 'R400'}  # R200 is current
+    assert set(coops) == {'R100', 'R300', 'R400', 'R500'}  # R200 is current
+
+    # transitive recovery: number comes from the charity partner's CH link
+    assert coops['R500']['Registered Number'] == '00012345'
+    assert stats['coops']['companyid_recovered_via_partner'] == 1
 
     # vanished co-op: spine details pass through, no society number known
     r100 = coops['R100']
@@ -207,8 +226,8 @@ def test_full_reconstruction(setup):
     assert row['Service_Postcode'] == 'PA34 5BB'
     assert row['DateReg'] == '14/02/2003'
 
-    assert stats['coops']['lost_records'] == 3
-    assert stats['coops']['companyid_recovered'] == 2
+    assert stats['coops']['lost_records'] == 4
+    assert stats['coops']['companyid_recovered'] == 3
     assert stats['coops']['regdate_own_preferred_over_spine'] == 1
     assert stats['coops']['removal_recovered_from_supplementary'] == 1
     assert stats['coops']['name_filled_from_absorber'] == 1

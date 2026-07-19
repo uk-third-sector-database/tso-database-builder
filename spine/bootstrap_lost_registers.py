@@ -75,16 +75,27 @@ Value conventions reproduced
   organisations keep their spine dates. Absorbed organisations use their
   own supplementary dates, falling back to the absorber's registration
   date (removal only if the absorber itself is removed).
-* Co-operatives 'Registered Number' (the FCA society number, which the
-  'companyid - coop mutual' rule compares against the mutual register):
-  recovered from the organisation's own 'companyid - coop mutual' rows in
-  the v1.0 matches file — the partner's id_in_source IS the shared
-  society number the original rule fired on. This is regulator-published
-  data that v1.0 preserved in its matches file, not an inference, so
-  restoring it is not a bootstrap echo; and because v1.0 published these
-  match rows itself, spine/suppress_echo_matches.py never touches the
-  re-fired pairs. Organisations with no such row get a blank number (no
-  false links possible).
+* Co-operatives 'Registered Number' (the registration number the
+  'companyid - coop mutual' and 'companyid - companyid' rules fire on):
+  recovered from the organisation's own match rows in the v1.0 matches
+  file, two ways —
+  (1) from 'companyid - coop mutual' rows, where the partner's
+      id_in_source IS the shared number the rule fired on;
+  (2) failing that, from 'companyid - companyid' rows, transitively: the
+      shared number equals the partner's own company number, which is
+      exposed by the partner's 'companyid - id_in_source' row (or unique
+      ftc link) to Companies House — the same recovery rule
+      bootstrap_base_files uses for charity company numbers. Applied
+      only when all of a co-op's partners agree on a single number
+      (ambiguity -> blank, counted). This closed the 16-pair gap found
+      by the 2026-07-19 QA-2 trace (qa2-adjudication-2026-07-19.md
+      section 3a).
+  Both are regulator-published data that v1.0 preserved in its matches
+  file, not inference, so restoring them is not a bootstrap echo; and
+  because v1.0 published these match rows itself,
+  spine/suppress_echo_matches.py never touches the re-fired pairs.
+  Organisations with no recoverable number get a blank (no false links
+  possible).
 * Care Inspectorate Scotland rows are written with
   ServiceType='Voluntary or Not for Profit' (the handler's inclusion
   filter — every v1.0 CIS record passed it by construction) and with
@@ -263,11 +274,14 @@ def load_matches(matches_csv):
       absorbed_into : orgB_uid -> orgA_uid (organisations absent from the
                       spine main file were absorbed into their orgA)
       uids_in_matches : {register_key: set of uids} for the four registers
-      coop_companyid : GB-COOP uid -> FCA society number, recovered from
+      coop_companyid : GB-COOP uid -> registration number, recovered from
                       'companyid - coop mutual' rows (the partner's
-                      id_in_source is the shared number the rule fired on)
+                      id_in_source is the shared number the rule fired
+                      on), else transitively from 'companyid - companyid'
+                      partners (see module docstring)
+      coop_companyid_via_partner : uids recovered by the transitive route
       coop_companyid_conflicts : count of co-ops whose rows disagreed
-                      (first value kept)
+                      (first value kept / transitive recovery skipped)
     """
     matched_uids = set()
     absorbed_into = {}
@@ -275,6 +289,10 @@ def load_matches(matches_csv):
     prefix_of = {v['prefix']: k for k, v in REGISTERS.items()}
     coop_companyid = {}
     conflicts = 0
+    # transitive recovery pools for 'companyid - companyid' partners
+    partner_companyid = {}                # partner uid -> its CH number
+    ftc_coh_partners = defaultdict(set)   # uid -> CH numbers via ftc
+    coop_cc_partners = defaultdict(set)   # coop uid -> (partner_uid, partner_id_in_source)
 
     with open(matches_csv, 'r', newline='', encoding='utf-8-sig') as f:
         for row in csv.DictReader(f):
@@ -289,7 +307,8 @@ def load_matches(matches_csv):
             if row['uid'] and a and b and a != b:
                 absorbed_into.setdefault(b, a)
 
-            if row['match_type'] == 'companyid - coop mutual':
+            mt = row['match_type']
+            if mt == 'companyid - coop mutual':
                 if a.startswith('GB-COOP-'):
                     coop, number = a, row['orgB_id_in_source']
                 elif b.startswith('GB-COOP-'):
@@ -301,10 +320,47 @@ def load_matches(matches_csv):
                     conflicts += 1
                     continue
                 coop_companyid.setdefault(coop, number)
+            elif mt == 'companyid - companyid':
+                if a.startswith('GB-COOP-') and b:
+                    coop_cc_partners[a].add((b, row['orgB_id_in_source']))
+                elif b.startswith('GB-COOP-') and a:
+                    coop_cc_partners[b].add((a, row['orgA_id_in_source']))
+            elif mt == 'companyid - id_in_source' and b.startswith('GB-COH-'):
+                partner_companyid.setdefault(a, row['orgB_id_in_source'])
+            elif mt == 'ftc':
+                if b.startswith('GB-COH-'):
+                    ftc_coh_partners[a].add(row['orgB_id_in_source'])
+                elif a.startswith('GB-COH-'):
+                    ftc_coh_partners[b].add(row['orgA_id_in_source'])
+
+    # ftc fallback for partner company numbers: only when unambiguous
+    for uid, numbers in ftc_coh_partners.items():
+        if uid not in partner_companyid and len(numbers) == 1:
+            partner_companyid[uid] = next(iter(numbers))
+
+    # transitive recovery: the shared number a 'companyid - companyid'
+    # row fired on equals the partner's own company number
+    via_partner = set()
+    for coop, partners in coop_cc_partners.items():
+        if coop in coop_companyid:
+            continue
+        candidates = set()
+        for partner_uid, partner_id in partners:
+            if partner_uid.startswith('GB-COH-'):
+                candidates.add(partner_id)  # a company IS its number
+            elif partner_uid in partner_companyid:
+                candidates.add(partner_companyid[partner_uid])
+        candidates.discard('')
+        if len(candidates) == 1:
+            coop_companyid[coop] = next(iter(candidates))
+            via_partner.add(coop)
+        elif len(candidates) > 1:
+            conflicts += 1
 
     return {'matched_uids': matched_uids, 'absorbed_into': absorbed_into,
             'uids_in_matches': uids_in_matches,
             'coop_companyid': coop_companyid,
+            'coop_companyid_via_partner': via_partner,
             'coop_companyid_conflicts': conflicts}
 
 
@@ -566,6 +622,8 @@ def reconstruct_register(key, spine_by_reg, all_spine, supp_by_reg, links,
             companyid = links['coop_companyid'].get(uid, '')
             if companyid:
                 stats['companyid_recovered'] += 1
+                if uid in links['coop_companyid_via_partner']:
+                    stats['companyid_recovered_via_partner'] += 1
             rows.append(build_coop_row(uid, details, dates, companyid))
         elif key == 'social_housing_england':
             rows.append(build_shpe_row(uid, details, dates))
