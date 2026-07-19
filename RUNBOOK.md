@@ -299,6 +299,22 @@ These are the commands in `spine_bash_script.sh`, in order:
    twice. On the July 2026 trial rebuild this restored 393,833 of v1.0's
    872,084 rows (697,656 built + 393,833 seeded = 1,091,489; only 8,581
    v1.0 rows — organisations no longer representable — were not carried).
+10. `python3 cli.py suppress-echo-matches ../public_spine_data/TSCS_spine.matches.csv <prior_release>/TSCS_spine.matches.csv`
+    Removes bootstrap-echo `companyid - id_in_source` rows from the fresh
+    matches file. Because `bootstrap-base-files` back-fills CCEW/CCNI
+    company numbers from the prior release's own links (CCEW's extracts do
+    not publish them), every rebuild re-fires the company-number rule on
+    those planted numbers and re-emits the prior release's ftc links as if
+    they were independent identifier evidence. This step drops a
+    `companyid - id_in_source` row only when the prior release did not
+    publish that row itself, the prior release already linked the pair
+    another way, and the pair keeps other evidence in the fresh file — so
+    no pair is ever disconnected and the uid universe is unchanged (order
+    relative to step 9 does not matter). The input is kept as
+    `TSCS_spine.matches.preecho.csv`, the removed rows as
+    `TSCS_spine.matches.suppressed-echo.csv`, and the step refuses to run
+    twice. On the July 2026 trial rebuild this removed 40,427 rows
+    (40,232 involving CE company numbers), leaving 131,699.
 
 ## 5. Validating a build before release
 

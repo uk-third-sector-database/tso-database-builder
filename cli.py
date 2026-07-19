@@ -18,6 +18,7 @@ from handler.preprocess_charity_regulators import process_ccew,process_ccni,proc
 from spine.bootstrap_base_files import write_base_files, AS_OF_ITERATION
 from spine.bootstrap_ch_scrape import write_ch_scrape_bootstrap
 from spine.seed_supplementary import seed_supplementary as run_seed_supplementary
+from spine.suppress_echo_matches import suppress_echo_matches as run_suppress_echo_matches
 from spine.build_public_spine import process_csvs_to_build_spine
 from spine.verify_build import verify_representation,create_tex_table
 from spine.add_cso_type import add_cso_type_to_spine
@@ -138,6 +139,24 @@ def seed_supplementary(built_supplementary_csv, built_spine_csv,
     """
     run_seed_supplementary(built_supplementary_csv, built_spine_csv,
                            built_matches_csv, prior_supplementary_csv)
+
+
+@cli.command()
+@click.argument("built_matches_csv")
+@click.argument("prior_matches_csv")
+def suppress_echo_matches(built_matches_csv, prior_matches_csv):
+    """
+    Remove bootstrap-echo 'companyid - id_in_source' rows from a freshly
+    built matches file: rows that re-fire on company numbers the bootstrap
+    back-filled from the prior release's own links, restating an existing
+    pair as if it were independent identifier evidence. A row is suppressed
+    only if the prior release did not publish it, the prior release already
+    linked the pair another way, and the pair keeps other evidence in the
+    built file (so no pair is ever disconnected). Run AFTER build-spine.
+    Keeps the original as <name>.preecho.csv and the removed rows as
+    <name>.suppressed-echo.csv.
+    """
+    run_suppress_echo_matches(built_matches_csv, prior_matches_csv)
 
 
 @cli.command()
