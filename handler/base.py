@@ -417,7 +417,9 @@ def sort_csv_by_field(filename, date_field1, date_field2=None):
 
     backupfilename = filename.replace(".csv",".notsorted.csv")
     try:
-        os.rename(filename,backupfilename)
+        # os.replace, not os.rename: on Windows os.rename refuses to
+        # overwrite an existing .notsorted.csv backup from a previous run
+        os.replace(filename,backupfilename)
         print(f'Original file renamed to {backupfilename}')
     except FileNotFoundError:
         print(f'Error renaming file {filename} to {backupfilename}: file not found')

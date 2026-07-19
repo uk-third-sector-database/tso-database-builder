@@ -17,6 +17,7 @@ from handler.oscr import OSCRDataHandler
 from handler.preprocess_charity_regulators import process_ccew,process_ccni,process_oscr
 from spine.bootstrap_base_files import write_base_files, AS_OF_ITERATION
 from spine.bootstrap_ch_scrape import write_ch_scrape_bootstrap
+from spine.bootstrap_lost_registers import write_lost_register_files
 from spine.seed_supplementary import seed_supplementary as run_seed_supplementary
 from spine.suppress_echo_matches import suppress_echo_matches as run_suppress_echo_matches
 from spine.build_public_spine import process_csvs_to_build_spine
@@ -118,6 +119,30 @@ def bootstrap_ch_scrape(spine_csv, supplementary_csv, matches_csv, sic_csv, raw_
     """
     write_ch_scrape_bootstrap(spine_csv, supplementary_csv, matches_csv,
                               sic_csv, raw_data_root)
+
+
+@cli.command()
+@click.argument("spine_csv")
+@click.argument("supplementary_csv")
+@click.argument("matches_csv")
+@click.option("-o", "raw_data_root", default="../raw_data",
+              help="Folder holding the register download folders (default ../raw_data).")
+@click.option("--as-of", "as_of", default=AS_OF_ITERATION,
+              help="Currency of the published release being read, as mm/yyyy "
+                   "(default %s, the published v1.0 = January 2026 build)." % AS_OF_ITERATION)
+def bootstrap_lost_registers(spine_csv, supplementary_csv, matches_csv,
+                             raw_data_root, as_of):
+    """
+    Reconstruct the lost co-op / housing / care register history from a
+    published Spine release: one historical snapshot file per register
+    (Co-operatives, Social Housing England, Scottish Housing Regulator,
+    Care Inspectorate Scotland) containing the organisations present in the
+    release but absent from the fresh downloads on disk. Run ONCE, after the
+    fresh register downloads are in place and BEFORE handler/preprocess.py -
+    see RUNBOOK.md section 3.1.3. Refuses to overwrite its outputs.
+    """
+    write_lost_register_files(spine_csv, supplementary_csv, matches_csv,
+                              raw_data_root, as_of=as_of)
 
 
 @cli.command()

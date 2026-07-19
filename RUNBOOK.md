@@ -71,7 +71,21 @@ contest.
 
 ### 3.1 Files that must be PRESERVED (or reconstructed)
 
-Five inputs are irreplaceable or curated:
+**The design principle behind this section.** Every build REGENERATES the
+current facts from raw register data, but some history is unrepeatable —
+it came from snapshot files that no longer exist and records the registers
+no longer publish. That history enters a build in exactly two ways: (a) as
+reconstructed input files, rebuilt once from the most recent published
+release and then kept permanently alongside fresh downloads (§3.1.1–§3.1.3
+— data goes in through the front door and flows through the normal
+matching rules), and (b) for historical name/address variants only, as the
+seed-supplementary union with the previous release (§4 step 9 — output
+rows carried forward directly, because a raw snapshot row can only hold
+one name and one address). Anything in category (a) or (b) has "the
+previous published release" as its effective provenance; the values
+themselves are whatever v1.0 recorded, unaltered.
+
+These inputs are irreplaceable or curated:
 
 | File | Role | If lost |
 |---|---|---|
@@ -80,6 +94,7 @@ Five inputs are irreplaceable or curated:
 | `../raw_data/ccni/ccni_spine.csv` | Historical CCNI base (April 2023), from `archive/ccni_spine_prep.do` | Reconstruct from the published Spine — see §3.1.1 |
 | `../raw_data/CompaniesHouse/ch_adv_scrape.csv` | One-off 2022 advanced-search API scrape (github.com/uk-third-sector-database/ch_adv_scraper); the only source for companies dissolved before the bulk downloads began | Reconstruct from the published Spine — see §3.1.2 |
 | `../raw_data/FTC_data/dkane_relationships_sameas.csv` | Find that Charity "same-as" lookup; supplies the majority of cross-register links and the charity-merger logic | Can be re-derived from David Kane's public Find that Charity data (findthatcharity.uk; drkane on GitHub — includes CCEW Register of Mergers). Document the derivation when refreshed |
+| `co_ops/coops_bootstrap_2026_01.csv`, `SocialHousingEngland/registered_providers_bootstrap_Jan2026.csv`, `ScotHousingReg/social_landlords_bootstrap.to_Jan2026.csv`, `CareInspectScot/MDSF_data_bootstrap.Jan2026.csv` (all under `../raw_data/`) | Reconstructed lost-register history: organisations that left the co-op / housing / care registers before the July 2026 fresh downloads (their historical snapshots were lost); sole input source for 281 spine organisations and ~4,800 match-pair endpoints | Reconstruct from the published Spine — see §3.1.3 |
 
 The build now **stops with an error** if the FTC or OSCR linkage files are
 missing (pass `--allow-missing-linkage` to `build-spine` only if you
@@ -176,6 +191,49 @@ and permanent losses (company_type detail beyond the CIC flag — unused by
 the pipeline; name/address history; SIC codes recorded as "None Supplied")
 are in the `spine/bootstrap_ch_scrape.py` docstring.
 
+#### 3.1.3 Reconstructing the lost co-op / housing / care register history
+
+The historical snapshots of four registers — Co-operatives UK, Social
+Housing England, the Scottish Housing Regulator and Care Inspectorate
+Scotland — were lost, and their fresh downloads list **current members
+only**. Without reconstruction, a from-raw rebuild silently drops every
+organisation that left those registers (July 2026 trial: 281 spine
+organisations gone entirely, plus ~4,800 match pairs whose deregistered
+co-op / closed care-service endpoint never entered the inputs). From the
+repo root, **after** the fresh register downloads are in place (the step
+computes "what is missing" against them):
+
+```
+python cli.py bootstrap-lost-registers \
+    <extracted>/TSCS_spine.spine.csv \
+    <extracted>/TSCS_spine.supplementary.csv \
+    <extracted>/TSCS_spine.matches.csv \
+    -o ../raw_data
+```
+
+This writes one historical snapshot per register (filenames in the §3.1
+table), each in the register's exact raw-download column layout,
+containing only the organisations present in the published release but
+absent from the fresh downloads. The filenames carry the release currency
+(January 2026), so `handler/preprocess.py` stamps the rows iteration
+`01/2026` and any fresher download wins the recency contest. Run it ONCE,
+then `handler/preprocess.py` and the build as normal; the step refuses to
+overwrite its outputs. Keep the four files permanently — they are the
+pipeline's only source for these organisations.
+
+Key recovered values: the co-op FCA society number (what the
+`companyid - coop mutual` rule fires on) is taken from the release's own
+match rows — regulator-published data v1.0 preserved, so the re-fired
+pairs are NOT bootstrap echoes and `suppress-echo-matches` (which only
+targets `companyid - id_in_source` rows the prior release never published)
+does not touch them. Reconstruction rules, absorber-fill logic and
+permanent losses (no dates/addresses for Scottish Housing Regulator
+records; no removal dates for Care Inspectorate Scotland; care pairs whose
+service is still listed but under a revised provider name) are in the
+`spine/bootstrap_lost_registers.py` docstring. Validation numbers: see the
+2026-07-19 progress-log entry and
+`docs/spine-docs/qa-rebuild-2026-07/validate_lostreg_restoration.py`.
+
 ### 3.2 Fresh downloads, per source
 
 **Every source below is scripted**: `python -m acquire.<module> --outdir
@@ -229,6 +287,15 @@ rebuilding after loss). `<extracted>` is the unzipped published release;
    `social_housing_england`, `scot_housing_reg`. The first-ever `ccni` run
    scrapes every removed charity's page (~1,300 pages ≈ 45 min); later
    runs are incremental (seconds–minutes).
+
+   Then, AFTER these downloads are in place (one-off; §3.1.3 — the step
+   computes what is missing against the downloads on disk):
+
+   ```
+   python cli.py bootstrap-lost-registers <extracted>/TSCS_spine.spine.csv \
+       <extracted>/TSCS_spine.supplementary.csv \
+       <extracted>/TSCS_spine.matches.csv -o ../raw_data
+   ```
 
 3. **Companies House bulk** (~500 MB; `--verify-only` first if unsure):
    `python -m acquire.companies_house_bulk --outdir ../raw_data`
