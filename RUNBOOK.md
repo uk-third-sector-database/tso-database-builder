@@ -413,7 +413,8 @@ automatically):
    v1.0 rows — organisations no longer representable — were not carried).
    The final accepted July 2026 build, after the lost-register restoration
    of §3.1.3 and the association-matching correction, produced 1,108,256
-   seeded supplementary rows.
+   seeded supplementary rows; the v1.2 rebuild of 20 July (housing–mutuals
+   matching fix) produced 1,108,831.
 10. `python3 cli.py suppress-echo-matches ../public_spine_data/TSCS_spine.matches.csv <prior_release>/TSCS_spine.matches.csv`
     Removes bootstrap-echo `companyid - id_in_source` rows from the fresh
     matches file. Because `bootstrap-base-files` back-fills CCEW/CCNI
@@ -430,8 +431,10 @@ automatically):
     `TSCS_spine.matches.suppressed-echo.csv`, and the step refuses to run
     twice. On the final accepted July 2026 build this removed exactly
     40,467 rows, partitioning the 176,261-row pre-echo file into 135,794
-    kept rows plus the suppressed set. (Earlier notes quoting 40,427 /
-    131,699 or 40,428 / 135,682 describe superseded artifacts.)
+    kept rows plus the suppressed set; the v1.2 rebuild of 20 July removed
+    the same 40,467 rows from its 177,045-row pre-echo file, keeping
+    136,578. (Earlier notes quoting 40,427 / 131,699 or 40,428 / 135,682
+    describe superseded artifacts.)
 
 ## 5. Validating a build before release
 
@@ -476,10 +479,12 @@ Additional checks:
 - Row counts and distributions: compare spine rows, supplementary rows,
   match counts by `match_type`, and spine counts by `source_register`
   against the most recent release (v1.0, March 2026: 770,923 spine rows;
-  872,084 supplementary; 125,624 matches; 668,280 SIC rows. v1.1
-  candidate, July 2026: 783,606 spine rows, of which 386,122 active;
-  1,108,256 supplementary; 135,794 matches; 474,843 SIC rows; full tables
-  in the guidance). Large unexplained swings in any cell mean stop and
+  872,084 supplementary; 125,624 matches; 668,280 SIC rows. v1.1,
+  July 2026: 783,606 spine rows, of which 386,122 active; 1,108,256
+  supplementary; 135,794 matches; 474,843 SIC rows. v1.2, July 2026
+  (current): 782,995 spine rows, of which 385,515 active; 1,108,831
+  supplementary; 136,578 matches; 474,843 SIC rows; full tables in the
+  guidance). Large unexplained swings in any cell mean stop and
   investigate.
 - uid conventions: every spine uid starts GB-CHC/GB-COH/GB-SC/GB-MPR/
   GB-NIC/GB-COOP/GB-SHPE/GB-SHR; GB-CIS and GB-CQC appear only in matches.
@@ -499,22 +504,30 @@ suppression all use explicit stable sort keys, so correctness does not
 depend on the hash seed. Acceptance was completed on 19 July 2026: two
 complete builds under `PYTHONHASHSEED=0` and `1` produced byte-identical
 copies of all four release CSVs and all twenty per-source outputs, and the
-full test suite (194 tests) passed under each seed. The four canonical
-v1.1 files are:
+full test suite (194 tests at the time; now 200) passed under each seed.
+The four canonical files of the current release (v1.2, published 20 July
+2026) are:
 
 | File | Logical rows | SHA-256 |
 |---|---:|---|
-| `TSCS_spine.spine.csv` | 783,606 | `f5dc33ca73b4c6287b3a4746359f1598cb3f319deb889033022ab4678344d7fa` |
-| `TSCS_spine.matches.csv` | 135,794 | `4bd4e96bbb9f90a67e5b58ef14ab522998d8b849951f7c4002dd9ef9846902c4` |
-| `TSCS_spine.supplementary.csv` | 1,108,256 | `39d1b01d4acde9009ea342e02ce7619ae6f6ec6965e311043e5f6144bd3818c2` |
+| `TSCS_spine.spine.csv` | 782,995 | `789cb4bd72b2020d0579b0efff8b8145251eae4d5ddea085db64234605422fe8` |
+| `TSCS_spine.matches.csv` | 136,578 | `21a7f44205d6378ab2fe88890617beb364f0e435981b46c1c904358797188829` |
+| `TSCS_spine.supplementary.csv` | 1,108,831 | `3ffcb7d7b4cb198c42b97238721fba28dc6299ebab909d79b6c702f0f660799a` |
 | `TSCS_spine.SIC_codes.csv` | 474,843 | `2e6b5644900f3b05d4b91e538f4866f9fd218d2cc5b9dacba709d7c70e71feb6` |
 
-These hashes are the corrected candidate of 19 July 2026 (evening): after
-the first signed candidate, an association-matching defect (the
-RNIB/UCLH wrong cross-border match) was fixed in
-`spine/build_public_spine.py` and both seed builds, all tests and all
-gates were re-run; see
-`docs/spine-docs/rnib-wrong-match-investigation-2026-07-19.md`.
+Release lineage of these hashes: the v1.1 candidate signed on 19 July
+2026 was corrected the same evening for an association-matching defect
+(the RNIB/UCLH wrong cross-border match; see
+`docs/spine-docs/rnib-wrong-match-investigation-2026-07-19.md`) and
+published as v1.1 (spine `f5dc33ca…`, matches `4bd4e96b…`, supplementary
+`39d1b01d…`, SIC `2e6b5644…`). On 20 July 2026 the `name - housing` rule
+was extended to accept Mutuals Public Register counterparts and the
+release was rebuilt from the matching step and republished as v1.2 under
+the same download filename — spine, matches and supplementary changed;
+the SIC file is byte-identical to v1.1. The v1.2 rebuild reused the
+accepted preprocessing outputs and ran single-seed (the tweak changes
+rule eligibility only, no ordering logic); gates and delta adjudication:
+`docs/spine-docs/qa-rebuild-2026-07/housing-mutuals-rebuild-2026-07-20.md`.
 
 After promoting the four CSVs into `../public_spine_data/`, re-hash them
 and compare against this table (or the signed hashes of whichever release
