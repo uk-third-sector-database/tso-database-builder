@@ -687,11 +687,19 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
                 matches_here.extend((x, 'name - crossborder') for x in candidates)
 
             if self.source.lower() == 'scottishhousingregulator':
-                candidates = [x for x in match if x.source.lower() == 'oscr']
+                # a Scottish housing provider's counterpart is either an OSCR charity or,
+                # for registered-society providers, a Mutuals Public Register society: such
+                # providers are on the FCA mutuals register, not the charity register, so
+                # mutuals must be an eligible 'name - housing' counterpart too. mutuals is
+                # loaded before the housing registers, so it is already in the store here.
+                candidates = [x for x in match if x.source.lower() in ('oscr', 'mutuals')]
                 matches_here.extend((x, 'name - housing') for x in candidates)
 
             if self.source.lower() == 'socialhousingengland':
-                candidates = [x for x in match if x.source.lower() == 'ccew']
+                # an English housing provider's counterpart is either a CCEW charity or,
+                # for registered-society providers, a Mutuals Public Register society
+                # (see the Scottish note above for why mutuals is included).
+                candidates = [x for x in match if x.source.lower() in ('ccew', 'mutuals')]
                 matches_here.extend((x, 'name - housing') for x in candidates)
 
             if self.source.lower() == 'careinspectoratescot':

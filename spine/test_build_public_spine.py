@@ -1465,6 +1465,83 @@ def test_small_companyid_clusters_still_link():
                for _, mt in m._store["GB-CHC-1"].matched_orgs)
 
 
+def test_socialhousingengland_matches_mutual_by_name():
+    # Registered-society housing providers (e.g. co-operatives) appear on the FCA Mutuals
+    # Public Register, not the charity register, and the RSH register carries no company
+    # number to join on. The 'name - housing' rule must therefore treat a same-name mutual
+    # as an eligible counterpart. Real-world case: "Stirchley Co-operative Development
+    # Limited" is both GB-MPR-4496 (mutuals) and GB-SHPE-5234 (socialhousingengland).
+    # mutuals is loaded before the housing registers in the real build, so order the files
+    # the same way here.
+    mutual_row = sub_spine_entry_creator({
+        "uid" : "GB-MPR-4496",
+        "organisationname" : "Stirchley Co-operative Development Limited",
+        "normalisedname" : "STIRCHLEY CO OPERATIVE DEVELOPMENT LIMITED",
+        "source" : "mutuals",
+        "id_in_source" : "4496",})
+    # an unrelated mutual with a different name must NOT be pulled in
+    other_mutual_row = sub_spine_entry_creator({
+        "uid" : "GB-MPR-9999",
+        "organisationname" : "Somewhere Else Society Limited",
+        "normalisedname" : "SOMEWHERE ELSE SOCIETY LIMITED",
+        "source" : "mutuals",
+        "id_in_source" : "9999",})
+    she_row = sub_spine_entry_creator({
+        "uid" : "GB-SHPE-5234",
+        "organisationname" : "Stirchley Co-operative Development Limited",
+        "normalisedname" : "STIRCHLEY CO OPERATIVE DEVELOPMENT LIMITED",
+        "source" : "socialhousingengland",
+        "id_in_source" : "5234",})
+
+    mutuals_file = write_input_data_to_tmp_file([mutual_row, other_mutual_row], [], SUB_SPINE_CSV_FIELDS)
+    she_file = write_input_data_to_tmp_file([she_row], [], SUB_SPINE_CSV_FIELDS)
+
+    main_orgs = build_spine_for_test([mutuals_file, she_file])
+
+    # the housing record is absorbed into exactly one organisation: the same-name mutual,
+    # via the 'name - housing' rule
+    absorbed_into = [org for org in main_orgs._store.values()
+                     if any(m.uid == 'GB-SHPE-5234' for m, mt in org.matched_orgs)]
+    assert len(absorbed_into) == 1
+    assert absorbed_into[0].uid == 'GB-MPR-4496'
+    assert any(m.uid == 'GB-SHPE-5234' and mt == 'name - housing'
+               for m, mt in absorbed_into[0].matched_orgs)
+    # it did not become its own standalone spine organisation
+    assert 'GB-SHPE-5234' not in main_orgs._store
+    # the unrelated mutual is untouched
+    assert main_orgs._store['GB-MPR-9999'].matched_orgs == []
+
+
+def test_scottishhousingregulator_matches_mutual_by_name():
+    # Same rule, Scottish side: a Scottish Housing Regulator provider that is a registered
+    # society must match its same-name Mutuals Public Register record via 'name - housing'.
+    mutual_row = sub_spine_entry_creator({
+        "uid" : "GB-MPR-2302RS",
+        "organisationname" : "Yorkhill Housing Association Ltd",
+        "normalisedname" : "YORKHILL HOUSING ASSOCIATION LTD",
+        "source" : "mutuals",
+        "id_in_source" : "2302RS",})
+    shr_row = sub_spine_entry_creator({
+        "uid" : "GB-SHR-209",
+        "organisationname" : "Yorkhill Housing Association Ltd",
+        "normalisedname" : "YORKHILL HOUSING ASSOCIATION LTD",
+        "source" : "scottishhousingregulator",
+        "id_in_source" : "209",})
+
+    mutuals_file = write_input_data_to_tmp_file([mutual_row], [], SUB_SPINE_CSV_FIELDS)
+    shr_file = write_input_data_to_tmp_file([shr_row], [], SUB_SPINE_CSV_FIELDS)
+
+    main_orgs = build_spine_for_test([mutuals_file, shr_file])
+
+    absorbed_into = [org for org in main_orgs._store.values()
+                     if any(m.uid == 'GB-SHR-209' for m, mt in org.matched_orgs)]
+    assert len(absorbed_into) == 1
+    assert absorbed_into[0].uid == 'GB-MPR-2302RS'
+    assert any(m.uid == 'GB-SHR-209' and mt == 'name - housing'
+               for m, mt in absorbed_into[0].matched_orgs)
+    assert 'GB-SHR-209' not in main_orgs._store
+
+
     
 	
 	
