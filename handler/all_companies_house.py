@@ -2,7 +2,7 @@
 ## then use companies_house.py for datahandler and base constructs to sort into primary and secondary for the subspine contributions from CH.
 
 from .base_definitions import sub_spine_entry_creator,SUB_SPINE_CSV_FIELDS
-import os
+import os,re
 import csv
 import glob
 from .companies_house import CompaniesHouseDataHandler
@@ -100,6 +100,20 @@ def main_process(ofilename):
 
 def sic_codes_lookup(ch_file,matches_file,ofile):
     """Create a lookup file of uid:sic_codes. Map uids to spine using matches.csv """
+
+    def extract_unique_sic(cell):
+        if pd.isna(cell):
+            return []
+
+        # find all 5-digit numbers
+        codes = re.findall(r'\b\d{5}\b', str(cell))
+
+        # return unique values (preserve order)
+        return ', '.join(list(dict.fromkeys(codes)))
+
+
+
+
     try:
         matches_df = pd.read_csv(matches_file,usecols=['uid','orgB_uid'])
     except ValueError as e:
@@ -114,6 +128,8 @@ def sic_codes_lookup(ch_file,matches_file,ofile):
     ch_data['matched_uid'] = ch_data['uid'].map(match_dict)
 
     ch_data['uid'] = ch_data.apply(lambda x: x['matched_uid'] if pd.notnull(x['matched_uid']) else x['uid'], axis=1)
+    ch_data['SIC'] = ch_data['SIC'].apply(extract_unique_sic)
+    ch_data['SIC'] = ch_data['SIC'].astype('string')
 
     ch_data[['uid','SIC']].drop_duplicates().to_csv(ofile,index=False)
 
