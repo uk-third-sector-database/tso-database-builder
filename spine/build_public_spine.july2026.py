@@ -1,88 +1,12 @@
 import csv
 import pandas as pd
 import os
-from  pydantic import BaseModel, Field, field_validator, model_validator
+from  pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 from memory_profiler import profile
 from tqdm import tqdm  
 
 from handler.base_definitions import EXTRA_DETAILS_CSV_FIELDS, SPINE_CSV_FIELDS, MATCHES_CSV_FIELDS, ORG_ID_MAPPING, SAMEAS_FILE, OSCR_LINKS_FILE
-
-
-source_precedence_order = [
-    'ccew',
-    'oscr',
-    'ccni',
-    'mutuals',
-    'ch',
-    'coops',
-    'scottishhousingregulator',
-    'socialhousingengland',
-    'careinspectoratescot',
-    'carequalitycommission']
-
-
-debug_uids = {
-    'GB-CHC-1135523',# c - DAWLISH CHRISTIAN FELLOWSHIP
-    'GB-CHC-1175498',# b - LAWYERS FOR PALESTINIAN HUMAN RIGHTS
-    'GB-CHC-1142158',# e - LAWYERS FOR PALESTINIAN HUMAN RIGHTS
-    'GB-COH-10972293',# f - LAWYERS FOR PALESTINIAN HUMAN RIGHTS
-    'GB-CHC-1178345',}# a - HOPE CHURCH / DAWLISH CHRISTIAN FELLOWSHIP
-#'GB-CHC-245698',
-#'GB-SC-SC033491',
-#'GB-MPR-31169R',
-#'GB-CIS-CS2012306141',}
-#   'GB-CIS-CS2004075277',
-#'GB-CIS-CS2004075279',
-#'GB-CIS-CS2004075290',
-#'GB-CIS-CS2004075293',
-#'GB-CIS-CS2004075297',
-#'GB-CIS-CS2004075301',
-#'GB-CIS-CS2004075303',
-#'GB-CIS-CS2004075307',
-#'GB-CIS-CS2004075308',
-#'GB-CIS-CS2006116474',
-#'GB-CIS-CS2006124410',
-#'GB-CIS-CS2011298798',
-#'GB-CIS-CS2011298803',
-#'GB-CIS-CS2012306141',
-#'GB-CIS-CS2014333203',
-#'GB-CIS-CS2014333209',
-#'GB-CIS-CS2014333292',
-#'GB-CIS-CS2015341633',
-#'GB-CIS-CS2015341636',
-#'GB-CIS-CS2016351073',
-#'GB-CIS-CS2019376641',
-#'GB-CIS-CS2020378748',
-#'GB-CIS-CS2020378749',
-#'GB-CIS-CS2021000227',
-#'GB-CIS-CS2021000228'}
-#    'GB-SC-SC005117',
-#    'GB-CHC-224469',
-#    'GB-COH-00214077',
-#    'GB-CHC-218186',
-#    'GB-COH-00552847',
-#    'GB-SC-SC038925',
-#    'GB-CQC-1-101678950',
-#    'GB-CIS-CS2003015115', 'GB-CIS-CS2004079574', 'GB-CIS-CS2004079575', 'GB-CIS-CS2007143010',
-#    'GB-CIS-CS2003000232',
-# 'GB-CIS-CS2003000237',
-# 'GB-CIS-CS2003000787',
-# 'GB-CIS-CS2003000828',
-# 'GB-CIS-CS2003000829',
-# 'GB-CIS-CS2003000830',
- #'GB-CIS-CS2003000831',
- #'GB-CIS-CS2003000865',
- #'GB-CIS-CS2003000929',
- #'GB-CIS-CS2003000932',
- #'GB-CIS-CS2003000933',
- #'GB-CIS-CS2003000934',
-# 'GB-SC-SC006878',
-# 'GB-MPR-1692RS',
-# 'GB-COH-SP1692RS'
-#
-#}
-
 
 
 def read_dkane_sameas(file):
@@ -149,19 +73,69 @@ def read_dkane_sameas(file):
 
     return ftc_dict, primary_orgs
 
-
+#def read_dkane_sameas(file):
+#
+#    def get_org_code(org_id):
+#        parts = str(org_id).split('-')
+#        return parts[1] if len(parts) > 1 else None
+#
+#    try:
+#        df = pd.read_csv(file,usecols=['org_id_a','org_id_b','source','valid_from'])
+#    except IOError as e:
+#        print(f'Error reading file {file} in function read_dkane_sameas: {e}')
+#        return {}, []
+#    except ValueError as e:
+#        try:
+#            df = pd.read_csv(file,usecols=['org_id_a','org_id_b'])
+#        except IOError as e:
+#            print(f'Error reading file {file} in function read_dkane_sameas: {e}')
+#            return {}, []
+#
+#
+#    df['org_a_code'] = df['org_id_a'].apply(get_org_code)
+#    df['org_b_code'] = df['org_id_b'].apply(get_org_code)
+#
+#    codes = set(ORG_ID_MAPPING.values())
+#
+#    trimmed_df = df[df['org_a_code'].isin(codes) & df['org_b_code'].isin(codes)]
+#
+#    ftc_dict = {}
+#    tuples = list(zip(trimmed_df['org_id_a'],trimmed_df['org_id_b'],trimmed_df['source'],trimmed_df['valid_from']))
+#    # when source = 'Register of Mergers', orgB in _sameas is the transferee in mergers 
+#    # (see relationships/ccew-register-of-mergers.csv in drkane's github):
+#    #  the org that receives the merged charity and so should be the primary. 
+#    # So we want to note that and check for primacy in subspinelist.matches()
+#    # For other sources we want to allow matches to be found in both directions.
+#
+#    primary_orgs = []
+#
+#    for x,y,source,date in tuples:
+#        x_source = x.split('-')[1]
+#        y_source = y.split('-')[1]
+#        if x_source == 'CHC' and y_source == 'CHC' and 'merger' in source.lower():
+#            if x in primary_orgs:
+#                # this already has been identified as a transferee: amend mapping to reflect subsequent merger
+#                primary_orgs.remove(x)
+#                print(f'Merger already found for {x} - removing from primary orgs and replacing with {y}')
+#
+#            primary_orgs.append(y)
+#            
+#        if x in ftc_dict:
+#            ftc_dict[x].add(y)
+#        else:
+#            ftc_dict[x] = {y}
+#        if y in ftc_dict:
+#            ftc_dict[y].add(x)
+#        else:
+#            ftc_dict[y] = {x}
+#
+#    return ftc_dict, primary_orgs
+    
 
 ftc_dict, primary_ccew_orgs_ftc = read_dkane_sameas(SAMEAS_FILE)
 oscr_linkage_lookup, _ = read_dkane_sameas(OSCR_LINKS_FILE)
 
-class ExtraInfoList(list):
 
-    def append(self, item):
-        if item.isempty():
-            return
-
-        if item not in self:
-            super().append(item)
 
 class ExtraInfo(BaseModel):
     uid: str
@@ -175,29 +149,16 @@ class ExtraInfo(BaseModel):
     source: str = ''
     source_register: str = ''
 
-    @model_validator(mode="after")
-    def validate_required_fields(self):
-        for field in ("uid",  "source_register"):#"source",
-            value = getattr(self, field)
-            if value is None or str(value).strip() == "":
-                raise ValueError(
-                    f"ExtraInfo: '{field}' must not be empty (uid={self.uid!r})"
-                )
-        return self
-
     def __eq__(self, value: "ExtraInfo") -> bool:
         return self.model_dump(exclude="source") == value.model_dump(exclude="source")
 
     def isempty(self):
-        ignored = {"uid", "source", "source_register"}
-        empty_values = {"", "na", "n/a"}
-
-        return all(
-            str(getattr(self, field)).strip().lower() in empty_values
-            for field in self.model_fields
-            if field not in ignored
-        )
-
+        fields = list(self.model_fields.keys())
+        fields.remove('uid')
+        fields.remove('source')
+        fields.remove('source_register')
+        return all(getattr(self, field) == '' for field in fields)
+    
     def __hash__(self):
         return hash(self.model_dump(exclude="source"))
     
@@ -219,7 +180,7 @@ def consolidate_extras(values):
     seen_adresses = set()
     seen_reg_dates = set()
     seen_rem_dates = set()
-    processed_extras = ExtraInfoList()
+    processed_extras = []
     for item in values:
         if isinstance(item, dict):
             item_obj = ExtraInfo(**item)
@@ -257,6 +218,7 @@ def consolidate_extras(values):
     return processed_extras
     
 
+    
 class MatchInfo(BaseModel):
     uid: str
     orgA_id_in_source : str
@@ -267,27 +229,7 @@ class MatchInfo(BaseModel):
     orgB_uid : str
     match_type : str
 
-    @model_validator(mode="after")
-    def validate_match(self):
-        if self.orgA_uid == self.orgB_uid:
-            raise ValueError(
-                f"Self-match detected for uid={self.orgA_uid!r}, "
-                f"match_type={self.match_type!r}"
-            )
-        return self
 
-class MatchedOrgList(list):
-
-    def append(self, item):
-        org, matchtype = item
-
-        key = (org.uid, matchtype)
-
-        if not any(
-            (existing.uid, mt) == key
-            for existing, mt in self
-        ):
-            super().append(item)
 
 class CoreOrganisation(BaseModel): # orgs for public spine
     uid: str
@@ -306,43 +248,15 @@ class CoreOrganisation(BaseModel): # orgs for public spine
     crossborder: str = ""
     is_cic: str = "False"
 
-    extras: list[ExtraInfo] =  Field(default_factory=ExtraInfoList)
+    extras: list[ExtraInfo] =  Field(default_factory=list)
 
-    matched_orgs: list =  Field(default_factory=MatchedOrgList) # list of (SubSpineOrg,matchtype:str) tuples
+    matched_orgs: list =  Field(default_factory=list) # list of (SubSpineOrg,matchtype:str) tuples
     sorted_matches: list[MatchInfo] =  Field(default_factory=list)
     sorted_extras: list[ExtraInfo] =  Field(default_factory=list)
 
     @field_validator('extras', mode='before')
     def validate_extras(cls,values):
         return consolidate_extras(values)
-
-    @model_validator(mode="after")
-    def validate_core(self):
-        for field in ("uid", "source", "source_register"):
-            value = getattr(self, field)
-            if value is None or str(value).strip() == "":
-                raise ValueError(
-                    f"CoreOrganisation: '{field}' must not be empty (uid={self.uid!r})"
-                )
-
-        if self.source.lower() in {
-            "careinspectoratescot",
-            "carequalitycommission",
-        }:
-            raise ValueError(
-                f"{self.uid} ({self.source}) must never become a CoreOrganisation\n{self}"
-            )
-
-        return self
-
-    def add_matched_org(self, org, matchtype):
-        if org.uid == self.uid:
-            print(
-                f"Attempted to add self ({self.uid}) as a matched organisation "
-                f"via '{matchtype}'"
-            )
-        else:
-            self.matched_orgs.append((org, matchtype))
 
 
     def to_extra_info(self) -> ExtraInfo:
@@ -382,31 +296,22 @@ class CoreOrganisation(BaseModel): # orgs for public spine
         matchtype is in ['companyid - companyid', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source', 'ftc']
         '''
 
-        matchtype_order = ['ftc', 'oscr', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source' , 'name - housing', 'name - care', 'companyid - companyid', 'merge via']
+        matchtype_order = ['ftc', 'oscr', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source' , 'name - housing', 'name - care', 'companyid - companyid']
 #   
         if len(self.matched_orgs)==0:
             return
         
         new_main_rows = []
         assured_matched_orgs = []
-        debug = self.uid in debug_uids
 
-        if debug:
-            print(f"\n========== sort_matches({self.uid}) ==========")
-            print("Matched orgs:")
-            for o, mt in self.matched_orgs:
-                print(f"    {o.uid:20} {mt}")
         for matchtype in matchtype_order:
             
-            matched_orgs = [item for item in self.matched_orgs if item[1].startswith(matchtype)] # == matchtype]
-
+            matched_orgs = [item[0] for item in self.matched_orgs if item[1] == matchtype]
             if not matched_orgs:
                 continue
 
 
-            for matched_org, mt in matched_orgs:
-                if debug:
-                    print(f"\nConsidering {matched_org.uid} ({mt})")
+            for matched_org in matched_orgs:
                 # if matched_org has is_cic flag set to True, set is_cic flag for this org:
                 if matched_org.is_cic == 'True':
                     self.is_cic = 'True'
@@ -426,7 +331,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                         orgB_id_in_source = matched_org.id_in_source,
                         orgB_source = matched_org.source,
                         orgB_uid = matched_org.uid,
-                        match_type = mt))
+                        match_type = matchtype))
 
                 else:
                     if not matched_org in assured_matched_orgs:
@@ -440,15 +345,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                         orgB_id_in_source = matched_org.id_in_source,
                         orgB_source = matched_org.source,
                         orgB_uid = matched_org.uid,
-                        match_type = mt))
-
-        if debug:
-            print("\nFinal state")
-            print("Assured:", [o.uid for o in assured_matched_orgs])
-            print("New main rows:", [o.uid for o in new_main_rows])
-            print("Extras:", len(self.extras))
-            print("Sorted matches:", len(self.sorted_matches))
-            
+                        match_type = matchtype))
 
         return new_main_rows
 
@@ -574,6 +471,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
         self.extras = consolidate_extras(self.extras)
 
 
+
 class SubSpineOrg(BaseModel):  # sub spine format (per source)
     uid: str
     organisationname: str
@@ -592,16 +490,6 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
     is_cic: str = ""
 
     extras: list[ExtraInfo] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def validate_required_fields(self):
-        for field in ("uid", "source", "source_register"):
-            value = getattr(self, field)
-            if value is None or str(value).strip() == "":
-                raise ValueError(
-                    f"SubSpineOrg: '{field}' must not be empty (uid={self.uid!r})"
-                )
-        return self
 
 
     def to_extra_info(self) -> ExtraInfo:
@@ -650,6 +538,7 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
 
             if self.source.lower() == 'careinspectoratescot' and any(x.source.lower() == 'oscr' for x in match):
                 matches_here.extend([(i, 'name - care') for i in match])   
+
 
             if self.source.lower() == 'carequalitycommission' and any(x.source.lower() == 'ccew' for x in match):
                 matches_here.extend([(i, 'name - care') for i in match])   
@@ -744,7 +633,6 @@ class MainOrgList:
             org = new_core_org
 
         self._store[org.uid] = org
-        #add_to_dict(self._store, org.uid, org)
         add_to_dict(self.byname, org.normalisedname, org)
         if org.companyid and org.companyid != '0' * len(org.companyid):
             add_to_dict(self.bycompanyid, org.companyid, org)
@@ -759,14 +647,7 @@ class MainOrgList:
                     add_to_dict(self.bycompanyid, m.companyid, org)
                 add_to_dict(self.bysourceid, m.id_in_source, org)
 
-        if org.uid in debug_uids:
-            print(f"add_to_stores({org.uid}, {type(org).__name__})")
-            #if isinstance(org,CoreOrganisation):
-            #    print(org.matched_orgs)
-
     def remove_from_stores(self, org):
-        if org.uid in debug_uids:
-            print(f"remove_from_stores({org.uid}, {type(org).__name__})")
         def remove_from_dict(dictionary, key, org):
             values = dictionary.get(key)
             if not values:
@@ -778,105 +659,7 @@ class MainOrgList:
         remove_from_dict(self.byname, org.normalisedname, org)
         remove_from_dict(self.bycompanyid, org.companyid, org)
         remove_from_dict(self.bysourceid, org.id_in_source, org)
-#        remove_from_dict(self._store, org.uid, org)
-        self._store.pop(org.uid,None)
-
-
-
-    def unique_core_matches(self, matched_org):
-        """
-        Given a list of (CoreOrganisation, matchtype) tuples,
-        return the unique CoreOrganisations.
-        """
-
-
-        unique = {}
-        for core, _ in matched_org:
-            unique[core.uid] = core
-
-
-        return list(unique.values())
-
-
-    def choose_primary_core(self, cores):
-        """
-        Decide which existing CoreOrganisation should remain the
-        primary organisation after two cores become connected.
-        """
-
-
-        if len(cores) == 1:
-            return cores[0]
-
-        precedence = {
-            source: i
-            for i, source in enumerate(source_precedence_order)
-        }
-
-        return min(
-            cores,
-            key=lambda org: precedence.get(org.source.lower(), float("inf"))
-        )
-
-
-
-    def merge_coreorganisations(self, cores, bridge_uid):
-        """
-        Merge several CoreOrganisations into one (when an organisation matches two on the spine, 
-        but the two weren't already linked).
-    
-        Returns the surviving CoreOrganisation.
-        """
-    
-        primary = self.choose_primary_core(cores)
-    
-        for other in cores:
-        
-            if other.uid == primary.uid:
-                continue
-            #print('other = ',other.uid, type(other))
-            #
-            # Remove from lookup dictionaries first
-            #
-            self.remove_from_stores(other)
-    
-            #
-            # Bring across all existing matched organisations
-            #
-            for m, matchtype in other.matched_orgs:
-                if (m.uid, matchtype) not in {
-                    (existing.uid, mt)
-                    for existing, mt in primary.matched_orgs
-                }:
-                    primary.add_matched_org(m, matchtype)
-            
-                #if not any(existing.uid == m.uid
-                #           for existing, _ in primary.matched_orgs):
-                #        
-                #    primary.add_matched_org(m, matchtype)
-    
-            #
-            # Downgrade the losing core into a SubSpineOrg
-            #
-            reverted = SubSpineOrg(**other.model_dump())
-    
-    
-            #
-            # Add the losing primary itself as a matched organisation
-            #
-            if not any(existing.uid == reverted.uid
-                       for existing, _ in primary.matched_orgs):
-                    
-                primary.add_matched_org(reverted, "merge via %s"%bridge_uid)
-    
-        #
-        # Re-index the surviving core.
-        #
-        self.add_to_stores(primary)
-    
-        return primary
-    
-
+        remove_from_dict(self._store, org.uid, org)
 
 
     def merge(self, orgs: list[SubSpineOrg]):
@@ -915,43 +698,9 @@ class MainOrgList:
         
         for this_subspine_org in tqdm(orgs, desc='Processing orgs'):
             # does this_subspine_org match anything already in the spine (MainList (self))?
-
-            debug = this_subspine_org.uid in debug_uids
-
             matched_org = this_subspine_org.matches(self.byname, self.bycompanyid, self.bysourceid, self._store)
 
-            if debug:
-                print(f"\n=== Processing {this_subspine_org.uid} ===")
-                print(this_subspine_org.organisationname, this_subspine_org.normalisedname)
-                if matched_org:
-                    print("Matched:")
-                    for core, mt in matched_org:
-                        print(f"    {core.uid} via {mt}")
-                else:
-                    print("No matches found")
-
             if matched_org:
-                
-                unique_cores = {}
-                for core, _ in matched_org:
-                    unique_cores.setdefault(core.uid, core)
-
-                unique_cores = list(unique_cores.values())
-                if debug:
-                    print('Unique cores: ',[c.uid for c in unique_cores])
-
-                if len(unique_cores) > 1:
-
-                    merged_core = self.merge_coreorganisations(unique_cores,this_subspine_org.uid)
-                    
-                    if debug:
-                        print(f'*** more than one match; {[i.uid for i in unique_cores]}, primary chosen = {merged_core.uid}, matches = {[i.uid for (i,_) in merged_core.matched_orgs]}')
-                    matched_org = [
-                        (merged_core, matchtype)
-                        for _, matchtype in matched_org]
-                    
-                    
-
                 #print('\nmatch: ',this_subspine_org.uid,this_subspine_org.normalisedname,' \n   to: ',matched_org)
                 check_removal_dates(this_subspine_org, matched_org)
                 # check if this org should be primary rather than matched:
@@ -959,30 +708,26 @@ class MainOrgList:
                     #print(f"primary org found ({this_subspine_org.uid})")
                     # this is the primary org in the match
                     new_coreorg = this_subspine_org.to_core_org()
-                    if debug: print('becomes new primary org')
+
                     # need to attach any matches so far to new_coreorg, instead of matched_org
                     for m,matchtype in matched_org:
                         new_coreorg.matched_orgs.extend([i for i in m.matched_orgs if i not in new_coreorg.matched_orgs])
                         reverted_m = SubSpineOrg(**m.__dict__)  # need to downgrade matched coreorg to subspine, and put it as a match in new_coreorg.
                         self.add_to_stores(reverted_m)
                         self.remove_from_stores(m)
-                        new_coreorg.add_matched_org(reverted_m,matchtype)
+                        new_coreorg.matched_orgs.append((reverted_m,matchtype))
                         self.add_to_stores(new_coreorg)
                 
                 else:
                     # add this_subspine_org to all matched this_subspine_org already in the spine:
                     for matched_coreorg,matchtype in matched_org: # o is higher up the precedence order than this_subspine_org
-                        matched_coreorg.add_matched_org(this_subspine_org,matchtype)
+                        matched_coreorg.matched_orgs.append((this_subspine_org,matchtype))
                         self.add_to_stores(matched_coreorg)
 
             else:
                 # no matches: add this as a new org in the spine
-                if not this_subspine_org.source.lower() in {
-                    "careinspectoratescot",
-                    "carequalitycommission",
-                }:
-                    self.add_to_stores(this_subspine_org)
-                
+                self.add_to_stores(this_subspine_org)
+
 
 
     def restore_from_csv(self, filename_main: str, filename_extras: str):
@@ -1003,11 +748,6 @@ class MainOrgList:
     def sort_matches(self):
         new_store_items = []
         for org in tqdm(self._store.values(), desc='Sorting matches'):
-            debug = org.uid in debug_uids
-            if debug:
-                print(f"\n========== sort_matches loop ({org.uid}) ==========")
-                for o, mt in org.matched_orgs:
-                    print(f"    {o.uid:20} {mt}")
             for_store = org.sort_matches()
             if for_store:
                 new_store_items.extend(for_store)
@@ -1027,6 +767,7 @@ class MainOrgList:
 
         self.sort_extras()
         print('\n\nsort_extras complete.')
+
 
         with open(filename_main, "w+") as out_main:
             with open(filename_extras, "w+") as out_extras:

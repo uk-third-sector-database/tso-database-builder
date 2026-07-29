@@ -15,8 +15,8 @@ from handler.ccew import CCEWDataHandler
 from handler.ccni import CCNIDataHandler
 from handler.oscr import OSCRDataHandler
 from handler.preprocess_charity_regulators import process_ccew,process_ccni,process_oscr
-from spine.build_public_spine_copy import process_csvs_to_build_spine
-#from spine.build_public_spine import process_csvs_to_build_spine
+#from spine.build_public_spine_copy import process_csvs_to_build_spine
+from spine.build_public_spine import process_csvs_to_build_spine
 from spine.verify_build import verify_representation,create_tex_table
 
 
