@@ -576,6 +576,29 @@ the frozen input hash lists, the unit/regression tests and the QA records
   addresses are no longer truncated at city names, same-name organisations
   are no longer over-merged, and previously inert cross-border/CQC match
   rules now fire. Expect small, explainable count differences from v1.0.
+- **Charity mergers are folded into the transferee (found 15 Sept 2026,
+  Decelerator endings audit)**. The Find that Charity same-as table
+  includes links from the CCEW Register of Mergers as well as
+  re-registrations, and `build_public_spine.py` treats every `ftc` link as
+  "same organisation". Checked against the Register of Mergers (5,944
+  transferor rows, Sept 2026 copy): 5,031 transferors have no spine row and
+  no removal date, 459 keep their own row, 439 are absent (mostly
+  subsidiaries). Two effects: (a) the transferor's removal (a genuine
+  ending, typically CCEW reason "Amalgamated"/"Transfer of funds"/"Ceased to
+  exist") disappears from the spine, so E&W removal counts are short by
+  roughly 250-450 events a year 2010-2025; (b) the transferee inherits the
+  transferor's `registerdate` (earliest-date rule) - 2,811 of 3,331
+  transferees in v1.1 carry a registration date earlier than their own CCEW
+  registration (e.g. GB-CHC-1113140 Cornwall Hospice Care, registered 2006,
+  shows 13/02/1981 from absorbed GB-CHC-281746 Mount Edgcumbe Hospice,
+  removed 2008). Re-registrations (charity-reregistrations.csv, 1,931 pairs)
+  are correctly folded and should stay so. Suggested fix: load the Register
+  of Mergers (drkane/charity-lookups `ccew-register-of-mergers.csv`) as an
+  exclusion list so transferor-transferee pairs are emitted as a
+  `successor` relationship in the matches file rather than merged, keeping
+  the transferor as its own removed row. Until then, consumers needing
+  endings should append Register of Mergers transferors to the spine and
+  take transferee registration dates from the raw CCEW extract.
 - CQC and Care Inspectorate Scotland contribute matches only, by design.
 - The supplementary file's `id_in_source` column is empty by construction.
 - `prepare_zip.sh` is out of date (wrong file names, dead branch) — do not
