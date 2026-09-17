@@ -80,7 +80,31 @@ class CCNIDataHandler(DataHandler):
     
 
     def combine_org_details_per_source(self, rows: list):
-        return super().combine_org_details_per_source(rows)
+        result = super().combine_org_details_per_source(rows)
+        if not result:
+            # the base helper returns [] when a row is missing required fields
+            return result
+        sub_spine_row, extras = result
+
+        # The base helper reads the identifier fields off whichever row happened to
+        # be last in the group. For CCNI that is a removals row or an older snapshot
+        # for most charities, which silently discarded the company number. Take the
+        # FIRST nonblank company number across the charity's rows instead.
+        # This deliberately differs from the CCEW convention of taking the LAST
+        # nonblank value (handler/ccew.py): the 2024 seed rows come first in
+        # ccni.all.csv and their numbers are proven - they produced real links in
+        # v1.0-v1.2 - whereas CCNI's self-reported 'Company number' download field is
+        # wrong in 2 of the 5 charities where the two sources overlap: 107318 reports
+        # '999999' against seed NI661353 (now caught earlier as repeated-digit filler)
+        # and 107859 reports '64999', a truncation of seed NI649994.
+        company_id = ''
+        for r in rows:
+            if r['companyid']:
+                company_id = r['companyid']
+                break
+        sub_spine_row['companyid'] = company_id
+
+        return sub_spine_row, extras
 
 
 

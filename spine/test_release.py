@@ -442,3 +442,16 @@ def test_prepare_release_refuses_overwrite_and_can_omit_zip(tmp_path):
 
     with pytest.raises(ReleasePackagingError, match="refusing to overwrite"):
         prepare_release(data_dir, html, pdf, licence, output_dir)
+
+
+def test_match_type_lists_cannot_drift():
+    # MATCHTYPE_ORDER (the build's rule precedence) and MATCH_TYPES (the release
+    # validator's allowed values) are maintained by hand in two modules. A match
+    # type added to one and not the other either loses its precedence or fails
+    # release validation, so they must always hold exactly the same names.
+    from spine.build_public_spine import MATCHTYPE_ORDER
+    from spine.release import MATCH_TYPES
+
+    assert set(MATCHTYPE_ORDER) == set(MATCH_TYPES)
+    assert len(MATCHTYPE_ORDER) == len(set(MATCHTYPE_ORDER))
+

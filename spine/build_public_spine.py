@@ -1,6 +1,7 @@
 import csv
 import pandas as pd
 import os
+import re
 from  pydantic import BaseModel, Field, field_validator, ValidationError
 from datetime import datetime
 from tqdm import tqdm  
@@ -320,10 +321,170 @@ def compress_extras_per_uid(values):
 # 'companyid - cqc' / 'charityno - cqc' are the identifier-based rules for CQC providers
 # fetched from the CQC API (acquire/cqc_api.py), which supply Companies House and charity
 # numbers: identifiers are stronger evidence than any name rule.
-MATCHTYPE_ORDER = ['ftc', 'oscr', 'companyid - cqc', 'charityno - cqc', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source' , 'name - housing', 'name - care', 'companyid - companyid']
+# 'merge via bridge' is NOT a match rule: no call of SubSpineOrg.matches() can ever
+# produce it. It records that two spine organisations were folded into one because an
+# incoming record matched both of them (see MainOrgList.bridge_merge_parties). It is
+# listed last only so that every match type has a rank and match_info_sort_key stays a
+# total order; because it is not a candidate rule, its rank never competes with one.
+BRIDGE_MERGE_MATCH_TYPE = 'merge via bridge'
+
+MATCHTYPE_ORDER = ['ftc', 'oscr', 'companyid - cqc', 'charityno - cqc', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source' , 'name - housing', 'name - care', 'name - ni charity', 'companyid - companyid', BRIDGE_MERGE_MATCH_TYPE]
 MATCHTYPE_RANK = {
     matchtype: rank for rank, matchtype in enumerate(MATCHTYPE_ORDER)
 }
+
+# The order in which the register files are loaded by the build (RUNBOOK section 4,
+# step 5). Earlier registers take precedence over later ones, so this single list also
+# decides which of two organisations survives a bridge merge. The two care registers
+# never become spine rows at all, but are listed so that every source has a rank.
+SOURCE_LOAD_ORDER = [
+    'ccew',
+    'oscr',
+    'ccni',
+    'mutuals',
+    'ch',
+    'coops',
+    'scottishhousingregulator',
+    'socialhousingengland',
+    'careinspectoratescot',
+    'carequalitycommission',
+]
+SOURCE_LOAD_RANK = {source: rank for rank, source in enumerate(SOURCE_LOAD_ORDER)}
+
+
+def holds_record_from(org, sources, id_in_source=None, companyid=None):
+    """True when `org` itself - or a record it has absorbed - comes from one of
+    `sources` AND carries the given identifier.
+
+    Identifier formats are not unique across registers: a Scottish charity number and a
+    Scottish company number are both SCnnnnnn, so an index keyed on the raw value can
+    return an organisation from any register. A rule that means "the Companies House or
+    Mutuals record with this number" must therefore say so, rather than trusting the
+    index. Absorbed records count, because a company that has been folded into a charity
+    is reached through the charity, which keeps its own source.
+    """
+    sources = tuple(s.lower() for s in sources)
+
+    def qualifies(record):
+        if record.source.lower() not in sources:
+            return False
+        if id_in_source is not None and record.id_in_source != id_in_source:
+            return False
+        if companyid is not None and record.companyid != companyid:
+            return False
+        return True
+
+    if qualifies(org):
+        return True
+    # Association-only 'companyid - companyid' partners keep their own identity and do
+    # not identify the organisation that lists them, exactly as in add_to_stores() /
+    # remove_from_stores(). This cannot change any output today - a partner of that rule
+    # must carry a companyid, and Companies House and Mutuals records leave companyid
+    # blank (they hold their number in id_in_source) - but the rule should not depend on
+    # that coincidence.
+    return any(qualifies(m) for m, matchtype in getattr(org, 'matched_orgs', [])
+               if matchtype != 'companyid - companyid')
+
+
+def resolve_merged_uid(uid, aliases):
+    """Follow bridge-merge aliases to the organisation that now holds `uid`.
+
+    A bridge merge removes the losing organisation's uid from the spine, but the two
+    uid-keyed linkage tables (Find that Charity same-as and the historic OSCR linkage)
+    still name it. This maps such a uid onto the organisation that absorbed it, following
+    a chain if the survivor was itself later merged away. Unknown uids come back
+    unchanged, and the `seen` guard makes a malformed cycle terminate.
+    """
+    if not aliases:
+        return uid
+    seen = set()
+    while uid in aliases and uid not in seen:
+        seen.add(uid)
+        uid = aliases[uid]
+    return uid
+
+
+def source_load_sort_key(org):
+    """Order organisations by register load order, ties broken by uid."""
+    return (SOURCE_LOAD_RANK.get(org.source.lower(), len(SOURCE_LOAD_ORDER)), org.uid)
+
+
+# Match rules that rest on a shared identifier (a company number, a charity number, or
+# an external linkage table keyed on identifiers) rather than on a shared name.
+IDENTIFIER_GRADE_MATCH_TYPES = frozenset({
+    'ftc',
+    'oscr',
+    'companyid - id_in_source',
+    'companyid - coop mutual',
+    'companyid - cqc',
+    'charityno - cqc',
+})
+
+# The subset of those rules where the identifier is declared by a REGISTER about itself:
+# a register publishes its own organisation's company number, or the linkage tables
+# assert that two register entries are one organisation. The CQC rules are different in
+# kind: they rest on a care provider's own return, which describes the provider and may
+# cite a trustee company or a trading subsidiary alongside the charity. That is good
+# evidence of a relationship but not of identity, so it cannot on its own justify fusing
+# two differently named organisations.
+REGISTER_DECLARED_IDENTIFIER_MATCH_TYPES = frozenset({
+    'ftc',
+    'oscr',
+    'companyid - id_in_source',
+    'companyid - coop mutual',
+})
+
+# Words dropped when comparing two organisation names for the bridge-merge policy only.
+# This is NOT the pipeline's name normalisation (handler/base_definitions.py): it is a
+# deliberately small comparison form that lets "The X Trust" and "X Trust Limited" count
+# as the same name while leaving every other word in place.
+CORE_NAME_DROP_WORDS = frozenset({'THE', 'LTD', 'LIMITED'})
+
+
+def core_name(name):
+    """Comparison form of a name: upper case, punctuation removed, and the words
+    THE / LTD / LIMITED dropped. Used only by bridge_evidence_is_strong_enough()."""
+    cleaned = re.sub(r'[^A-Z0-9 ]+', ' ', (name or '').upper())
+    return ' '.join(word for word in cleaned.split()
+                    if word not in CORE_NAME_DROP_WORDS)
+
+
+def bridge_evidence_is_strong_enough(org_a, types_a, org_b, types_b):
+    """Evidence policy for a bridge merge (condition 5); change the policy here.
+
+    Two organisations on different registers may be folded together by a record that
+    matches both when:
+
+      (a) they already carry the same normalised name (a shared name plus a shared
+          third-party record is strong evidence); or
+      (b) their names agree once THE / LTD / LIMITED and punctuation are set aside
+          (see core_name()); or
+      (c) each of them is linked to the bridging record by an identifier rule AND at
+          least one of those links is a register-declared identifier.
+
+    The extra condition in (c) is what keeps related-but-distinct bodies apart. A single
+    CQC provider record often cites both a charity number and the company number of that
+    charity's trustee company or trading subsidiary, which used to be enough to fuse,
+    for example, AGE CONCERN HAMPSHIRE with AGE CONCERN HAMPSHIRE CORPORATE TRUSTEE
+    LIMITED. Where the names differ, at least one side must therefore be identified by
+    the registers themselves rather than by a care provider's return.
+    """
+    name_a = (org_a.normalisedname or '').strip()
+    name_b = (org_b.normalisedname or '').strip()
+    if name_a and name_a == name_b:
+        return True
+
+    core_a, core_b = core_name(name_a), core_name(name_b)
+    if core_a and core_a == core_b:
+        return True
+
+    both_sides_have_an_identifier = (
+        any(mt in IDENTIFIER_GRADE_MATCH_TYPES for mt in types_a)
+        and any(mt in IDENTIFIER_GRADE_MATCH_TYPES for mt in types_b))
+    a_register_declared_it = (
+        any(mt in REGISTER_DECLARED_IDENTIFIER_MATCH_TYPES for mt in types_a)
+        or any(mt in REGISTER_DECLARED_IDENTIFIER_MATCH_TYPES for mt in types_b))
+    return both_sides_have_an_identifier and a_register_declared_it
 
 
 def match_candidate_sort_key(candidate):
@@ -665,7 +826,8 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
 
 
 #    @profile
-    def matches(self, byname:dict, bycompanyid:dict, bysourceid:dict, spinelist:dict):
+    def matches(self, byname:dict, bycompanyid:dict, bysourceid:dict, spinelist:dict,
+                ni_ch_name_counts:dict|None=None, merged_uid_aliases:dict|None=None):
 
         matches_here = []
         
@@ -710,14 +872,62 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
                 candidates = [x for x in match if x.source.lower() == 'ccew']
                 matches_here.extend((x, 'name - care') for x in candidates)
 
-                
+            if (self.source.lower() == 'ch'
+                    and self.id_in_source.upper().startswith('NI')):
+                # A Northern Irish company and its CCNI charity registration, joined
+                # from the Companies House side (as 'name - housing' is). CCNI records
+                # a company number for only about a fifth of its register, so for the
+                # rest a shared normalised name is the only available evidence.
+                # A shared name is weak evidence, so this rule fires only when the name
+                # picks out exactly ONE organisation on each side:
+                #   - exactly one CCNI-sourced organisation already holds the name, and
+                #   - this is the only NI-prefixed Companies House record holding it.
+                # The second test cannot be read off byname (the incoming record is not
+                # in the indexes yet, and an already-absorbed NI company is hidden
+                # inside its parent), so merge() precomputes a per-name census of the
+                # incoming Companies House batch and passes it in.
+                # A stored organisation holds the name for CCNI either in its own
+                # right, or because it absorbed a CCNI charity earlier: an 'ftc' or
+                # 'oscr' link can put a CCNI charity under a CCEW/OSCR parent, and
+                # add_to_stores() then indexes that parent under the charity's name
+                # while the parent keeps its own source. Counting only x.source would
+                # miss it and wrongly leave one visible holder. matched_orgs entries
+                # are (organisation, matchtype) tuples.
+                candidates = [
+                    x for x in match
+                    if x.source.lower() == 'ccni'
+                    or any(m.source.lower() == 'ccni'
+                           for m, _ in getattr(x, 'matched_orgs', []))
+                ]
+                incoming_ni_holders = (ni_ch_name_counts or {}).get(self.normalisedname, 1)
+                if len(candidates) == 1 and incoming_ni_holders <= 1:
+                    matches_here.extend((x, 'name - ni charity') for x in candidates)
+
+
         if self.companyid in bysourceid:
             match = bysourceid[self.companyid]
-            #for m in match:
-            if self.source.lower() == 'coops' and any(x.source.lower() in ['mutuals','ch'] for x in match): 
-                matches_here.extend([(i, 'companyid - coop mutual') for i in match])
-            elif self.source.lower() == 'mutuals' and any(m.source.lower() == 'coops' for m in match):
-                matches_here.extend([(i, 'companyid - coop mutual') for i in match])
+            # A co-operative's company number identifies a Companies House company or a
+            # Mutuals Public Register society - never a charity. Both rules previously
+            # linked EVERY organisation the index returned for the number as soon as one
+            # of them qualified, which let a Scottish charity number collide with an
+            # identically formatted Scottish company number (the co-op GB-COOP-R009306
+            # linked both CITY CABS (EDINBURGH) LIMITED and the unrelated OSCR charity
+            # '2nd Inchinnan Brownie Unit', GB-SC-SC033518; in v1.2 that surfaced as a
+            # harmless blank-uid row, but it is exactly the evidence a bridge merge
+            # would act on). Only the organisations that actually hold the number on a
+            # qualifying record are matched now.
+            if self.source.lower() == 'coops':
+                candidates = [x for x in match
+                              if holds_record_from(x, ('mutuals', 'ch'),
+                                                   id_in_source=self.companyid)]
+                matches_here.extend((x, 'companyid - coop mutual') for x in candidates)
+            elif (self.source.lower() == 'mutuals'
+                    and any(holds_record_from(x, ('coops',), id_in_source=self.companyid)
+                            for x in match)):
+                candidates = [x for x in match
+                              if holds_record_from(x, ('coops', 'ch'),
+                                                   id_in_source=self.companyid)]
+                matches_here.extend((x, 'companyid - coop mutual') for x in candidates)
 
                 
         # identifier-based rules for CQC providers (CQC API data): a provider's
@@ -753,23 +963,32 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
             if self.source.lower() == 'ch':
                 # companies house counterpart to charity
                 matches_here.extend([(i, 'companyid - id_in_source') for i in match])
-            for m in match:
-                if self.source.lower() == 'mutuals' and m.source.lower() == 'coops':
-                    matches_here.extend([(i, 'companyid - coop mutual') for i in match])
+            if (self.source.lower() == 'mutuals'
+                    and any(holds_record_from(x, ('coops',), companyid=self.id_in_source)
+                            for x in match)):
+                # same narrowing as above, from the mutuals side
+                candidates = [x for x in match
+                              if holds_record_from(x, ('coops', 'ch'),
+                                                   companyid=self.id_in_source)]
+                matches_here.extend((x, 'companyid - coop mutual') for x in candidates)
             
-        # find matches in dkane _sameas csv
+        # find matches in dkane _sameas csv. Both linkage tables name organisations by
+        # uid, so a uid that a bridge merge folded into another organisation has to be
+        # resolved to its survivor, or the link would silently match nothing.
         if self.uid in ftc_dict:
             matched_uids = ftc_dict[self.uid]
             for m in matched_uids:
-                if m in spinelist:
-                    matches_here.append((spinelist[m],'ftc')) 
+                target = resolve_merged_uid(m, merged_uid_aliases)
+                if target in spinelist:
+                    matches_here.append((spinelist[target],'ftc')) 
     
         # find matches using historic oscr data
         if self.uid in oscr_linkage_lookup:
             matched_uids = oscr_linkage_lookup[self.uid]
             for m in matched_uids:
-                if m in spinelist:
-                    matches_here.append((spinelist[m],'oscr')) 
+                target = resolve_merged_uid(m, merged_uid_aliases)
+                if target in spinelist:
+                    matches_here.append((spinelist[target],'oscr')) 
 
         # Index and linkage-table paths can identify the same candidate more
         # than once. Deduplicate before applying the explicit (rule rank, uid)
@@ -799,6 +1018,11 @@ class MainOrgList:
         # companyid values identified as placeholder junk (see merge()):
         # never indexed, so no companyid rule can fire on them
         self.suppressed_companyids: set[str] = set()
+        # organisations folded into another organisation by a bridge merge, as
+        # {merged-away uid: surviving uid}. They are no longer live CoreOrganisations,
+        # so they can never be a party to another merge (merges never chain), and the
+        # uid-keyed linkage tables are redirected through this map.
+        self.merged_uid_aliases: dict[str, str] = {}
 
 
     def __iter__(self):
@@ -885,6 +1109,144 @@ class MainOrgList:
         self._store.pop(org.uid, None)
 
 
+    def bridge_merge_parties(self, absorbing):
+        """Decide whether an incoming record is a "bridge" proving that two spine
+        organisations are the same body.
+
+        ``absorbing`` is the list of (stored organisation, match type) candidates for one
+        incoming record, with the association-only 'companyid - companyid' links already
+        removed by the caller. A bridge merge is allowed only when ALL of these hold:
+
+          1. the candidates resolve to exactly TWO distinct stored organisations;
+          2. those two organisations come from different registers;
+          3. neither link is association-only ('companyid - companyid'); every other
+             rule, including the name rules, is an acceptable bridge (the Clyde Valley
+             Housing Association case is a 'name - housing' bridge, and the known
+             failure cases are excluded by conditions 1 and 2 instead);
+          4. both organisations are still live CoreOrganisations - one already folded
+             into another can never be a merge party again, so merges cannot chain;
+          5. the evidence clears bridge_evidence_is_strong_enough().
+
+        Returns (survivor, loser, types_by_uid), or None if no merge should happen.
+        """
+        if not absorbing:
+            return None
+
+        # deterministic: candidates are keyed by uid and re-read in sorted uid order, and
+        # each one's match types keep the (rule rank, uid) order they arrived in
+        orgs_by_uid: dict[str, CoreOrganisation] = {}
+        types_by_uid: dict[str, list[str]] = {}
+        for org, matchtype in absorbing:
+            orgs_by_uid.setdefault(org.uid, org)
+            types = types_by_uid.setdefault(org.uid, [])
+            if matchtype not in types:
+                types.append(matchtype)
+
+        # 1. exactly two distinct stored organisations
+        if len(orgs_by_uid) != 2:
+            return None
+        candidates = [orgs_by_uid[uid] for uid in sorted(orgs_by_uid)]
+        org_a, org_b = candidates
+
+        # 2. different registers
+        if org_a.source.lower() == org_b.source.lower():
+            return None
+
+        # 3. association-only evidence never bridges. The caller already filters
+        # 'companyid - companyid' out of `absorbing`; this keeps the rule correct if a
+        # future caller does not.
+        for types in types_by_uid.values():
+            if any(mt == 'companyid - companyid' for mt in types):
+                return None
+
+        # 4. only two live organisations may be combined
+        for org in candidates:
+            if org.uid in self.merged_uid_aliases:
+                return None
+            if self._store.get(org.uid) is not org:
+                return None
+
+        # 5. same name, or identifier-grade evidence on both sides
+        if not bridge_evidence_is_strong_enough(org_a, types_by_uid[org_a.uid],
+                                                org_b, types_by_uid[org_b.uid]):
+            return None
+
+        # the earlier-loaded register survives (explicit sort, never an unordered min)
+        survivor, loser = sorted(candidates, key=source_load_sort_key)
+        return survivor, loser, types_by_uid
+
+
+    def apply_bridge_merge(self, survivor, loser, bridge_org, types_by_uid):
+        """Fold `loser` into `survivor`, the two organisations bridged by `bridge_org`.
+
+        The loser leaves the spine: it is removed from every index and becomes a matched
+        (absorbed) sub-organisation of the survivor with match type 'merge via bridge'.
+        The bridging record's uid is deliberately NOT written into the match type - it is
+        recoverable because the bridge's own match rows sit on the survivor.
+        """
+        # drop the loser from every index FIRST, while its own matched_orgs still
+        # describe the keys it was indexed under
+        self.remove_from_stores(loser)
+        self.merged_uid_aliases[loser.uid] = survivor.uid
+
+        # re-parent the loser's matched organisations onto the survivor
+        existing_links = {(m.uid, mt) for m, mt in survivor.matched_orgs}
+        for m, mt in sorted(loser.matched_orgs, key=match_candidate_sort_key):
+            if (m.uid, mt) not in existing_links:
+                survivor.matched_orgs.append((m, mt))
+                existing_links.add((m.uid, mt))
+
+        # re-parent the loser's supplementary rows
+        for extra in loser.extras:
+            if extra not in survivor.extras:
+                survivor.extras.append(extra)
+
+        # Re-parent the association-only (blank uid) match rows the loser had already
+        # accumulated. Their orgA side must be rewritten to the survivor: the loser's uid
+        # is no longer a spine row, and release validation requires every orgA_uid to be
+        # one. A row that now points from the survivor back at itself is dropped.
+        for match_row in loser.sorted_matches:
+            rewritten = match_row.model_copy(update={
+                'uid': survivor.uid if match_row.uid else '',
+                'orgA_uid': survivor.uid,
+                'orgA_source': survivor.source,
+                'orgA_id_in_source': survivor.id_in_source,
+            })
+            if rewritten.orgA_uid == rewritten.orgB_uid:
+                continue
+            if rewritten not in survivor.sorted_matches:
+                survivor.sorted_matches.append(rewritten)
+
+        # the loser itself becomes a matched organisation of the survivor
+        reverted_loser = SubSpineOrg(**loser.__dict__)
+        if (reverted_loser.uid, BRIDGE_MERGE_MATCH_TYPE) not in existing_links:
+            survivor.matched_orgs.append((reverted_loser, BRIDGE_MERGE_MATCH_TYPE))
+
+        # Re-parenting can leave the survivor holding an association-only row for a link
+        # it now also absorbs (or two association-only rows for the same link). Release
+        # validation rejects a repeated unordered endpoint pair + match type, so drop any
+        # association row whose (other endpoint, match type) is now covered by a real
+        # absorption, and keep only one association row per remaining link.
+        absorbed_links = {(m.uid, mt) for m, mt in survivor.matched_orgs}
+        kept_rows = []
+        seen_association_links = set()
+        for match_row in survivor.sorted_matches:
+            if not match_row.uid:
+                link = (match_row.orgB_uid, match_row.match_type)
+                if link in absorbed_links or link in seen_association_links:
+                    continue
+                seen_association_links.add(link)
+            kept_rows.append(match_row)
+        survivor.sorted_matches = kept_rows
+
+        bridge_types = ', '.join(sorted(
+            set(types_by_uid[survivor.uid]) | set(types_by_uid[loser.uid]),
+            key=lambda mt: (MATCHTYPE_RANK.get(mt, len(MATCHTYPE_ORDER)), mt),
+        ))
+        print(f'Bridge merge: {loser.uid} -> {survivor.uid} '
+              f'via {bridge_org.uid} ({bridge_types})')
+
+
     def merge(self, orgs: list[SubSpineOrg]):
         '''merge SubSpineOrgs onto MainOrgList (self): check for matches'''
 
@@ -905,6 +1267,24 @@ class MainOrgList:
             print('Suppressed placeholder companyid value(s) for this source: '
                   + ', '.join(sorted(newly_suppressed)))
 
+        # Census of NI-prefixed Companies House records per normalised name in this
+        # source batch. The 'name - ni charity' rule may only fire when the name
+        # identifies one organisation on each side; the incoming record's own side
+        # cannot be counted from the indexes, because it is not stored yet and any
+        # earlier NI company on the same name is hidden inside the parent it joined.
+        # The census covers ONE call of merge(), i.e. one input file, so the guard
+        # assumes every Companies House record arrives in a single file (CH_all),
+        # as spine_bash_script.sh loads them. Splitting Companies House across
+        # several files would let a second NI company on a name escape the guard.
+        ni_ch_name_holders: dict[str, set[str]] = {}
+        for org in orgs:
+            if (org.source.lower() == 'ch' and org.normalisedname
+                    and org.id_in_source.upper().startswith('NI')):
+                ni_ch_name_holders.setdefault(org.normalisedname, set()).add(org.uid)
+        ni_ch_name_counts = {
+            name: len(holders) for name, holders in ni_ch_name_holders.items()
+        }
+
         def check_removal_dates(subspine_org, matched_orgs):
             ''' 
             if any matched orgs are from the same source as subspine_org, check for removal dates:
@@ -919,6 +1299,11 @@ class MainOrgList:
             org_merging_on_remdate = parse_date(subspine_org.removeddate)
 
 
+            # This guard only ever compares the incoming record with candidates from the
+            # SAME source, so a bridge merge cannot make it misfire: a bridge merge
+            # requires its two organisations to come from different registers, and a
+            # merged-in organisation never reappears as a candidate (it leaves the
+            # indexes altogether).
             # These are linkage invariants, not advisory diagnostics. Letting
             # the build continue would choose a demonstrably stale same-source
             # primary while merely printing "ERROR:" into a long progress log.
@@ -948,7 +1333,8 @@ class MainOrgList:
         
         for this_subspine_org in tqdm(orgs, desc='Processing orgs'):
             # does this_subspine_org match anything already in the spine (MainList (self))?
-            matched_org = this_subspine_org.matches(self.byname, self.bycompanyid, self.bysourceid, self._store)
+            matched_org = this_subspine_org.matches(self.byname, self.bycompanyid, self.bysourceid, self._store,
+                                                    ni_ch_name_counts, self.merged_uid_aliases)
             if matched_org:
                 #print('\nmatch: ',this_subspine_org.uid,this_subspine_org.normalisedname,' \n   to: ',matched_org)
                 check_removal_dates(this_subspine_org, matched_org)
@@ -976,7 +1362,29 @@ class MainOrgList:
                     absorbing = [(m,mt) for m,mt in matched_org if mt != 'companyid - companyid']
                     associations = [(m,mt) for m,mt in matched_org if mt == 'companyid - companyid']
 
-                    if absorbing:
+                    # "Bridge merge": when this record matches exactly two organisations
+                    # from different registers on strong enough evidence, that is proof
+                    # the two are one and the same body, so they are folded into a single
+                    # organisation instead of one absorbing the record while the other
+                    # keeps a blank-uid association row.
+                    bridge = self.bridge_merge_parties(absorbing)
+
+                    if bridge is not None:
+                        survivor, loser, types_by_uid = bridge
+                        self.apply_bridge_merge(survivor, loser, this_subspine_org,
+                                                types_by_uid)
+                        # absorb the incomer into the survivor exactly as normal, keeping
+                        # its ORIGINAL match types: both links now point at the survivor
+                        incoming_types = sorted(
+                            set(types_by_uid[survivor.uid]) | set(types_by_uid[loser.uid]),
+                            key=lambda mt: (MATCHTYPE_RANK.get(mt, len(MATCHTYPE_ORDER)), mt),
+                        )
+                        for mt in incoming_types:
+                            survivor.matched_orgs.append((this_subspine_org, mt))
+                        self.add_to_stores(survivor)
+                        # no blank-uid association row is written for this incomer
+
+                    elif absorbing:
                         best_org, _ = min(absorbing, key=match_candidate_sort_key)
                         for m,mt in absorbing:
                             if m.uid == best_org.uid:

@@ -223,6 +223,70 @@ def find_postcode(address_string:str,name_str:str):
 
 
 
+# CCNI charities whose self-declared 'Company number' has been checked against
+# Companies House and the CCNI register and found to name a DIFFERENT company.
+# Keyed by charity number, the value is the wrong declaration in normalised form
+# (NI + six digits). The suppression is deliberately value-specific: if CCNI
+# corrects the field in a later download, the corrected value passes straight
+# through and no code change is needed.
+#
+# Do not "fix" these from Find That Charity: FTC has inherited both errors from
+# CCNI (its GB-NIC-108948 record carries NI056404 and relabels that company), so
+# it is not independent evidence.
+#
+# With the number suppressed, the exact normalised-name rule links each charity
+# to its real company instead.
+CCNI_KNOWN_BAD_COMPANY_NUMBERS = {
+    # charity number -> the declared value that is wrong (normalised, NI + 6 digits)
+
+    # Healthy Living Centres Alliance Ltd declares 653679, which is TAUGHMONAGH
+    # WORKS C.I.C. (Finwood Park, Belfast BT9 6QR; directors Earle/Hanna/
+    # Pritchard/Smith). The charity's own company is NI653799 HEALTHY LIVING
+    # CENTRES ALLIANCE LTD, 106 Albert Street BT12 4HL, which is the charity's
+    # CCNI address, and four CCNI trustees (McShane, Connolly, Conway, Corr) are
+    # its directors. The digits are transposed: 653679 against 653799.
+    # Verified on Companies House and the CCNI register, 2026-09-17.
+    '108557': 'NI653679',
+
+    # POMEROY DEVELOPMENT PROJECTS LTD declares 56404, which is MEDICINE WHEEL
+    # PRODUCTIONS (IRELAND) LIMITED of Derry, dissolved 2013-01-04, directors
+    # Boyle/Cassidy/Cullen/Sheehlan. The charity's own company is NI056101
+    # POMEROY DEVELOPMENT PROJECTS LTD (385 Pomeroy Road BT70 3FD), and all four
+    # CCNI trustees (Corrigan, McDonald, McElhone, Lagan) are its directors.
+    # Verified 2026-09-17.
+    '108948': 'NI056404',
+}
+
+
+def normalise_ccni_company_number(raw) -> str:
+    '''Map a CCNI 'Company number' cell onto the spine's NI company-number format.
+
+    CCNI publishes the company number of a charitable company as a bare integer
+    with no NI prefix and no leading zeros ('652013', '43374', '306'), and uses
+    '0' for 'this charity is not a company'. Companies House NI numbers are the
+    letters NI followed by six digits, so:
+
+    - blank and anything that is not a plain run of ASCII digits yields ''
+      (no company number recorded);
+    - a value longer than six digits cannot be an NI company number (CCNI holds
+      a handful, e.g. '1029207'), so it is left blank rather than guessed at;
+    - a single repeated digit is filler, not a company number: '0'/'000000' mean
+      'not a company', and '111111'/'999999'/'99999' are keyboard junk;
+    - otherwise the digits are zero-padded to six and prefixed 'NI'.
+
+    Legacy R-prefixed Northern Irish numbers are knowingly out of scope: CCNI
+    does not publish them in this field and they are not reconstructed here.
+    '''
+    digits = str(raw or '').strip()
+    if not digits or not digits.isascii() or not digits.isdigit():
+        return ''
+    if len(digits) > 6:
+        return ''
+    if len(set(digits)) == 1:
+        return ''
+    return 'NI' + digits.zfill(6)
+
+
 def process_ccni():
     raw_files = sorted(glob.glob('../raw_data/ccni/*charitydetails_*.csv'))
     dissolution_files = sorted(glob.glob('../raw_data/ccni/ni-removals-*.csv'))
@@ -273,8 +337,20 @@ def process_ccni():
                     address,postcode = find_postcode(row['Public address'],row['Charity name'])
                     new_row = {key:'' for key in ccni_fields}
                     new_row['iteration'] = iteration_date
-                    new_row['charitynumber'] = row['Reg charity number']
+                    charity_number = row['Reg charity number']
+                    new_row['charitynumber'] = charity_number
                     new_row['organisationname'] = row['Charity name']
+                    # company number: present in the download but previously dropped,
+                    # so only the 2024 seed file carried one into the spine
+                    company_number = normalise_ccni_company_number(
+                        row['Company number'])
+                    if (company_number
+                            and CCNI_KNOWN_BAD_COMPANY_NUMBERS.get(charity_number)
+                            == company_number):
+                        print(f'CCNI known-bad company number suppressed for '
+                              f'charity {charity_number}: {company_number}')
+                        company_number = ''
+                    new_row['companyid'] = company_number
                     new_row['address'] = address
                     new_row['postcode'] = postcode
                     new_row['registerdate'] = row['Date registered']

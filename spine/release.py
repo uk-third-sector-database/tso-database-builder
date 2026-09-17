@@ -137,7 +137,11 @@ MATCH_TYPES = frozenset({
     "companyid - id_in_source",
     "name - housing",
     "name - care",
+    "name - ni charity",
     "companyid - companyid",
+    # not a match rule: records that two spine organisations were folded into one
+    # because an incoming record matched both (build_public_spine.BRIDGE_MERGE_MATCH_TYPE)
+    "merge via bridge",
 })
 
 SOURCE_UID_PREFIX: Mapping[str, str] = {

@@ -19,7 +19,14 @@ from handler.ccew import CCEWDataHandler
 from handler.oscr import OSCRDataHandler
 from handler.companies_house import CompaniesHouseDataHandler
 from handler.preprocess import drop_duplicates, parse_iteration_tag
-from handler.preprocess_charity_regulators import format_date_strings, find_postcode
+from handler.preprocess_charity_regulators import (
+    CCNI_KNOWN_BAD_COMPANY_NUMBERS,
+    format_date_strings,
+    find_postcode,
+    normalise_ccni_company_number,
+    process_ccni,
+)
+from handler.ccni import CCNIDataHandler
 
 
 def test_utf8_intermediate_csv_is_read_without_platform_default(tmp_path):
@@ -698,3 +705,190 @@ class TestCompaniesHouseMapDate:
 
     def test_map_date_empty(self):
         assert CompaniesHouseDataHandler().map_date('') == ''
+
+
+# ---------------------------------------------------------------------------
+# CCNI company numbers: the download publishes a bare integer ('0' when the
+# charity is not a company); the spine needs the Companies House NI form.
+# ---------------------------------------------------------------------------
+
+class TestNormaliseCCNICompanyNumber:
+
+    def test_not_a_company_is_blank(self):
+        assert normalise_ccni_company_number('0') == ''
+
+    def test_blank_is_blank(self):
+        assert normalise_ccni_company_number('') == ''
+
+    def test_six_digits_kept_as_is(self):
+        assert normalise_ccni_company_number('652013') == 'NI652013'
+
+    def test_five_digits_zero_padded(self):
+        assert normalise_ccni_company_number('43374') == 'NI043374'
+
+    def test_three_digits_zero_padded(self):
+        assert normalise_ccni_company_number('306') == 'NI000306'
+
+    def test_more_than_six_digits_is_not_an_ni_number(self):
+        assert normalise_ccni_company_number('1029207') == ''
+
+    def test_non_numeric_is_blank(self):
+        assert normalise_ccni_company_number('abc') == ''
+
+    def test_repeated_digit_filler_is_blank(self):
+        # keyboard junk, not a company number
+        assert normalise_ccni_company_number('111111') == ''
+        assert normalise_ccni_company_number('999999') == ''
+        assert normalise_ccni_company_number('99999') == ''
+
+    def test_surrounding_whitespace_stripped(self):
+        assert normalise_ccni_company_number(' 652013 ') == 'NI652013'
+
+    def test_all_zeros_is_blank(self):
+        assert normalise_ccni_company_number('000000') == ''
+
+    def test_none_is_blank(self):
+        assert normalise_ccni_company_number(None) == ''
+
+
+class TestCCNICompanyIdCarriedThrough:
+    # The base consolidation helper takes identifiers from whichever row happens
+    # to be last in the group; for CCNI that is usually a removals row or an older
+    # snapshot with no company number. CCNI takes the FIRST nonblank company number
+    # instead, so that the proven 2024 seed value beats a contradictory value in a
+    # later CCNI download (see handler/ccni.py).
+
+    def _row(self, **overrides):
+        row = {
+            'uid': 'GB-NIC-107323',
+            'id_in_source': '107323',
+            'organisationname': 'Oak Counselling Services Ltd',
+            'normalisedname': 'OAK COUNSELLING SERVICES LTD',
+            'companyid': '',
+            'fulladdress': '51 Strand Road',
+            'city': 'Londonderry',
+            'postcode': 'BT48 7BN',
+            'registerdate': '10/02/2020',
+            'removeddate': '',
+            'source': 'ccni',
+            'source_register': 'Charity Commission for Northern Ireland',
+            'is_cic': '',
+            'iteration': '01/2024',
+        }
+        row.update(overrides)
+        return row
+
+    def test_first_nonblank_companyid_wins(self):
+        # blank seed rows and a trailing removals row must not wipe the number
+        rows = [
+            self._row(iteration='01/2024', companyid=''),
+            self._row(iteration='07/2026', companyid='NI652013'),
+            self._row(iteration='07/2026', companyid='', removeddate='29/01/2024'),
+        ]
+        sub_spine_row, _ = CCNIDataHandler().combine_org_details_per_source(rows)
+        assert sub_spine_row['companyid'] == 'NI652013'
+
+    def test_seed_value_beats_a_contradictory_download_value(self):
+        # real case: charity 107859, seed NI649994 against a truncated '64999'
+        # in the July 2026 download
+        rows = [
+            self._row(iteration='01/2024', companyid='NI649994'),
+            self._row(iteration='07/2026', companyid='NI064999'),
+        ]
+        sub_spine_row, _ = CCNIDataHandler().combine_org_details_per_source(rows)
+        assert sub_spine_row['companyid'] == 'NI649994'
+
+    def test_blank_stays_blank_when_no_row_has_one(self):
+        rows = [self._row(iteration='01/2024'), self._row(iteration='07/2026')]
+        sub_spine_row, _ = CCNIDataHandler().combine_org_details_per_source(rows)
+        assert sub_spine_row['companyid'] == ''
+
+
+
+# ---------------------------------------------------------------------------
+# CCNI charities whose self-declared company number names a different company
+# ---------------------------------------------------------------------------
+
+class TestCCNIKnownBadCompanyNumbers:
+
+    SEED_FIELDS = ['uid', 'charitynumber', 'organisationname', 'normalisedname',
+                   'companyid', 'housenumber', 'address', 'city', 'localauthority',
+                   'postcode', 'registerdate', 'removeddate', 'source', 'iteration']
+    DOWNLOAD_FIELDS = ['Reg charity number', 'Charity name', 'Date registered',
+                       'Status', 'Public address', 'Company number']
+
+    def run_process_ccni(self, tmp_path, monkeypatch, download_rows):
+        # process_ccni() reads '../raw_data/ccni/...' and writes
+        # '../raw_data/ccni.all.csv' relative to the working directory, so give it a
+        # throwaway working directory with its own sibling raw_data tree. The real
+        # ../raw_data is never touched.
+        raw = tmp_path / 'raw_data' / 'ccni'
+        raw.mkdir(parents=True)
+        work = tmp_path / 'work'
+        work.mkdir()
+
+        with open(raw / 'ccni_spine.csv', 'w', newline='', encoding='utf-8-sig') as fh:
+            csv.DictWriter(fh, fieldnames=self.SEED_FIELDS).writeheader()
+        with open(raw / 'register_charitydetails_2026_07_18.csv', 'w',
+                  newline='', encoding='Latin-1') as fh:
+            writer = csv.DictWriter(fh, fieldnames=self.DOWNLOAD_FIELDS)
+            writer.writeheader()
+            writer.writerows(download_rows)
+
+        monkeypatch.chdir(work)
+        process_ccni()
+
+        with open(tmp_path / 'raw_data' / 'ccni.all.csv', newline='',
+                  encoding='utf8') as fh:
+            return {row['charitynumber']: row['companyid']
+                    for row in csv.DictReader(fh)}
+
+    def download_row(self, charity_number, company_number, name='A Charity'):
+        return {'Reg charity number': charity_number,
+                'Charity name': name,
+                'Date registered': '10Feb2020',
+                'Status': 'Registered',
+                'Public address': '1 High Street, Belfast, BT1 1AA',
+                'Company number': company_number}
+
+    def test_mapping_documents_the_two_verified_cases(self):
+        assert CCNI_KNOWN_BAD_COMPANY_NUMBERS == {'108557': 'NI653679',
+                                                  '108948': 'NI056404'}
+
+    def test_known_bad_value_is_suppressed(self, tmp_path, monkeypatch, capsys):
+        rows = [self.download_row('108557', '653679',
+                                  'Healthy Living Centres Alliance Ltd'),
+                self.download_row('108948', '56404',
+                                  'Pomeroy Development Projects Ltd')]
+
+        result = self.run_process_ccni(tmp_path, monkeypatch, rows)
+
+        assert result['108557'] == ''
+        assert result['108948'] == ''
+        # the suppression is visible in the build log
+        printed = capsys.readouterr().out
+        assert ('CCNI known-bad company number suppressed for charity 108557: '
+                'NI653679') in printed
+        assert ('CCNI known-bad company number suppressed for charity 108948: '
+                'NI056404') in printed
+
+    def test_a_corrected_value_for_the_same_charity_passes_through(
+            self, tmp_path, monkeypatch, capsys):
+        # NI653799 is the charity's real company; if CCNI corrects the field the
+        # value must flow through with no code change
+        rows = [self.download_row('108557', '653799',
+                                  'Healthy Living Centres Alliance Ltd')]
+
+        result = self.run_process_ccni(tmp_path, monkeypatch, rows)
+
+        assert result['108557'] == 'NI653799'
+        assert 'known-bad' not in capsys.readouterr().out
+
+    def test_an_unlisted_charity_is_unaffected(self, tmp_path, monkeypatch):
+        rows = [self.download_row('100001', '652013'),
+                self.download_row('100002', '0')]
+
+        result = self.run_process_ccni(tmp_path, monkeypatch, rows)
+
+        assert result['100001'] == 'NI652013'
+        assert result['100002'] == ''
