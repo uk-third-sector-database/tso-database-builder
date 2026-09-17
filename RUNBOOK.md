@@ -380,6 +380,53 @@ automatically):
 3. `python3 cli.py process-charity-source ccni` (then `oscr`, then `ccew`)
    Combines each regulator's base file + downloads → `../raw_data/{ccni,oscr,ccew}.all.csv`.
    The OSCR step also writes `../raw_data/oscr.linkage.csv`, required later.
+
+   **CCNI company numbers (new in v1.3).** The CCNI register download has
+   always carried a `Company number` column, but the CCNI step used to throw
+   it away, so the only Northern Irish company numbers ever to reach the
+   builder were the 655 held in the 2024 seed file. They are now read from
+   every download and written into `companyid` in the spine's Companies
+   House format: the bare digits CCNI publishes (`652013`, `43374`, `306`)
+   are zero-padded to six and prefixed `NI` → `NI652013`, `NI043374`,
+   `NI000306`. Values that cannot be a company number are left blank rather
+   than guessed at — anything that is not a plain run of digits, anything
+   longer than six digits (CCNI holds a handful), and any single repeated
+   digit, because `0` and `000000` are CCNI's way of saying “not a company”
+   and `111111`/`999999`/`99999` are keyboard filler. Legacy R-prefixed
+   Northern Irish numbers are knowingly out of scope.
+
+   **Which number wins when a charity has several rows.** A charity normally
+   appears in more than one CCNI file (the 2024 seed, later register
+   downloads, the removals scrape). The step takes the FIRST non-blank
+   company number across the charity's rows, and because the seed rows are
+   read first this means “the seed number, unless the charity only ever had
+   a downloaded one”. This is deliberately the opposite of the CCEW
+   convention, which takes the LAST non-blank value: CCEW's later extracts
+   are corrections, whereas CCNI's self-reported `Company number` field is
+   the weaker source. Of the five charities where a seed number and a
+   downloaded number both exist, two of the downloaded numbers are wrong
+   (charity 107318 reports `999999` against seed NI661353; charity 107859
+   reports `64999`, a truncation of seed NI649994).
+
+   **Known-bad declarations.** `CCNI_KNOWN_BAD_COMPANY_NUMBERS` in
+   `handler/preprocess_charity_regulators.py` suppresses two specific
+   declarations that name a real but different company. Both were checked
+   against Companies House and the CCNI register on 17 September 2026:
+
+   | Charity | Declared | Why it is wrong |
+   |---|---|---|
+   | 108557 Healthy Living Centres Alliance Ltd | `NI653679` | That number is TAUGHMONAGH WORKS C.I.C. The charity's own company is NI653799, at the charity's own CCNI address, and four CCNI trustees are its directors — the digits are transposed |
+   | 108948 Pomeroy Development Projects Ltd | `NI056404` | That number is MEDICINE WHEEL PRODUCTIONS (IRELAND) LIMITED of Derry, dissolved 2013. The charity's own company is NI056101, and all four CCNI trustees are its directors |
+
+   The suppression is value-specific, so if CCNI corrects the field in a
+   later download the corrected number passes straight through and no code
+   change is needed. Do **not** “fix” these from Find that Charity: FTC has
+   inherited both errors from CCNI and so is not independent evidence. With
+   the number suppressed, each charity reaches its real company through the
+   exact-name rule in step 5 instead. The step prints
+   `CCNI known-bad company number suppressed for charity <number>: <value>`
+   once per charity per download file that repeats the bad value, so expect
+   several such lines in a build log — one per file, not one per charity.
 4. Ten `python3 cli.py process-source <Handler> <in> <out>` calls →
    per-source `*.spine.csv` + `*.supplementary.csv` in `../public_spine_data/`.
 5. `python3 cli.py build-spine <ten .spine.csv files> -o ../public_spine_data/TSCS_spine`
@@ -389,6 +436,99 @@ automatically):
    Housing Regulator, Social Housing England, Care Inspectorate Scotland,
    CQC. Console output (including per-organisation warnings) goes to
    `build_spine.out` — read it after every build.
+
+   **Match rules changed in v1.3.** Two additions and one narrowing; the rest
+   of the rule set is unchanged.
+
+   - **`name - ni charity`** links a Northern Irish company (a Companies
+     House record whose number begins `NI`) to the CCNI charity of the same
+     normalised name, joined from the Companies House side as
+     `name - housing` is. CCNI records a company number for only about a
+     fifth of its register, so for the rest a shared name is the only
+     evidence available — and a shared name on its own is weak. The rule
+     therefore fires only when the name picks out exactly ONE organisation on
+     each side: exactly one stored organisation holds that name for CCNI
+     (either in its own right, or because it absorbed a CCNI charity earlier
+     through an `ftc`/`oscr` link), and the incoming record is the only
+     NI-prefixed Companies House record carrying it. The second test cannot
+     be read off the name index — the incoming record is not stored yet — so
+     `merge()` first counts NI-prefixed Companies House records per
+     normalised name across the incoming batch and passes that census in.
+     The census covers ONE call of `merge()`, i.e. one input file, so it
+     assumes Companies House arrives as a single `CH.all.csv`, which is how
+     `spine_bash_script.sh` loads it. **Do not split Companies House across
+     several input files** — a second NI company on the same name would
+     escape the guard. The charity is the surviving organisation (CCNI
+     outranks Companies House in the load order) and the company's own name
+     and address are kept in the supplementary file.
+
+   - **`merge via bridge`** is not a match rule — no rule can produce it —
+     but a record that two spine organisations were folded into one. When a
+     single incoming record matched two stored organisations, the build used
+     to let one absorb the record and leave the other holding a blank-uid
+     association row, even where the incoming record was proof that the two
+     stored organisations are the same body. It now folds them together, but
+     only when every one of these holds:
+
+     1. the record resolves to exactly two distinct stored organisations;
+     2. those two come from different registers;
+     3. neither link is the association-only `companyid - companyid`;
+     4. both are still live spine organisations, so merges can never chain;
+     5. the evidence clears the policy in `bridge_evidence_is_strong_enough()`
+        — the two share a normalised name, or share it once THE / LTD /
+        LIMITED and punctuation are set aside, or each is linked to the
+        bridging record by an identifier rule with at least one of those
+        links declared by a register about itself (`ftc`, `oscr`,
+        `companyid - id_in_source`, `companyid - coop mutual`).
+
+     The last condition is what keeps related-but-distinct bodies apart: a
+     CQC provider's return often cites both a charity number and the company
+     number of that charity's trustee company or trading subsidiary, which is
+     good evidence of a relationship but not of identity. The organisation
+     from the register loaded EARLIER survives (the file order of this step
+     is the precedence order); the other leaves the spine, becomes an
+     absorbed record of the survivor carrying the fixed match type
+     `merge via bridge`, and hands over its supplementary rows and its own
+     match rows.
+
+     Every merge prints one line to `build_spine.out`:
+
+     ```
+     Bridge merge: <loser uid> -> <survivor uid> via <bridge uid> (<match types>)
+     ```
+
+     **Read these after every build.** They are the complete list of
+     organisations that left the spine by merging, and each one should be
+     defensible on its own evidence. `spine/compare_releases.py` (§5) collects
+     them with organisation names attached, which is the easier read.
+
+     Because a merged-away uid is no longer a spine row, the two uid-keyed
+     linkage tables (the Find that Charity same-as table and the historic
+     OSCR linkage) are looked up through an alias map: a link naming the
+     merged-away organisation now resolves to its survivor instead of
+     silently matching nothing.
+
+   - **`companyid - coop mutual` narrowed.** A co-operative's registered
+     number identifies a Companies House company or a Mutuals Public Register
+     society — never a charity. The rule used to link EVERY organisation the
+     number index returned as soon as one of them qualified, which let a
+     Scottish charity number collide with an identically formatted Scottish
+     company number: the co-op GB-COOP-R009306 linked both CITY CABS
+     (EDINBURGH) LIMITED (GB-COH-SC033518) and the unrelated OSCR charity
+     2nd Inchinnan Brownie Unit (GB-SC-SC033518). In v1.2 that surfaced as a
+     harmless blank-uid row — it is published as an example match row in the
+     guidance — but it is exactly the kind of evidence a bridge merge would
+     act on. Only organisations that actually hold the number on a qualifying
+     Companies House or Mutuals record are matched now.
+
+   **Keep the two match-type lists in step.** `MATCHTYPE_ORDER` in
+   `spine/build_public_spine.py` (which sets rule precedence) and
+   `MATCH_TYPES` in `spine/release.py` (the values release validation will
+   accept) are maintained by hand in two modules. A type added to one and not
+   the other either loses its precedence or fails validation at the end of
+   the build. `spine/test_release.py` now asserts that the two lists hold
+   exactly the same names, so the drift cannot go unnoticed — but a new
+   match type still has to be added to both by hand.
 6. `python3 cli.py check-spine <same ten files> -o ../public_spine_data/TSCS_spine`
    Verifies every input organisation reached the spine, supplementary or
    matches output.
@@ -415,6 +555,10 @@ automatically):
    of §3.1.3 and the association-matching correction, produced 1,108,256
    seeded supplementary rows; the v1.2 rebuild of 20 July (housing–mutuals
    matching fix) produced 1,108,831.
+   v1.3 (17 September 2026): 705,270 built rows plus 407,348 rows seeded
+   from the prior release gave 1,112,618 supplementary rows (of v1.0's
+   872,084 prior rows, 463,220 were already present in the fresh build and
+   1,516 belong to organisations no longer represented in the release).
 10. `python3 cli.py suppress-echo-matches ../public_spine_data/TSCS_spine.matches.csv <prior_release>/TSCS_spine.matches.csv`
     Removes bootstrap-echo `companyid - id_in_source` rows from the fresh
     matches file. Because `bootstrap-base-files` back-fills CCEW/CCNI
@@ -434,7 +578,8 @@ automatically):
     kept rows plus the suppressed set; the v1.2 rebuild of 20 July removed
     the same 40,467 rows from its 177,045-row pre-echo file, keeping
     136,578. (Earlier notes quoting 40,427 / 131,699 or 40,428 / 135,682
-    describe superseded artifacts.)
+    describe superseded artifacts.) The v1.3 rebuild of 17 September removed
+    41,122 rows from its 180,984-row pre-echo file, keeping 139,862.
 
 ## 5. Validating a build before release
 
@@ -484,7 +629,9 @@ Additional checks:
   supplementary; 135,794 matches; 474,843 SIC rows. v1.2, July 2026
   (current): 782,995 spine rows, of which 385,515 active; 1,108,831
   supplementary; 136,578 matches; 474,843 SIC rows; full tables in the
-  guidance). Large unexplained swings in any cell mean stop and
+  guidance. v1.3, September 2026 — spine rows / active / supplementary /
+  matches / SIC rows: 781,176 / 384,096 / 1,112,618 / 139,862 /
+  474,842). Large unexplained swings in any cell mean stop and
   investigate.
 - uid conventions: every spine uid starts GB-CHC/GB-COH/GB-SC/GB-MPR/
   GB-NIC/GB-COOP/GB-SHPE/GB-SHR; GB-CIS and GB-CQC appear only in matches.
@@ -495,6 +642,66 @@ Additional checks:
   `release_info.tex` is a deprecated historical record, not a second
   hand-maintained source of current counts — point readers to the guidance
   changelog and the archived validation records instead.
+
+### Delta adjudication against the prior release
+
+The three gates say a build is internally sound; they do not say *what
+changed*. Since v1.3 every candidate release is also adjudicated line by
+line against the release it replaces:
+
+```
+python spine/compare_releases.py <prior_release_dir> <new_staging_dir> <out_dir>
+```
+
+Both directories must hold the four release CSVs, and nothing else is read,
+so the comparison is reproducible from published artefacts alone. It writes
+`delta-report.md` plus supporting CSVs into `<out_dir>`:
+
+1. **Headline counts** — the four files, the active/removed split and
+   distinct uids, prior against new with the differences.
+2. **Spine uids removed** — every organisation in the prior spine and not in
+   the new one, *and where it went*: whether it reappears as the junior side
+   of a match row, under which match type, and which organisation absorbed
+   it, broken down by uid prefix and by status
+   (`spine-uids-removed.csv`). An organisation that leaves the spine without
+   reappearing anywhere is the thing to chase.
+3. **Spine uids added** — organisations new to the spine
+   (`spine-uids-added.csv`), including those separated out of a prior
+   over-merge.
+4. **Match rows** — totals by `match_type` prior against new, rows added and
+   removed by type (`match-rows-added.csv`, `match-rows-removed.csv`), the
+   match types the release introduces, and a bridge-merge table giving both
+   parties' names and the bridging record (`bridge-merges.csv`). This is the
+   readable version of the `Bridge merge:` lines in `build_spine.out`.
+5. **Field changes for surviving organisations** — name, normalised name,
+   postcode, registration date, removal date, CIC flag and the two
+   classification columns, with removal-date changes classified (revived:
+   had a date, now blank; newly removed; date changed) and a sample of
+   changed rows (`spine-field-changes.csv`).
+6. **Supplementary** — rows added and removed by source register, and which
+   organisations' variant records changed
+   (`supplementary-rows-added.csv`, `supplementary-rows-removed.csv`,
+   `supplementary-uids-changed.csv`).
+7. **SIC codes** — organisations gaining or losing codes
+   (`sic-uids-changed.csv`).
+8. **Northern Ireland** — the section written for this release: what
+   evidence stands behind each CCNI charity-to-company link, charities that
+   absorbed more than one company, postcode agreement between a charity and
+   the company folded into it, and CCNI charities that were removed in the
+   prior spine but are active in the new one
+   (`ni-charity-company-absorptions.csv`, `ni-charities-multi-company.csv`,
+   `ni-charities-revived.csv`).
+
+Keep the report and its CSVs with the release record. The adjudication is
+the evidence that every count movement was intended rather than merely
+tolerated.
+
+**Builds run from a frozen copy of the repo.** A full build takes hours, so
+it is normal to copy the repo to `code/tso-build-snapshot-<tag>` and run the
+build there, leaving the working repo free for further code edits. The copy
+is the build's code of record — name it in the QA notes — and it is deleted
+once the release is signed off. Never promote CSVs out of a snapshot whose
+code does not match what was committed.
 
 ### Determinism (cross-seed acceptance completed 19 July 2026)
 
@@ -528,6 +735,15 @@ the SIC file is byte-identical to v1.1. The v1.2 rebuild reused the
 accepted preprocessing outputs and ran single-seed (the tweak changes
 rule eligibility only, no ordering logic); gates and delta adjudication:
 `docs/spine-docs/qa-rebuild-2026-07/housing-mutuals-rebuild-2026-07-20.md`.
+
+The equivalent v1.3 table — four logical row counts and SHA-256 hashes:
+
+| File | Logical rows | SHA-256 |
+|---|---:|---|
+| `TSCS_spine.spine.csv` | 781,176 | `1038502982df3dcf52c3cc8ac8767884c293102f862d8951d658e54fcf1abafd` |
+| `TSCS_spine.matches.csv` | 139,862 | `f4720b41c5aebbd6e407adec310b460fbf9a8d95001341f60547178c693b192f` |
+| `TSCS_spine.supplementary.csv` | 1,112,618 | `3ecc1e4e16f7fb0549be69b231097cd2217de11895ac30ea518562931233c757` |
+| `TSCS_spine.SIC_codes.csv` | 474,842 | `7088679d373200a14858bddc9f7bd6fe0a1cd71fc8317d455f37c896f409e025` |
 
 After promoting the four CSVs into `../public_spine_data/`, re-hash them
 and compare against this table (or the signed hashes of whichever release
@@ -607,3 +823,34 @@ the frozen input hash lists, the unit/regression tests and the QA records
   transport ZIP.
 - The Makefile's `setup-pyenv`/`setup-venv` targets are Unix-only and
   broken; use §2 instead.
+- **Name-only Northern Ireland links are weaker than identifier-confirmed
+  ones (v1.3).** Where a CCNI charity and a Northern Irish company are
+  linked by exact name alone, the two records agree on postcode about 52% of
+  the time, against about 79% for pairs confirmed by a company number. Much
+  of that gap is not error: a Companies House registered office is often the
+  address of the charity's accountant or solicitor, while CCNI holds the
+  charity's own address. Treat the name-only links as good but not certain,
+  and use the `match_type` column to separate them.
+- **Registration dates move earlier when a company is folded in.** The
+  spine's `registerdate` is the earliest date across all linked source
+  records, so a CCNI charity linked to an older company shows the company's
+  incorporation date rather than its charity registration date. This is the
+  designed rule (the same one behind the charity-merger effect above), but it
+  became visible for Northern Ireland only in v1.3, when NI companies started
+  linking in numbers.
+- **Clyde Valley Housing Association is still two organisations** (OSCR
+  SC037244 and Mutuals 2489RS). The bridge merge does not fire because the
+  Scottish Housing Regulator record names it “… Ltd” while the other side
+  says “… Limited”, and the name rules compare normalised names, which keep
+  the difference. Follow-up: normalise Ltd/Limited in the pipeline's own name
+  normalisation (`handler/base_definitions.py`), not only in the
+  bridge-merge comparison form.
+- **CCNI company numbers are self-reported.** Roughly 0.3% of the numbers
+  CCNI publishes name a different company. Two verified cases are suppressed
+  by name (§4 step 3); others may remain. Find that Charity has inherited at
+  least those two errors from CCNI, so it cannot be used as an independent
+  check.
+- **Two CCNI charities are classified as CICs** — uHub Therapy Centre and
+  RiChmusicNI both resolve to companies registered as Community Interest
+  Companies, so `is_cic` is true and `cso_type` is CIC rather than Charity.
+  That is what the registers say; it is unusual but not a pipeline error.
