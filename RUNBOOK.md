@@ -854,3 +854,30 @@ the frozen input hash lists, the unit/regression tests and the QA records
   RiChmusicNI both resolve to companies registered as Community Interest
   Companies, so `is_cic` is true and `cso_type` is CIC rather than Charity.
   That is what the registers say; it is unusual but not a pipeline error.
+
+### Worked examples: links resting on the exact name alone (v1.3)
+
+Of the 2,049 CCNI charity-to-company links in v1.3, 654 were already present in v1.2
+through the Find That Charity same-as file; 1,395 are new, of which 392 rest on the
+exact normalised name alone (no CCNI-declared company number, no Find That Charity
+entry). Ten of the 392, drawn at random (seed 20260917) on 2026-09-17:
+
+| Charity | Company | Charity address | Company registered office | Dates |
+|---|---|---|---|---|
+| Older People North West (GB-NIC-103825) | GB-COH-NI030134 | 3 Belvoir Park, Londonderry, BT48 8PQ | Malvern House, Chapel Road, Derry, BT47 2AM | both active; company since 1995 |
+| Manna (Kells) Ltd (GB-NIC-100631) | GB-COH-NI621158 | 2 Fernisky Road, Kells, BT42 3JP | 2 Fernisky Road, Kells, BT42 3JP | company dissolved Oct 2019; charity removed Jul 2020 |
+| Inter Estate Partnership (GB-NIC-105605) | GB-COH-NI066337 | 20 Oaktree Drive, Antrim, BT41 1DB | Unit 3 Parkhall Shopping Centre, Antrim, BT41 1AJ | company dissolved 2010; charity removed Apr 2026 |
+| ME Support NI (GB-NIC-109910) | GB-COH-NI690761 | 61 Orchardville Avenue, Belfast, BT10 0JH | 61 Orchardville Avenue, Belfast, BT10 0JH | company dissolved Dec 2024; charity removed Nov 2025 |
+| Killyrammer and District Community Association (GB-NIC-101613) | GB-COH-NI614900 | 16 Hillcrest Gardens, Ballymoney, BT53 8NB | 16 Hillcrest Gardens, Killyrammer, BT53 8NB | company dissolved 2018; charity active |
+| Omagh Women's Area Network (GB-NIC-101290) | GB-COH-NI036070 | Community House, 2 Drumragh Avenue, Omagh, BT78 1DP | Community House, 2nd Floor, 2 Drumragh Avenue, BT78 1DP | company dissolved Jul 2017; charity removed Feb 2018 |
+| Community Restorative Justice Ireland (GB-NIC-103318) | GB-COH-NI042773 | Forbairt Feirste Building, Belfast, BT12 6FB | Belfast, BT12 6BE | both active; company since 2002 |
+| Apsley Hall Assembly (GB-NIC-101167) | GB-COH-NI724181 | 66 Magheralave Meadows, Lisburn, BT28 3NT | 48 Apsley Street, Belfast, BT7 1DU | both active; company since Nov 2024 |
+| JCP Trust Limited (GB-NIC-100030) | GB-COH-NI031631 | Johnston Campbell Ltd, 8 Cromac Place, Belfast, BT7 2JB | 8 Cromac Place, Belfast, BT7 2JB | both ended 20 Jul 2021 |
+| Belfast and County Down Miniature Railway Society Ltd (GB-NIC-100683) | GB-COH-NI025802 | 4 Steeple Green, Antrim, BT41 1BP | Century House, 40 Crescent Business Park, BT28 2GN | both active; company since 1991 |
+
+Five share an address outright; dissolution dates line up closely in four cases and JCP
+Trust ended on both registers the same day. Killyrammer's company was dissolved in 2018
+while the charity remains registered: the link to the dissolved company is historically
+correct. An earlier sample shown during the session mistakenly included pairs that also
+carried a Find That Charity link (e.g. Drumcree Community Trust); those were already in
+v1.2 and are not "new" links.
