@@ -20,7 +20,9 @@ The CCEW, OSCR and CCNI arguments must name the current register snapshots,
 not their historical/removal extracts. The Companies House argument is the
 processed chronological ``CH.all.csv`` input; only organisations seen in its
 newest monthly bulk snapshot or a later dated refresh are treated as current.
-CE-prefix CIO status is deferred to the newer CCEW snapshot. Exit status is
+CE-prefix CIO status is deferred to the newer CCEW snapshot, and a Companies
+House registered-society record absorbed into a society the FCA Mutuals Public
+Register has deregistered is deferred to the FCA (v1.3.1). Exit status is
 zero only when every organisation which is active in its latest authoritative
 source record resolves to a final spine row with a blank ``removeddate``.
 Direct UIDs resolve to themselves; absorbed UIDs resolve through nonblank
@@ -55,6 +57,9 @@ class SourceAlignmentResult:
     active_effective_parent_uids: int
     unresolved_source_uids: tuple[str, ...]
     false_removed_links: tuple[tuple[str, str], ...]
+    # Companies House society-number records whose absorbing organisation is
+    # an FCA-deregistered society: removed on the FCA's authority, not stale.
+    fca_deferred_links: tuple[tuple[str, str], ...] = ()
 
     @property
     def unresolved_count(self) -> int:
@@ -438,6 +443,27 @@ def active_companies_house_uids(path: Path | str) -> set[str]:
     }
 
 
+# Companies House number prefixes for registered societies; the same list as
+# spine.build_public_spine.SOCIETY_CH_PREFIXES (kept separate: this module
+# reads only the release files).
+SOCIETY_CH_UID_PREFIXES = tuple(
+    "GB-COH-" + prefix for prefix in ("IP", "RS", "SP", "SR", "NP", "NR", "NO")
+)
+
+
+def _fca_deferred(source_uid: str, parent_uid: str) -> bool:
+    """A Companies House society-number record kept inside a society-led
+    organisation. Companies House keeps such records as copies of the FCA
+    register and never dissolves them, so the organisation's removal date
+    comes from the FCA deregistration (the build's v1.3.1 rule) and the
+    record's bulk-file 'active' status is not checked a second time."""
+
+    return (
+        source_uid.startswith(SOCIETY_CH_UID_PREFIXES)
+        and parent_uid.startswith("GB-MPR-")
+    )
+
+
 def _compare_source(
     source: str,
     active_uids: set[str],
@@ -461,12 +487,17 @@ def _compare_source(
         for uid, parent in effective.items()
         if parent
     }
+    removed_links = sorted(
+        (uid, parent)
+        for uid, parent in resolved.items()
+        if final_spine[parent]
+    )
+    fca_deferred_links = tuple(
+        link for link in removed_links
+        if source == "Companies House" and _fca_deferred(*link)
+    )
     false_removed_links = tuple(
-        sorted(
-            (uid, parent)
-            for uid, parent in resolved.items()
-            if final_spine[parent]
-        )
+        link for link in removed_links if link not in fca_deferred_links
     )
     return SourceAlignmentResult(
         source=source,
@@ -476,6 +507,7 @@ def _compare_source(
         active_effective_parent_uids=len(set(resolved.values())),
         unresolved_source_uids=unresolved,
         false_removed_links=false_removed_links,
+        fca_deferred_links=fca_deferred_links,
     )
 
 
@@ -561,6 +593,14 @@ def format_report(
         ),
     ))
     for result in report.results:
+        if result.fca_deferred_links:
+            lines.append(
+                f"{result.source}: {len(result.fca_deferred_links):,} active "
+                "registered-society record(s) deferred to the FCA "
+                "deregistration of the society that absorbs them "
+                "(not counted as false-removed)"
+            )
+    for result in report.results:
         if not result.false_removed_links:
             continue
         examples = ", ".join(
@@ -617,6 +657,7 @@ def _json_report(report: SourceAlignmentReport) -> str:
                     result.false_removed_direct_source_count
                 ),
                 "false_removed_parent_count": result.false_removed_count,
+                "fca_deferred_source_count": len(result.fca_deferred_links),
                 "false_removed_parent_uids": result.false_removed_uids,
                 "false_removed_links": [
                     {

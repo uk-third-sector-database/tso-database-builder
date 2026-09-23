@@ -402,3 +402,32 @@ def test_bad_ch_iteration_is_an_input_error(tmp_path):
 
     with pytest.raises(SourceAlignmentInputError, match="expected YYYY"):
         active_companies_house_uids(path)
+
+
+def test_ch_society_record_is_deferred_to_fca_deregistration():
+    from spine.source_alignment import _compare_source
+
+    final_spine = {
+        "GB-MPR-17815R": "19/08/2024",   # FCA-deregistered society
+        "GB-CHC-1": "01/01/2020",        # removed charity
+    }
+    parents = {
+        "GB-COH-IP17815R": "GB-MPR-17815R",
+        "GB-COH-05123456": "GB-MPR-17815R",
+        "GB-COH-RS000001": "GB-CHC-1",
+    }
+    result = _compare_source(
+        "Companies House", set(parents), final_spine, parents
+    )
+
+    assert result.fca_deferred_links == (("GB-COH-IP17815R", "GB-MPR-17815R"),)
+    # an ordinary company inside the society, and a society record inside a
+    # charity, are still reported as false-removed
+    assert result.false_removed_links == (
+        ("GB-COH-05123456", "GB-MPR-17815R"),
+        ("GB-COH-RS000001", "GB-CHC-1"),
+    )
+
+    # the exception belongs to the Companies House comparison only
+    other = _compare_source("OSCR", {"GB-COH-IP17815R"}, final_spine, parents)
+    assert other.fca_deferred_links == ()

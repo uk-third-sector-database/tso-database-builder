@@ -886,6 +886,98 @@ def test_ccew_status_is_authoritative_for_cio_shadow_record():
     assert parent.removeddate == "07/03/2023"
 
 
+def _society_parent(removeddate):
+    return CoreOrganisation(**sub_spine_entry_creator({
+        "uid": "GB-MPR-17815R",
+        "organisationname": "Grasmere Club Limited",
+        "normalisedname": "GRASMERE CLUB LIMITED",
+        "source": "mutuals",
+        "source_register": "Mutuals Public Register",
+        "id_in_source": "17815R",
+        "removeddate": removeddate,
+    }))
+
+
+def _live_link(uid, source, source_register, id_in_source):
+    return SubSpineOrg(**sub_spine_entry_creator({
+        "uid": uid,
+        "organisationname": "Grasmere Club Limited",
+        "normalisedname": "GRASMERE CLUB LIMITED",
+        "source": source,
+        "source_register": source_register,
+        "id_in_source": id_in_source,
+        "removeddate": "",
+    }))
+
+
+def test_fca_deregistration_is_authoritative_for_a_society():
+    # live society-number Companies House mirror, Co-operatives UK and housing
+    # records do not keep an FCA-deregistered society open
+    parent = _society_parent("19/08/2024")
+    parent.matched_orgs = [
+        (_live_link("GB-COH-IP17815R", "CH", "Companies House", "IP17815R"), "ftc"),
+        (_live_link("GB-COOP-R010095", "CoOps", "Co-operatives", "R010095"),
+         "companyid - coop mutual"),
+        (_live_link("GB-SHPE-L0001", "socialhousingengland", "Social Housing England",
+                    "L0001"), "name - housing"),
+    ]
+
+    parent.sort_extras()
+
+    assert parent.removeddate == "19/08/2024"
+
+
+@pytest.mark.parametrize("number", ["RS007840", "SP2696RS", "NP000256", "NO000004"])
+def test_every_society_number_prefix_is_a_mirror(number):
+    parent = _society_parent("05/09/2022")
+    parent.matched_orgs = [
+        (_live_link("GB-COH-" + number, "CH", "Companies House", number), "ftc"),
+    ]
+
+    parent.sort_extras()
+
+    assert parent.removeddate == "05/09/2022"
+
+
+def test_society_converted_to_a_live_company_stays_open():
+    parent = _society_parent("19/08/2024")
+    parent.matched_orgs = [
+        (_live_link("GB-COH-05123456", "CH", "Companies House", "05123456"), "ftc"),
+    ]
+
+    parent.sort_extras()
+
+    assert parent.removeddate == ""
+    assert any(extra.removeddate == "19/08/2024" for extra in parent.extras)
+
+
+def test_society_rule_does_not_touch_a_live_society_or_other_leads():
+    live_society = _society_parent("")
+    live_society.matched_orgs = [
+        (_live_link("GB-COH-IP17815R", "CH", "Companies House", "IP17815R"), "ftc"),
+    ]
+    live_society.sort_extras()
+    assert live_society.removeddate == ""
+
+    # a removed charity lead is still held open by a live society-number record:
+    # the exception belongs to FCA-led organisations only
+    charity = CoreOrganisation(**sub_spine_entry_creator({
+        "uid": "GB-CHC-1001",
+        "organisationname": "Removed Charity",
+        "normalisedname": "REMOVED CHARITY",
+        "source": "ccew",
+        "source_register": "Charity Commission for England and Wales",
+        "id_in_source": "1001-0",
+        "removeddate": "07/03/2023",
+    }))
+    charity.matched_orgs = [
+        (_live_link("GB-COH-IP17815R", "CH", "Companies House", "IP17815R"),
+         "companyid - id_in_source"),
+    ]
+    charity.sort_extras()
+    assert charity.removeddate == ""
+
+
 def test_absorbed_uid_is_not_rematerialised_by_another_association():
     def core(uid):
         return CoreOrganisation(**sub_spine_entry_creator({

@@ -351,6 +351,21 @@ SOURCE_LOAD_ORDER = [
 ]
 SOURCE_LOAD_RANK = {source: rank for rank, source in enumerate(SOURCE_LOAD_ORDER)}
 
+# Companies House number prefixes for registered societies (industrial and provident
+# societies, registered societies, credit unions): England & Wales, Scotland and
+# Northern Ireland (NO = Northern Ireland credit unions, typed industrial-and-provident-
+# society by the API, checked 23 Sep 2026). Companies House holds these as mirrors of
+# the FCA's (or, for NI, the Department for the Economy's) register and never gives
+# them a dissolution date.
+SOCIETY_CH_PREFIXES = ('IP', 'RS', 'SP', 'SR', 'NP', 'NR', 'NO')
+
+
+def is_ordinary_ch_company(org):
+    """True when `org` is a Companies House record for an ordinary company, i.e.
+    not a registered-society mirror record."""
+    return (org.source.lower() == 'ch'
+            and not org.id_in_source.upper().startswith(SOCIETY_CH_PREFIXES))
+
 
 def holds_record_from(org, sources, id_in_source=None, companyid=None):
     """True when `org` itself - or a record it has absorbed - comes from one of
@@ -714,8 +729,19 @@ class CoreOrganisation(BaseModel): # orgs for public spine
 
         # Check whether every consolidated register record is currently
         # removed. Historical removals in supplementary rows do not determine
-        # current status. Companies House CE-number records are the narrow
-        # exception: CCEW is authoritative for CIO status.
+        # current status. Two exceptions, both where one register is the
+        # authority for the organisation's legal form:
+        # - Companies House CE-number records: CCEW is authoritative for CIO
+        #   status.
+        # - A society the FCA Mutuals Public Register has deregistered (v1.3.1,
+        #   owner decision 22-23 Sep 2026): the FCA is authoritative for its
+        #   ending, so a live linked record does not keep it open - UNLESS that
+        #   record is an ordinary Companies House company (the society most
+        #   likely converted into it, a genuine continuation). Companies House
+        #   society-number records only mirror the FCA and never carry a
+        #   dissolution date; Co-operatives UK and the housing and care
+        #   registers rarely or never record an ending.
+        fca_society_ended = self.source.lower() == 'mutuals' and bool(self.removeddate)
         for matched_org, _ in consolidated_matches:
             if not matched_org.removed():
                 is_cio_shadow = (
@@ -724,6 +750,8 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                     and matched_org.id_in_source.upper().startswith('CE')
                 )
                 if is_cio_shadow:
+                    continue
+                if fca_society_ended and not is_ordinary_ch_company(matched_org):
                     continue
                 all_orgs_removed = False
 
