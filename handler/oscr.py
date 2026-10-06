@@ -2,7 +2,7 @@
 from datetime import datetime
 import pandas as pd
 
-from .base import DataHandler,sort_encoding_issue,fix_dates_set
+from .base import DataHandler,fix_dates_set,stable_data_key
 from .base_definitions import sub_spine_entry_creator,extra_csv_entry_creator
 nulls = (None, '', [], {}, ())
 
@@ -85,9 +85,6 @@ class OSCRDataHandler(DataHandler):
 
     def find_primary_name(self,names_list):
         '''names_list is list of tuples (orgname,normname,name_origin)'''
-        def stable_data_key(data_tuple):
-            return tuple('' if value is None else str(value) for value in data_tuple)
-
         primary = ('','')
         all_names = set()
         dated_candidates = []
@@ -132,9 +129,6 @@ class OSCRDataHandler(DataHandler):
     def find_primary_info(self,address_list):
         '''address_list is list of tuples (fulladdress,city,postcode,iteration)
         and primary address is that found in most recent iteration'''
-
-        def stable_data_key(data_tuple):
-            return tuple('' if value is None else str(value) for value in data_tuple)
 
         primary = ('','','')
         all_addresses = set()

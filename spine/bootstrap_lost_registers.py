@@ -145,6 +145,8 @@ import re
 from collections import defaultdict
 from datetime import datetime
 
+from spine.bootstrap_base_files import load_supplementary
+
 # currency of the published v1.0 details (January 2026 build), mm/yyyy
 AS_OF_ITERATION = '01/2026'
 
@@ -241,31 +243,6 @@ def load_spine(spine_csv):
                     by_reg[key][row['uid']] = slim
                     break
     return by_reg, all_spine
-
-
-def load_supplementary(supplementary_csv):
-    """One pass over the published supplementary file. Returns
-    {register_key: {uid: [rows in file order]}} keeping only rows attributed
-    to the register's own source_register (rows for the same uid attributed
-    to other registers belong to those registers)."""
-    by_reg = {k: defaultdict(list) for k in REGISTERS}
-    wanted = {v['register']: k for k, v in REGISTERS.items()}
-    with open(supplementary_csv, 'r', newline='', encoding='utf-8-sig') as f:
-        for row in csv.DictReader(f):
-            key = wanted.get(row['source_register'])
-            if key is None:
-                continue
-            if not row['uid'].startswith(REGISTERS[key]['prefix']):
-                continue
-            by_reg[key][row['uid']].append({
-                'organisationname': row['organisationname'],
-                'fulladdress': row['fulladdress'],
-                'city': row['city'],
-                'postcode': row['postcode'],
-                'registerdate': row['registerdate'],
-                'removeddate': row['removeddate'],
-            })
-    return {k: dict(v) for k, v in by_reg.items()}
 
 
 def load_matches(matches_csv):
@@ -676,7 +653,7 @@ def write_lost_register_files(spine_csv, supplementary_csv, matches_csv,
 
     links = load_matches(matches_csv)
     spine_by_reg, all_spine = load_spine(spine_csv)
-    supp_by_reg = load_supplementary(supplementary_csv)
+    supp_by_reg = load_supplementary(supplementary_csv, REGISTERS)
     fresh_ids = load_fresh_ids(raw_data_root)
 
     all_stats = {}

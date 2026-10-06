@@ -1,14 +1,13 @@
 ## preprocess companies house data from the various sources, adding an iteration tag for later sorting.
 ## then use companies_house.py for datahandler and base constructs to sort into primary and secondary for the subspine contributions from CH.
 
-from .base_definitions import sub_spine_entry_creator,SUB_SPINE_CSV_FIELDS
+from .base_definitions import SUB_SPINE_CSV_FIELDS
 import os
 import csv
 import glob
 import re
 from .companies_house import CompaniesHouseDataHandler
 from .companies_house_API_scrape import CH_APIScrape_DataHandler
-#from .companies_house_2014 import CompaniesHouse2014DataHandler
 import pandas as pd
 
 
@@ -29,13 +28,6 @@ def process_api_scrape(file,ofile):
         data_handler.all_filters, iter_csv_rows(file,data_handler)):
         ofile.writerows(data_handler.transform_row(new_row))
 
-
-#def process_2014_data(file,ofile):
-#    print(file)
-#    data_handler = CompaniesHouse2014DataHandler()
-#    for new_row in filter(
-#        data_handler.all_filters, iter_csv_rows(file,data_handler)):
-#        ofile.writerows(data_handler.transform_row(new_row))
 
 def process_bulk_download(file,ofile,datahandler):
     # extract date from filename, eg. BasicCompanyDataAsOneFile-2023-06-01.csv

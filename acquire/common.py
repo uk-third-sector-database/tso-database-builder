@@ -11,7 +11,6 @@ Only plain functions and the `requests` library - no framework.
 """
 
 import os
-import re
 import time
 from pathlib import Path
 
@@ -101,13 +100,6 @@ def download_file(url, dest_path, *, params=None, headers=None,
     os.replace(tmp, dest_path)
     print(f'  saved {written:,} bytes -> {dest_path}')
     return dest_path
-
-
-def filename_from_response(resp):
-    """Filename given in a response's Content-Disposition header, or None."""
-    cd = resp.headers.get('Content-Disposition', '')
-    m = re.search(r'filename\*?=(?:UTF-8\'\')?"?([^";]+)"?', cd)
-    return m.group(1).strip() if m else None
 
 
 def strip_utf8_bom(data: bytes) -> bytes:

@@ -17,13 +17,9 @@ py -3.11 -m venv .tso
 ```
 
 `requirements.txt` contains the pinned build and acquisition dependencies.
-`test-requirements.txt` adds the pinned test runner. The old analysis notebooks
-are not part of the release build; install their optional packages only when
-needed:
-
-```bash
-.tso/Scripts/python.exe -m pip install -r requirements-visualise.txt
-```
+`test-requirements.txt` adds the pinned test runner. The old analysis notebook
+is not part of the release build and now lives in `archive/visualise/` with its
+own optional requirements file.
 
 The commands call the virtual-environment interpreter directly, so activation
 is optional. If you prefer activation in Git Bash, use:
@@ -73,7 +69,7 @@ After updating and rendering the canonical HTML/PDF guidance, create a new
 exact-whitelist release directory:
 
 ```bash
-./prepare_zip.sh \
+PYTHONUTF8=1 .tso/Scripts/python.exe cli.py prepare-release \
   ../public_spine_data/run-2026-07 \
   ../../docs/guidance/tcss-organisation-register-guidance.html \
   ../../docs/guidance/tcss-organisation-register-guidance.pdf \

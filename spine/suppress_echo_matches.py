@@ -38,15 +38,9 @@ import os
 import tempfile
 from collections import Counter
 
+from spine.seed_supplementary import read_csv_rows
+
 ECHO_MATCH_TYPE = 'companyid - id_in_source'
-
-
-def read_csv_rows(filename):
-    '''Returns (header, rows) with rows as lists of field values.'''
-    with open(filename, newline='', encoding='utf-8-sig') as f:
-        reader = csv.reader(f)
-        header = next(reader)
-        return header, [row for row in reader if row]
 
 
 def _column_indices(header, filename, columns):

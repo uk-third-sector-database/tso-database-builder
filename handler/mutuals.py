@@ -1,10 +1,7 @@
 
-from .base import DataHandler,sort_encoding_issue
+from .base import DataHandler
 from datetime import datetime
 
-exclude_filters = {
-    "": []
-}
 
 
 class MutualsDataHandler(DataHandler):
@@ -64,11 +61,7 @@ class MutualsDataHandler(DataHandler):
         return new_row
     
 
-    def find_primary_info(self, details_list):
-        return super().find_primary_info(details_list)
 
-    def combine_org_details_per_source(self, rows: list):
-        return super().combine_org_details_per_source(rows)
 
 
 

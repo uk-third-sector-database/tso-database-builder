@@ -1,4 +1,4 @@
--r requirements.txt
+-r ../../requirements.txt
 jupyter==1.0.0
 matplotlib==3.10.8
 matplotlib-venn==1.1.2

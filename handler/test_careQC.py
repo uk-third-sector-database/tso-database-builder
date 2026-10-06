@@ -5,7 +5,6 @@
 
 import csv
 
-import pytest
 
 from handler.base import do_csv_processing
 from handler.careQC import CQCDataHandler, normalise_company_number, PROVIDER_ID_FIELD

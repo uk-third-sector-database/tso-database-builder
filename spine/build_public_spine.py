@@ -183,17 +183,6 @@ class ExtraInfo(BaseModel):
     def __hash__(self):
         return hash(self.model_dump(exclude="source"))
     
-    def hash_addr(self):
-        return hash((self.fulladdress, self.city, self.postcode))
-    
-    def hash_names(self):
-        return hash((self.organisationname, self.normalisedname))
-    
-    def hash_reg(self):
-        return hash(self.registerdate)
-    
-    def hash_rem(self):
-        return hash(self.removeddate)
 
 
 EXTRA_INFO_SORT_FIELDS = (

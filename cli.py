@@ -5,8 +5,6 @@ import click
 from handler.base import do_csv_processing,compress_org_details,sort_csv_by_field
 
 from handler.companies_house import CompaniesHouseDataHandler
-#from handler.companies_house_2014 import CompaniesHouse2014DataHandler
-from handler.companies_house_API_scrape import CH_APIScrape_DataHandler
 from handler.co_ops import CoOpsDataHandler
 from handler.careInspectScot import CareInspScotDataHandler
 from handler.careQC import CQCDataHandler
@@ -23,11 +21,7 @@ from spine.bootstrap_lost_registers import write_lost_register_files
 from spine.seed_supplementary import seed_supplementary as run_seed_supplementary
 from spine.suppress_echo_matches import suppress_echo_matches as run_suppress_echo_matches
 from spine.build_public_spine import process_csvs_to_build_spine
-from spine.verify_build import (
-    RepresentationError,
-    create_tex_table,
-    verify_representation,
-)
+from spine.verify_build import RepresentationError, verify_representation
 from spine.add_cso_type import add_cso_type_to_spine
 from spine.release import (
     ReleasePackagingError,
@@ -41,14 +35,10 @@ from spine.release import (
 
 from handler.all_companies_house import main_process, sic_codes_lookup
 
-import subprocess
-
 
 # Add entries here of handler name to handler type for use by the command line
 handler_map = {"CompaniesHouse": CompaniesHouseDataHandler,
                "CoOps": CoOpsDataHandler,
-#               "CompaniesHouse2014":CompaniesHouse2014DataHandler,
-               "CompaniesHouseGapDecade":CH_APIScrape_DataHandler,
                "CareInspScot":CareInspScotDataHandler,
                "CQC":CQCDataHandler,
                "SocialHousingEng":SocialHousingEngDataHandler,
@@ -237,12 +227,6 @@ def check_spine(infiles, outfile_base):
     except RepresentationError as exc:
         raise click.ClickException(str(exc)) from exc
     
-
-@cli.command()
-@click.argument("outfile_base", default="public_spine", nargs = 1)
-def tex_table_spine(outfile_base):
-    create_tex_table(outfile_base)
-
 
 @cli.command()
 @click.argument('ch_prepared_file')

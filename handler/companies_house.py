@@ -135,11 +135,7 @@ class CompaniesHouseDataHandler(DataHandler):
         super().sort_address_fields(new_row)
         return new_row
         
-    def find_primary_info(self, details_list):
-        return super().find_primary_info(details_list)
     
-    def combine_org_details_per_source(self, rows: list):
-        return super().combine_org_details_per_source(rows)
 
 
 

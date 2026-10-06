@@ -320,19 +320,23 @@ def load_spine(spine_csv):
     return by_reg
 
 
-def load_supplementary(supplementary_csv):
+def load_supplementary(supplementary_csv, registers=None):
     """One pass over the published supplementary file.  Returns
     {regulator: {uid: [rows in file order]}} keeping only rows attributed to
     the regulator's own register (rows for the same uid attributed to other
-    registers belong to those registers' reconstructions)."""
-    by_reg = {k: defaultdict(list) for k in REGULATORS}
-    wanted = {v['register']: k for k, v in REGULATORS.items()}
+    registers belong to those registers' reconstructions).  `registers`
+    defaults to the three charity regulators; bootstrap_lost_registers
+    passes its own register table."""
+    if registers is None:
+        registers = REGULATORS
+    by_reg = {k: defaultdict(list) for k in registers}
+    wanted = {v['register']: k for k, v in registers.items()}
     with open(supplementary_csv, 'r', newline='', encoding='utf-8-sig') as f:
         for row in csv.DictReader(f):
             reg = wanted.get(row['source_register'])
             if reg is None:
                 continue
-            if not row['uid'].startswith(REGULATORS[reg]['prefix']):
+            if not row['uid'].startswith(registers[reg]['prefix']):
                 continue
             by_reg[reg][row['uid']].append({
                 'organisationname': row['organisationname'],

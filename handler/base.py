@@ -26,6 +26,11 @@ def parse_iteration_date(value):
     return None
 
 
+def stable_data_key(data_tuple):
+    '''Sort key that orders detail tuples by their text, treating None as blank.'''
+    return tuple('' if value is None else str(value) for value in data_tuple)
+
+
 def fix_dates_set(datesset, order):
     '''select the earliest (order=0) or latest (order=-1) date from a set of
     dd/mm/yyyy date strings (datetime objects also accepted), comparing
@@ -78,7 +83,6 @@ class DataHandler:
     fileencoding = None
     names = None
     tmp_fields = None
-    ftc_code = None
         
     def all_filters(self, row: dict) -> bool:
         raise NotImplementedError()
@@ -177,9 +181,6 @@ class DataHandler:
         details_list = list(details_list)
         if not details_list:
             return (), []
-
-        def stable_data_key(data_tuple):
-            return tuple('' if value is None else str(value) for value in data_tuple)
 
         primary = tuple('' for _ in range(len(details_list[0])-1))
         dated_candidates = []
@@ -353,7 +354,7 @@ def sort_encoding_issue(st:str):
     while not st.isascii():
         try:
             st = st.encode('latin-1').decode('utf-8-sig')
-        except (UnicodeEncodeError, UnicodeDecodeError) as e:
+        except (UnicodeEncodeError, UnicodeDecodeError):
             break
     return st
     
@@ -370,13 +371,10 @@ def iter_csv_rows(filename,DataHandler):
             yield row
 
 
-def normalizer(name, norm_dict=None):
-    ''' normalise entity names with manually curated dict'''
-    norm_dict={}
+def normalizer(name):
+    ''' normalise entity names'''
     if isinstance(name, str):
         name = name.upper()
-        for key, value in norm_dict.items():
-            name = name.replace(key, value)
         name = name.replace(r"\(.*\)", " ")  # remove brackets
         name = name.replace(r"&", "AND")  
         name = name.replace(r"\+", "AND")  

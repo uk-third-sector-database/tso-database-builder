@@ -2,11 +2,8 @@
 
 from datetime import datetime
 
-from .base import DataHandler,sort_encoding_issue
+from .base import DataHandler
 
-exclude_filters = {
-    "": []
-}
 
 PROVIDER_ID_FIELD = 'CQC Provider ID (for office use only)'
 
@@ -45,10 +42,6 @@ class CQCDataHandler(DataHandler):
         if row.get(PROVIDER_ID_FIELD) == PROVIDER_ID_FIELD:
             return False
 
-        # other filters?
-        for fieldname, exclude_values in exclude_filters.items():
-            if row.get(fieldname) in exclude_values:
-                return False
         return True
 
     def map_date(self, datestr):
@@ -98,8 +91,6 @@ class CQCDataHandler(DataHandler):
         return new_row
 
 
-    def find_primary_info(self, details_list):
-        return super().find_primary_info(details_list)
 
     def combine_org_details_per_source(self, rows: list):
         # the base consolidation keeps companyid but knows nothing about

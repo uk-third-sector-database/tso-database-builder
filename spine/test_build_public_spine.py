@@ -1,6 +1,5 @@
 from .build_public_spine import *
 import pytest
-from copy import deepcopy
 from handler.base_definitions import public_spine_entry_creator, sub_spine_entry_creator, extra_csv_entry_creator, match_csv_entry_creator, MATCHES_CSV_FIELDS, SUB_SPINE_CSV_FIELDS, SPINE_CSV_FIELDS, EXTRA_DETAILS_CSV_FIELDS
 import tempfile
 

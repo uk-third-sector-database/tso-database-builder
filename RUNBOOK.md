@@ -63,10 +63,10 @@ what each stage does and what can go wrong.
 
 - Python **3.11** (python.org installer on Windows; `pyenv` targets in the
   Makefile are Unix-only).
-- Create a virtual environment and install the pinned requirements. Three
-  requirement files exist and should be used separately: `requirements.txt`
-  (core build), `test-requirements.txt` (adds the test tooling) and
-  `requirements-visualise.txt` (optional, notebook visualisations only):
+- Create a virtual environment and install the pinned requirements:
+  `requirements.txt` (core build) and `test-requirements.txt` (adds the test
+  tooling). The old visualisation notebook and its optional requirements
+  file live in `archive/visualise/` and are not part of the build:
 
   ```
   python -m venv .tso
@@ -635,7 +635,6 @@ Additional checks:
   investigate.
 - uid conventions: every spine uid starts GB-CHC/GB-COH/GB-SC/GB-MPR/
   GB-NIC/GB-COOP/GB-SHPE/GB-SHR; GB-CIS and GB-CQC appear only in matches.
-- `python3 cli.py tex-table-spine` produces the release-notes counts table.
 - Update the guidance page (schema, counts, changelog, download-date
   coverage) for every release, re-render the guidance PDF from the updated
   HTML, and visually check the rendered pages before packaging.
@@ -817,10 +816,9 @@ the frozen input hash lists, the unit/regression tests and the QA records
   take transferee registration dates from the raw CCEW extract.
 - CQC and Care Inspectorate Scotland contribute matches only, by design.
 - The supplementary file's `id_in_source` column is empty by construction.
-- `prepare_zip.sh` is out of date (wrong file names, dead branch) — do not
-  use it. Release packaging is `python cli.py prepare-release` (see §5),
-  which validates, copies the exact seven-file payload and writes the
-  transport ZIP.
+- `prepare_zip.sh` has been removed (October 2026). Release packaging is
+  `python cli.py prepare-release` (see §5), which validates, copies the
+  exact seven-file payload and writes the transport ZIP.
 - The Makefile's `setup-pyenv`/`setup-venv` targets are Unix-only and
   broken; use §2 instead.
 - **Name-only Northern Ireland links are weaker than identifier-confirmed

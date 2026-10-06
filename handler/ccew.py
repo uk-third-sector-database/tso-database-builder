@@ -2,7 +2,7 @@
 from datetime import datetime
 import pandas as pd
 
-from .base import DataHandler,sort_encoding_issue,fix_dates_set
+from .base import DataHandler,fix_dates_set,stable_data_key
 from .base_definitions import sub_spine_entry_creator,extra_csv_entry_creator
 nulls = (None, '', [], {}, ())
 
@@ -95,9 +95,6 @@ class CCEWDataHandler(DataHandler):
         Original (historic) ccew data had 'primary_flag' set to determine the details 
         for the spine. This needs to be superseded if there are more recent data for an org.
         """
-        def stable_data_key(data_tuple):
-            return tuple('' if value is None else str(value) for value in data_tuple)
-
         s = list(s)
         candidates = []
         data_width = max((len(item) - 2 for item in s), default=0)
@@ -418,63 +415,6 @@ class CCEWDataHandler(DataHandler):
 
             return result
 
-        '''
-        def merge_extra_rows(new_extra_rows, extra_rows, key_field="normalisedname"):
-            """
-            Merge extra_rows into new_extra_rows, keeping only the richest row per normalisedname.
-
-            Parameters
-            ----------
-            new_extra_rows : list of dict
-                Existing collection of extra rows.
-            extra_rows : list of dict
-                Newly collected rows to evaluate and merge.
-            key_field : str
-                The dict key to use as the unique identifier. Default is 'normalisedname'.
-
-            Returns
-            -------
-            list of dict
-                Updated new_extra_rows with only the most complete rows preserved per normalisedname.
-            """
-
-            def compare_rows(r1, r2):
-                """Return 1 if r1 is richer, -1 if r2 is richer, 0 if equal/incomparable."""
-                def count_filled(row):
-                    return sum(1 for v in row.values() if v not in ("", None) and not pd.isna(v))
-                r1_count = count_filled(r1)
-                r2_count = count_filled(r2)
-                if r1_count > r2_count:
-                    return 1
-                elif r2_count > r1_count:
-                    return -1
-                else:
-                    return 0
-
-            # Build index of current rows by normalisedname
-            index = {r[key_field]: r for r in new_extra_rows if key_field in r and r[key_field]}
-
-            for e in extra_rows:
-                if not any(e.values()):  # skip fully empty rows
-                    continue
-                key = e.get(key_field)
-                if not key:
-                    # No normalisedname → append as is
-                    new_extra_rows.append(e)
-                    continue
-
-                if key in index:
-                    cmp = compare_rows(e, index[key])
-                    if cmp == 1:  # e is richer
-                        #print(f"Replacing row for '{key}':\n  old: {index[key]}\n  new: {e}")
-                        index[key] = e
-                else:
-                    index[key] = e
-
-            return list(index.values())
-        
-        
-        '''
         def check_for_old_data(subspine:dict,datarows:list[dict]):
             '''Called if umbrella row AND removed: find datafields from datarows
             for address and dates if they're null in subspine row'''

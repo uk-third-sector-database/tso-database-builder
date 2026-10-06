@@ -1,7 +1,6 @@
 import csv
 import hashlib
 import zipfile
-from pathlib import Path
 
 import pytest
 
