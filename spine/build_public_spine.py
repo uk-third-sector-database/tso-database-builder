@@ -1,38 +1,15 @@
 import csv
 import pandas as pd
 import os
-from  pydantic import BaseModel, Field, field_validator, model_validator
+import re
+from  pydantic import BaseModel, Field, field_validator, ValidationError
 from datetime import datetime
-from memory_profiler import profile
 from tqdm import tqdm  
 
 from handler.base_definitions import EXTRA_DETAILS_CSV_FIELDS, SPINE_CSV_FIELDS, MATCHES_CSV_FIELDS, ORG_ID_MAPPING, SAMEAS_FILE, OSCR_LINKS_FILE
 
 
-source_precedence_order = [
-    'ccew',
-    'oscr',
-    'ccni',
-    'mutuals',
-    'ch',
-    'coops',
-    'scottishhousingregulator',
-    'socialhousingengland',
-    'careinspectoratescot',
-    'carequalitycommission']
-
-
-debug_uids = {
-    'GB-SC-SC037244',
-    'GB-SHR-291',
-    'GB-SC-SC034572',
-    'GB-SHR-116',
-    
-}
-
-
-
-def read_dkane_sameas(file):
+def read_dkane_sameas(file, role='linkage', allow_missing=False):
 
     def get_org_code(org_id):
         parts = str(org_id).split('-')
@@ -41,17 +18,24 @@ def read_dkane_sameas(file):
     wanted_cols = ['org_id_a', 'org_id_b', 'source']
 
     try:
-        df = pd.read_csv(file,low_memory=False)
+        # dtype=str + fillna('') so a blank source cell cannot crash the .lower() call below
+        df = pd.read_csv(file, usecols=lambda c: c in wanted_cols, dtype=str)
     except OSError as e:
-        print(f'Error reading file {file} in function read_dkane_sameas: {e}')
-        return {}, []
+        if allow_missing:
+            print(f'WARNING: linkage file {file} ({role}) could not be read - building with no {role} links: {e}')
+            return {}, []
+        raise RuntimeError(
+            f'Required linkage file {file} ({role}) could not be read: {e}. '
+            f'Building without it would silently drop these links from the spine. '
+            f'Pass allow_missing_linkage=True to build anyway with an empty linkage table.'
+        ) from e
 
     # Ensure required columns exist
     for col in wanted_cols:
         if col not in df.columns:
-            df[col] = None
+            df[col] = ''
 
-    df = df[wanted_cols]
+    df = df[wanted_cols].fillna('')
 
     df['org_a_code'] = df['org_id_a'].apply(get_org_code)
     df['org_b_code'] = df['org_id_b'].apply(get_org_code)
@@ -96,32 +80,83 @@ def read_dkane_sameas(file):
 
     return ftc_dict, primary_orgs
 
+#def read_dkane_sameas(file):
+#
+#    def get_org_code(org_id):
+#        parts = str(org_id).split('-')
+#        return parts[1] if len(parts) > 1 else None
+#
+#    try:
+#        df = pd.read_csv(file,usecols=['org_id_a','org_id_b','source','valid_from'])
+#    except IOError as e:
+#        print(f'Error reading file {file} in function read_dkane_sameas: {e}')
+#        return {}, []
+#    except ValueError as e:
+#        try:
+#            df = pd.read_csv(file,usecols=['org_id_a','org_id_b'])
+#        except IOError as e:
+#            print(f'Error reading file {file} in function read_dkane_sameas: {e}')
+#            return {}, []
+#
+#
+#    df['org_a_code'] = df['org_id_a'].apply(get_org_code)
+#    df['org_b_code'] = df['org_id_b'].apply(get_org_code)
+#
+#    codes = set(ORG_ID_MAPPING.values())
+#
+#    trimmed_df = df[df['org_a_code'].isin(codes) & df['org_b_code'].isin(codes)]
+#
+#    ftc_dict = {}
+#    tuples = list(zip(trimmed_df['org_id_a'],trimmed_df['org_id_b'],trimmed_df['source'],trimmed_df['valid_from']))
+#    # when source = 'Register of Mergers', orgB in _sameas is the transferee in mergers 
+#    # (see relationships/ccew-register-of-mergers.csv in drkane's github):
+#    #  the org that receives the merged charity and so should be the primary. 
+#    # So we want to note that and check for primacy in subspinelist.matches()
+#    # For other sources we want to allow matches to be found in both directions.
+#
+#    primary_orgs = []
+#
+#    for x,y,source,date in tuples:
+#        x_source = x.split('-')[1]
+#        y_source = y.split('-')[1]
+#        if x_source == 'CHC' and y_source == 'CHC' and 'merger' in source.lower():
+#            if x in primary_orgs:
+#                # this already has been identified as a transferee: amend mapping to reflect subsequent merger
+#                primary_orgs.remove(x)
+#                print(f'Merger already found for {x} - removing from primary orgs and replacing with {y}')
+#
+#            primary_orgs.append(y)
+#            
+#        if x in ftc_dict:
+#            ftc_dict[x].add(y)
+#        else:
+#            ftc_dict[x] = {y}
+#        if y in ftc_dict:
+#            ftc_dict[y].add(x)
+#        else:
+#            ftc_dict[y] = {x}
+#
+#    return ftc_dict, primary_orgs
+    
+
+# linkage lookup tables used by SubSpineOrg.matches() and MainOrgList.merge().
+# These are populated by load_linkage_tables(), called from process_csvs_to_build_spine(),
+# so that importing this module performs no file I/O.
+ftc_dict = {}
+primary_ccew_orgs_ftc = []
+oscr_linkage_lookup = {}
 
 
-ftc_dict, primary_ccew_orgs_ftc = read_dkane_sameas(SAMEAS_FILE)
-oscr_linkage_lookup, _ = read_dkane_sameas(OSCR_LINKS_FILE)
-
-def append_extra(extra_list, item):
-    """
-    Append an ExtraInfo to extra_list, skipping empty/duplicate entries.
-
-    This is used instead of relying solely on ExtraInfoList's overridden
-    append(): pydantic revalidates the `extras` field against its
-    `list[ExtraInfo]` annotation after construction, which rebuilds a plain
-    `list` and loses the ExtraInfoList subclass. Calling this helper directly
-    at every append site guarantees the dedup logic applies regardless of
-    whether extra_list is currently an ExtraInfoList or a plain list.
-    """
-    if item.isempty():
-        return
-    if item not in extra_list:
-        list.append(extra_list, item)
+def load_linkage_tables(sameas_file=SAMEAS_FILE, oscr_links_file=OSCR_LINKS_FILE, allow_missing_linkage=False):
+    global ftc_dict, primary_ccew_orgs_ftc, oscr_linkage_lookup
+    ftc_dict, primary_ccew_orgs_ftc = read_dkane_sameas(
+        sameas_file, role="Find that Charity same-as links (the 'ftc' match rule)",
+        allow_missing=allow_missing_linkage)
+    oscr_linkage_lookup, _ = read_dkane_sameas(
+        oscr_links_file, role="historic OSCR links (the 'oscr' match rule)",
+        allow_missing=allow_missing_linkage)
 
 
-class ExtraInfoList(list):
-
-    def append(self, item):
-        append_extra(self, item)
 
 class ExtraInfo(BaseModel):
     uid: str
@@ -135,90 +170,336 @@ class ExtraInfo(BaseModel):
     source: str = ''
     source_register: str = ''
 
-    @model_validator(mode="after")
-    def validate_required_fields(self):
-        for field in ("uid",  "source_register"):#"source",
-            value = getattr(self, field)
-            if value is None or str(value).strip() == "":
-                raise ValueError(
-                    f"ExtraInfo: '{field}' must not be empty (uid={self.uid!r})"
-                )
-        return self
-
     def __eq__(self, value: "ExtraInfo") -> bool:
         return self.model_dump(exclude="source") == value.model_dump(exclude="source")
 
     def isempty(self):
-        ignored = {"uid", "source", "source_register"}
-        empty_values = {"", "na", "n/a"}
-
-        return all(
-            str(getattr(self, field)).strip().lower() in empty_values
-            for field in self.model_fields
-            if field not in ignored
-        )
-
+        fields = list(type(self).model_fields.keys())
+        fields.remove('uid')
+        fields.remove('source')
+        fields.remove('source_register')
+        return all(getattr(self, field) == '' for field in fields)
+    
     def __hash__(self):
-        # model_dump() returns a dict, which is unhashable - hash a sorted tuple of its
-        # items instead (all field values here are strings, so this is safe).
-        data = self.model_dump(exclude="source")
-        return hash(tuple(sorted(data.items())))
+        return hash(self.model_dump(exclude="source"))
+    
 
-    def hash_addr(self):
-        return hash((self.fulladdress, self.city, self.postcode))
-    
-    def hash_names(self):
-        return hash((self.organisationname, self.normalisedname))
-    
-    def hash_reg(self):
-        return hash(self.registerdate)
-    
-    def hash_rem(self):
-        return hash(self.removeddate)
-    
+
+EXTRA_INFO_SORT_FIELDS = (
+    'uid',
+    'source_register',
+    'source',
+    'organisationname',
+    'normalisedname',
+    'fulladdress',
+    'city',
+    'postcode',
+    'registerdate',
+    'removeddate',
+)
+
+
+def extra_info_sort_key(value):
+    """Stable ordering for supplementary rows from sets and merged sources."""
+    if isinstance(value, dict):
+        get_value = value.get
+    else:
+        get_value = lambda field, default='': getattr(value, field, default)
+    return tuple(
+        '' if get_value(field, '') is None else str(get_value(field, ''))
+        for field in EXTRA_INFO_SORT_FIELDS
+    )
+
+
 def consolidate_extras(values):
     # before adding anything to extras, check extras lists for duplicates
     seen_names = set()
     seen_adresses = set()
     seen_reg_dates = set()
     seen_rem_dates = set()
-    processed_extras = ExtraInfoList()
+    processed_extras = []
+    items = []
     for item in values:
         if isinstance(item, dict):
             item_obj = ExtraInfo(**item)
         else:
             item_obj = item
-        
+        items.append(item_obj)
 
-        addr_hash = item_obj.hash_addr()
-        names_hash = item_obj.hash_names()
-        reg_hash = item_obj.hash_reg()
-        rem_hash = item_obj.hash_rem()
+    for item_obj in sorted(items, key=extra_info_sort_key):
+        # Store the values themselves, rather than their process-randomised
+        # hashes. This also avoids treating a theoretical hash collision as a
+        # duplicate.
+        address = (item_obj.fulladdress, item_obj.city, item_obj.postcode)
+        name = (item_obj.organisationname, item_obj.normalisedname)
+        registerdate = item_obj.registerdate
+        removeddate = item_obj.removeddate
         
         updates={}
-        if addr_hash in seen_adresses:
+        if address in seen_adresses:
             updates.update({'fulladdress':'' , 'city':'', 'postcode':''})
         else:
-            seen_adresses.add(addr_hash)
-        if names_hash in seen_names:
+            seen_adresses.add(address)
+        if name in seen_names:
             updates.update({'organisationname':'', 'normalisedname':''})
         else:   
-            seen_names.add(names_hash)
-        if reg_hash in seen_reg_dates:
+            seen_names.add(name)
+        if registerdate in seen_reg_dates:
             updates.update({'registerdate':''})
         else:
-            seen_reg_dates.add(reg_hash)
-        if rem_hash in seen_rem_dates:
+            seen_reg_dates.add(registerdate)
+        if removeddate in seen_rem_dates:
             updates.update({'removeddate':''})
         else:
-            seen_rem_dates.add(rem_hash)
+            seen_rem_dates.add(removeddate)
 
         new_item = item_obj.model_copy(update=updates)
         if not new_item.isempty():
             processed_extras.append(new_item)
 
     return processed_extras
+
+
+def compress_extras_per_uid(values):
+    '''
+    Merge complementary rows for the same uid so that supplementary.csv has as few rows as
+    possible: all data for a given uid goes on one line, unless the source provided more than
+    one entry for a given field (conflicting values stay on separate rows).
+    Only called at the final sort_extras stage (write-out), not at ingest, so intermediate
+    processing still sees one row per source entry.
+    Fields are merged as groups so that e.g. an address stays together. source_register is
+    treated as a group too, so rows from different registers are never merged (provenance).
+    '''
+    field_groups = [('organisationname', 'normalisedname'),
+                    ('fulladdress', 'city', 'postcode'),
+                    ('registerdate',),
+                    ('removeddate',),
+                    ('source_register',)]
+
+    merged = []
+    by_uid = {}
+    for item in sorted(values, key=extra_info_sort_key):
+        placed = False
+        for target in by_uid.get(item.uid, []):
+            conflict = False
+            for group in field_groups:
+                item_has = any(getattr(item, f) for f in group)
+                target_has = any(getattr(target, f) for f in group)
+                if item_has and target_has and any(getattr(item, f) != getattr(target, f) for f in group):
+                    conflict = True
+                    break
+            if not conflict:
+                for group in field_groups:
+                    if any(getattr(item, f) for f in group) and not any(getattr(target, f) for f in group):
+                        for f in group:
+                            setattr(target, f, getattr(item, f))
+                if item.source and not target.source:
+                    target.source = item.source
+                placed = True
+                break
+        if not placed:
+            by_uid.setdefault(item.uid, []).append(item)
+            merged.append(item)
+
+    return sorted(merged, key=extra_info_sort_key)
+
+
     
+# precedence of match rules, strongest first: used by sort_matches() and by merge() when an
+# incoming record matches more than one organisation and only the best match may absorb it.
+# 'companyid - cqc' / 'charityno - cqc' are the identifier-based rules for CQC providers
+# fetched from the CQC API (acquire/cqc_api.py), which supply Companies House and charity
+# numbers: identifiers are stronger evidence than any name rule.
+# 'merge via bridge' is NOT a match rule: no call of SubSpineOrg.matches() can ever
+# produce it. It records that two spine organisations were folded into one because an
+# incoming record matched both of them (see MainOrgList.bridge_merge_parties). It is
+# listed last only so that every match type has a rank and match_info_sort_key stays a
+# total order; because it is not a candidate rule, its rank never competes with one.
+BRIDGE_MERGE_MATCH_TYPE = 'merge via bridge'
+
+MATCHTYPE_ORDER = ['ftc', 'oscr', 'companyid - cqc', 'charityno - cqc', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source' , 'name - housing', 'name - care', 'name - ni charity', 'companyid - companyid', BRIDGE_MERGE_MATCH_TYPE]
+MATCHTYPE_RANK = {
+    matchtype: rank for rank, matchtype in enumerate(MATCHTYPE_ORDER)
+}
+
+# The order in which the register files are loaded by the build (RUNBOOK section 4,
+# step 5). Earlier registers take precedence over later ones, so this single list also
+# decides which of two organisations survives a bridge merge. The two care registers
+# never become spine rows at all, but are listed so that every source has a rank.
+SOURCE_LOAD_ORDER = [
+    'ccew',
+    'oscr',
+    'ccni',
+    'mutuals',
+    'ch',
+    'coops',
+    'scottishhousingregulator',
+    'socialhousingengland',
+    'careinspectoratescot',
+    'carequalitycommission',
+]
+SOURCE_LOAD_RANK = {source: rank for rank, source in enumerate(SOURCE_LOAD_ORDER)}
+
+# Companies House number prefixes for registered societies (industrial and provident
+# societies, registered societies, credit unions): England & Wales, Scotland and
+# Northern Ireland (NO = Northern Ireland credit unions, typed industrial-and-provident-
+# society by the API, checked 23 Sep 2026). Companies House holds these as mirrors of
+# the FCA's (or, for NI, the Department for the Economy's) register and never gives
+# them a dissolution date.
+SOCIETY_CH_PREFIXES = ('IP', 'RS', 'SP', 'SR', 'NP', 'NR', 'NO')
+
+
+def is_ordinary_ch_company(org):
+    """True when `org` is a Companies House record for an ordinary company, i.e.
+    not a registered-society mirror record."""
+    return (org.source.lower() == 'ch'
+            and not org.id_in_source.upper().startswith(SOCIETY_CH_PREFIXES))
+
+
+def holds_record_from(org, sources, id_in_source=None, companyid=None):
+    """True when `org` itself - or a record it has absorbed - comes from one of
+    `sources` AND carries the given identifier.
+
+    Identifier formats are not unique across registers: a Scottish charity number and a
+    Scottish company number are both SCnnnnnn, so an index keyed on the raw value can
+    return an organisation from any register. A rule that means "the Companies House or
+    Mutuals record with this number" must therefore say so, rather than trusting the
+    index. Absorbed records count, because a company that has been folded into a charity
+    is reached through the charity, which keeps its own source.
+    """
+    sources = tuple(s.lower() for s in sources)
+
+    def qualifies(record):
+        if record.source.lower() not in sources:
+            return False
+        if id_in_source is not None and record.id_in_source != id_in_source:
+            return False
+        if companyid is not None and record.companyid != companyid:
+            return False
+        return True
+
+    if qualifies(org):
+        return True
+    # Association-only 'companyid - companyid' partners keep their own identity and do
+    # not identify the organisation that lists them, exactly as in add_to_stores() /
+    # remove_from_stores(). This cannot change any output today - a partner of that rule
+    # must carry a companyid, and Companies House and Mutuals records leave companyid
+    # blank (they hold their number in id_in_source) - but the rule should not depend on
+    # that coincidence.
+    return any(qualifies(m) for m, matchtype in getattr(org, 'matched_orgs', [])
+               if matchtype != 'companyid - companyid')
+
+
+def resolve_merged_uid(uid, aliases):
+    """Follow bridge-merge aliases to the organisation that now holds `uid`.
+
+    A bridge merge removes the losing organisation's uid from the spine, but the two
+    uid-keyed linkage tables (Find that Charity same-as and the historic OSCR linkage)
+    still name it. This maps such a uid onto the organisation that absorbed it, following
+    a chain if the survivor was itself later merged away. Unknown uids come back
+    unchanged, and the `seen` guard makes a malformed cycle terminate.
+    """
+    if not aliases:
+        return uid
+    seen = set()
+    while uid in aliases and uid not in seen:
+        seen.add(uid)
+        uid = aliases[uid]
+    return uid
+
+
+def source_load_sort_key(org):
+    """Order organisations by register load order, ties broken by uid."""
+    return (SOURCE_LOAD_RANK.get(org.source.lower(), len(SOURCE_LOAD_ORDER)), org.uid)
+
+
+# Match rules that rest on a shared identifier (a company number, a charity number, or
+# an external linkage table keyed on identifiers) rather than on a shared name.
+IDENTIFIER_GRADE_MATCH_TYPES = frozenset({
+    'ftc',
+    'oscr',
+    'companyid - id_in_source',
+    'companyid - coop mutual',
+    'companyid - cqc',
+    'charityno - cqc',
+})
+
+# The subset of those rules where the identifier is declared by a REGISTER about itself:
+# a register publishes its own organisation's company number, or the linkage tables
+# assert that two register entries are one organisation. The CQC rules are different in
+# kind: they rest on a care provider's own return, which describes the provider and may
+# cite a trustee company or a trading subsidiary alongside the charity. That is good
+# evidence of a relationship but not of identity, so it cannot on its own justify fusing
+# two differently named organisations.
+REGISTER_DECLARED_IDENTIFIER_MATCH_TYPES = frozenset({
+    'ftc',
+    'oscr',
+    'companyid - id_in_source',
+    'companyid - coop mutual',
+})
+
+# Words dropped when comparing two organisation names for the bridge-merge policy only.
+# This is NOT the pipeline's name normalisation (handler/base_definitions.py): it is a
+# deliberately small comparison form that lets "The X Trust" and "X Trust Limited" count
+# as the same name while leaving every other word in place.
+CORE_NAME_DROP_WORDS = frozenset({'THE', 'LTD', 'LIMITED'})
+
+
+def core_name(name):
+    """Comparison form of a name: upper case, punctuation removed, and the words
+    THE / LTD / LIMITED dropped. Used only by bridge_evidence_is_strong_enough()."""
+    cleaned = re.sub(r'[^A-Z0-9 ]+', ' ', (name or '').upper())
+    return ' '.join(word for word in cleaned.split()
+                    if word not in CORE_NAME_DROP_WORDS)
+
+
+def bridge_evidence_is_strong_enough(org_a, types_a, org_b, types_b):
+    """Evidence policy for a bridge merge (condition 5); change the policy here.
+
+    Two organisations on different registers may be folded together by a record that
+    matches both when:
+
+      (a) they already carry the same normalised name (a shared name plus a shared
+          third-party record is strong evidence); or
+      (b) their names agree once THE / LTD / LIMITED and punctuation are set aside
+          (see core_name()); or
+      (c) each of them is linked to the bridging record by an identifier rule AND at
+          least one of those links is a register-declared identifier.
+
+    The extra condition in (c) is what keeps related-but-distinct bodies apart. A single
+    CQC provider record often cites both a charity number and the company number of that
+    charity's trustee company or trading subsidiary, which used to be enough to fuse,
+    for example, AGE CONCERN HAMPSHIRE with AGE CONCERN HAMPSHIRE CORPORATE TRUSTEE
+    LIMITED. Where the names differ, at least one side must therefore be identified by
+    the registers themselves rather than by a care provider's return.
+    """
+    name_a = (org_a.normalisedname or '').strip()
+    name_b = (org_b.normalisedname or '').strip()
+    if name_a and name_a == name_b:
+        return True
+
+    core_a, core_b = core_name(name_a), core_name(name_b)
+    if core_a and core_a == core_b:
+        return True
+
+    both_sides_have_an_identifier = (
+        any(mt in IDENTIFIER_GRADE_MATCH_TYPES for mt in types_a)
+        and any(mt in IDENTIFIER_GRADE_MATCH_TYPES for mt in types_b))
+    a_register_declared_it = (
+        any(mt in REGISTER_DECLARED_IDENTIFIER_MATCH_TYPES for mt in types_a)
+        or any(mt in REGISTER_DECLARED_IDENTIFIER_MATCH_TYPES for mt in types_b))
+    return both_sides_have_an_identifier and a_register_declared_it
+
+
+def match_candidate_sort_key(candidate):
+    """Order (organisation, match type) candidates by rule then stable uid."""
+    org, matchtype = candidate
+    return (
+        MATCHTYPE_RANK.get(matchtype, len(MATCHTYPE_ORDER)),
+        org.uid,
+        matchtype,
+    )
+
 
 class MatchInfo(BaseModel):
     uid: str
@@ -230,27 +511,21 @@ class MatchInfo(BaseModel):
     orgB_uid : str
     match_type : str
 
-    @model_validator(mode="after")
-    def validate_match(self):
-        if self.orgA_uid == self.orgB_uid:
-            raise ValueError(
-                f"Self-match detected for uid={self.orgA_uid!r}, "
-                f"match_type={self.match_type!r}"
-            )
-        return self
 
-class MatchedOrgList(list):
+def match_info_sort_key(match):
+    return (
+        MATCHTYPE_RANK.get(match.match_type, len(MATCHTYPE_ORDER)),
+        match.orgA_uid,
+        match.orgB_uid,
+        match.orgA_source,
+        match.orgB_source,
+        match.orgA_id_in_source,
+        match.orgB_id_in_source,
+        match.uid,
+        match.match_type,
+    )
 
-    def append(self, item):
-        org, matchtype = item
 
-        key = (org.uid, matchtype)
-
-        if not any(
-            (existing.uid, mt) == key
-            for existing, mt in self
-        ):
-            super().append(item)
 
 class CoreOrganisation(BaseModel): # orgs for public spine
     uid: str
@@ -269,9 +544,9 @@ class CoreOrganisation(BaseModel): # orgs for public spine
     crossborder: str = ""
     is_cic: str = "False"
 
-    extras: list[ExtraInfo] =  Field(default_factory=ExtraInfoList)
+    extras: list[ExtraInfo] =  Field(default_factory=list)
 
-    matched_orgs: list =  Field(default_factory=MatchedOrgList) # list of (SubSpineOrg,matchtype:str) tuples
+    matched_orgs: list =  Field(default_factory=list) # list of (SubSpineOrg,matchtype:str) tuples
     sorted_matches: list[MatchInfo] =  Field(default_factory=list)
     sorted_extras: list[ExtraInfo] =  Field(default_factory=list)
 
@@ -279,58 +554,27 @@ class CoreOrganisation(BaseModel): # orgs for public spine
     def validate_extras(cls,values):
         return consolidate_extras(values)
 
-    @model_validator(mode="after")
-    def validate_core(self):
-        for field in ("uid", "source", "source_register"):
-            value = getattr(self, field)
-            if value is None or str(value).strip() == "":
-                raise ValueError(
-                    f"CoreOrganisation: '{field}' must not be empty (uid={self.uid!r})"
-                )
-
-        if self.source.lower() in {
-            "careinspectoratescot",
-            "carequalitycommission",
-        }:
-            raise ValueError(
-                f"{self.uid} ({self.source}) must never become a CoreOrganisation\n{self}"
-            )
-
-        return self
-
-    def add_matched_org(self, org, matchtype):
-        if org.uid == self.uid:
-            print(
-                f"Attempted to add self ({self.uid}) as a matched organisation "
-                f"via '{matchtype}'"
-            )
-        else:
-            self.matched_orgs.append((org, matchtype))
-
 
     def to_extra_info(self) -> ExtraInfo:
         return ExtraInfo(**self.model_dump())
-    
-    # NOTE: an is_cic propagation validator used to live here, but it did
-    # `cls.is_cic = 'True'` inside a `mode='before'` classmethod validator -
-    # that sets the attribute on the *class*, not the instance being built
-    # (there is no `self` at that point), so it never actually took effect.
-    # The correct, instance-level propagation already happens in
-    # sort_matches() below, which sets `self.is_cic = 'True'` when a matched
-    # org has the flag set.
+
+    # NOTE: is_cic propagation from matched orgs happens per-instance in sort_matches();
+    # a former validator here mutated the *class* attribute (cls.is_cic), which was unsafe
+    # and redundant, so it has been removed.
+
 
     def to_main_csv(self):
         self.is_cic = self.is_cic if self.is_cic else 'False'
         return self.model_dump(exclude={"extras","matched_orgs","sorted_matches"})
         
     def to_extras_csv(self):
-        for x in self.extras:
+        for x in sorted(self.extras, key=extra_info_sort_key):
             if not x.isempty():
                 yield x.model_dump()
 
 
     def to_match_csv(self):
-        for m in self.sorted_matches:
+        for m in sorted(self.sorted_matches, key=match_info_sort_key):
             yield m.model_dump()
 
 
@@ -341,34 +585,29 @@ class CoreOrganisation(BaseModel): # orgs for public spine
         when two organisations are mapped to the same companyid, which creates a link in the match table but not an identical
         organisation UNLESS also in the ftc mappings.
         self.matches is a list of (CoreOrganisation,matchtype) tuples
-        matchtype is in ['companyid - companyid', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source', 'ftc']
+        matchtype is one of MATCHTYPE_ORDER (identifier rules such as 'companyid - cqc' /
+        'charityno - cqc' included)
         '''
 
-        matchtype_order = ['ftc', 'oscr', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source' , 'name - housing', 'name - care', 'companyid - companyid', 'merge via']
-#   
+        matchtype_order = MATCHTYPE_ORDER
+#
         if len(self.matched_orgs)==0:
             return
-        
+
         new_main_rows = []
         assured_matched_orgs = []
-        debug = self.uid in debug_uids
 
-        if debug:
-            print(f"\n========== sort_matches({self.uid}) ==========")
-            print("Matched orgs:")
-            for o, mt in self.matched_orgs:
-                print(f"    {o.uid:20} {mt}")
         for matchtype in matchtype_order:
             
-            matched_orgs = [item for item in self.matched_orgs if item[1].startswith(matchtype)] # == matchtype]
-
+            matched_orgs = sorted(
+                (item[0] for item in self.matched_orgs if item[1] == matchtype),
+                key=lambda org: org.uid,
+            )
             if not matched_orgs:
                 continue
 
 
-            for matched_org, mt in matched_orgs:
-                if debug:
-                    print(f"\nConsidering {matched_org.uid} ({mt})")
+            for matched_org in matched_orgs:
                 # if matched_org has is_cic flag set to True, set is_cic flag for this org:
                 if matched_org.is_cic == 'True':
                     self.is_cic = 'True'
@@ -376,9 +615,11 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                 if not matchtype == 'companyid - companyid':
                     assured_matched_orgs.append(matched_org)
                     e = matched_org.to_extra_info()
-                    append_extra(self.extras, e)
+                    if not e in self.extras:
+                        self.extras.append(e) 
                     for e in matched_org.extras:
-                        append_extra(self.extras, e)
+                        if not e in self.extras:
+                            self.extras.append(e)
                     self.sorted_matches.append(MatchInfo(uid = self.uid, 
                         orgA_id_in_source = self.id_in_source,
                         orgA_source = self.source,
@@ -386,7 +627,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                         orgB_id_in_source = matched_org.id_in_source,
                         orgB_source = matched_org.source,
                         orgB_uid = matched_org.uid,
-                        match_type = mt))
+                        match_type = matchtype))
 
                 else:
                     if not matched_org in assured_matched_orgs:
@@ -400,15 +641,7 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                         orgB_id_in_source = matched_org.id_in_source,
                         orgB_source = matched_org.source,
                         orgB_uid = matched_org.uid,
-                        match_type = mt))
-
-        if debug:
-            print("\nFinal state")
-            print("Assured:", [o.uid for o in assured_matched_orgs])
-            print("New main rows:", [o.uid for o in new_main_rows])
-            print("Extras:", len(self.extras))
-            print("Sorted matches:", len(self.sorted_matches))
-            
+                        match_type = matchtype))
 
         return new_main_rows
 
@@ -455,9 +688,9 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                 uid=uid,
                 source=source,
                 source_register=source_register,
-                **{datefield: date},
+                **{datefield: date}
             )
-            append_extra(extra_info_list, new_obj)
+            extra_info_list.append(new_obj)
 
             return extra_info_list
 
@@ -476,16 +709,43 @@ class CoreOrganisation(BaseModel): # orgs for public spine
         registerdates, removeddates = set(), set()
         all_orgs_removed = bool(self.removeddate)
 
-        # Check if all matched orgs are removed
-        for m in self.matched_orgs:
-            if not m[0].removed():
-                # and not m[0].id_in_source.startswith('CE'):
-                ## if the match is between CCEW and CompaniesHouse CIO type, we want to use the CCEW removal date if there is one, since
-                ## CIO filing is superseded by CCEW and so CIO data does not reflect check_removal_dates
+        # Association-only company-number links are not consolidations and
+        # must not affect the final organisation's dates or status.
+        consolidated_matches = [
+            match for match in self.matched_orgs
+            if match[1] != 'companyid - companyid'
+        ]
+
+        # Check whether every consolidated register record is currently
+        # removed. Historical removals in supplementary rows do not determine
+        # current status. Two exceptions, both where one register is the
+        # authority for the organisation's legal form:
+        # - Companies House CE-number records: CCEW is authoritative for CIO
+        #   status.
+        # - A society the FCA Mutuals Public Register has deregistered (v1.3.1,
+        #   owner decision 22-23 Sep 2026): the FCA is authoritative for its
+        #   ending, so a live linked record does not keep it open - UNLESS that
+        #   record is an ordinary Companies House company (the society most
+        #   likely converted into it, a genuine continuation). Companies House
+        #   society-number records only mirror the FCA and never carry a
+        #   dissolution date; Co-operatives UK and the housing and care
+        #   registers rarely or never record an ending.
+        fca_society_ended = self.source.lower() == 'mutuals' and bool(self.removeddate)
+        for matched_org, _ in consolidated_matches:
+            if not matched_org.removed():
+                is_cio_shadow = (
+                    self.source.lower() == 'ccew'
+                    and matched_org.source.lower() == 'ch'
+                    and matched_org.id_in_source.upper().startswith('CE')
+                )
+                if is_cio_shadow:
+                    continue
+                if fca_society_ended and not is_ordinary_ch_company(matched_org):
+                    continue
                 all_orgs_removed = False
 
         # Collect dates from matched orgs and extras
-        find_dates(self.matched_orgs, registerdates, removeddates)
+        find_dates(consolidated_matches, registerdates, removeddates)
         find_dates(self.extras, registerdates, removeddates)
 
         # Update register date
@@ -500,8 +760,6 @@ class CoreOrganisation(BaseModel): # orgs for public spine
             self.registerdate = earliest_register.strftime('%d/%m/%Y')
 
         # Update removed date
-        # if there's a removal date in the mainorg and its source was ccew, use this regardless of matches, as it is the primary register
-        # for organisations which are also CIOs or Care Inspectorate members
         if all_orgs_removed:
             latest_removed = fix_dates_set(removeddates, -1)
             orgremdate = parse_date(self.removeddate)
@@ -512,10 +770,9 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                     #self.extras.append(ExtraInfo(uid=self.uid, source=self.source, removeddate=self.removeddate, source_register=self.source_register))
                 self.removeddate = latest_removed.strftime('%d/%m/%Y')
         else:
-            if not self.source.lower()=='ccew':
-                if self.removeddate:
-                    self.extras = add_or_update_date(self.extras, self.uid, self.source, 'removeddate', self.removeddate, self.source_register)
-                    self.removeddate = ''
+            if self.removeddate:
+                self.extras = add_or_update_date(self.extras, self.uid, self.source, 'removeddate', self.removeddate, self.source_register)
+                self.removeddate = ''
 
         # Remove redundant fields from extras
         for x in self.extras:
@@ -530,8 +787,15 @@ class CoreOrganisation(BaseModel): # orgs for public spine
             if self.removeddate == x.removeddate:
                 x.removeddate = ''
         
-        # consolidate extras per uid so that supplementary.csv has as few rows as possible
-        self.extras = consolidate_extras(self.extras)
+        # consolidate extras per uid so that supplementary.csv has as few rows as possible.
+        # consolidate_extras blanks values duplicated across rows (its return value was
+        # previously discarded, so it had no effect); compress_extras_per_uid then merges
+        # complementary rows for the same uid onto a single line.
+        self.extras = sorted(
+            compress_extras_per_uid(consolidate_extras(self.extras)),
+            key=extra_info_sort_key,
+        )
+
 
 
 class SubSpineOrg(BaseModel):  # sub spine format (per source)
@@ -550,18 +814,11 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
     crossborder: str = ""
     cqc_reg: str = ""
     is_cic: str = ""
+    # charity number reported by the source itself (currently only populated by the CQC
+    # API data, via handler/careQC.py): used by the 'charityno - cqc' match rule
+    charitynumber: str = ""
 
     extras: list[ExtraInfo] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def validate_required_fields(self):
-        for field in ("uid", "source", "source_register"):
-            value = getattr(self, field)
-            if value is None or str(value).strip() == "":
-                raise ValueError(
-                    f"SubSpineOrg: '{field}' must not be empty (uid={self.uid!r})"
-                )
-        return self
 
 
     def to_extra_info(self) -> ExtraInfo:
@@ -576,130 +833,197 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
         return CoreOrganisation(**kwargs)
     
     def removed(self) -> bool:
-        removed = False
-        if self.removeddate:
-            removed = True
-        for e in self.extras:
-            if e.removeddate:
-                removed = True
-        return removed
+        """Return the organisation's current status from its primary row.
+
+        Supplementary removal dates are historical variants. In particular,
+        a restored company or re-registered charity can be active now while
+        retaining a genuine earlier removal in ``extras``.
+        """
+        return bool(self.removeddate)
 
 
 #    @profile
-    def matches(self, byname:dict, bycompanyid:dict, bysourceid:dict, spinelist:dict):
-        # spinelist is expected to be MainOrgList.byuid: uid -> owning CoreOrganisation,
-        # covering both primary orgs and anything folded into a matched_orgs list.
-        # (Passing self._store here instead would silently stop resolving ftc/oscr
-        # matches for any uid that's already been demoted into another org's matches.)
+    def matches(self, byname:dict, bycompanyid:dict, bysourceid:dict, spinelist:dict,
+                ni_ch_name_counts:dict|None=None, merged_uid_aliases:dict|None=None):
 
         matches_here = []
-
-        def resolve(i):
-            # byname/bycompanyid/bysourceid entries for a matched sub-org are
-            # keyed by that sub-org's own name/companyid/id_in_source (so the
-            # filters above can check its real attributes), but the actual
-            # match target has to be whichever core currently owns it, which
-            # may be a different object entirely if that sub-org's original
-            # core has since been folded into another one. spinelist (byuid)
-            # maps every uid, primary or subordinate, to its current owner.
-            return spinelist.get(i.uid, i)
-
-        def resolved_targets(match):
-            # A single key (e.g. one normalisedname) can list both a core's
-            # own self-entry and one of its matched sub-orgs that happens to
-            # share that same name/companyid/id_in_source - both resolve to
-            # the same owning core. Dedup by resolved uid so we don't emit
-            # the same (target, matchtype) pair more than once.
-            seen = set()
-            out = []
-            for i in match:
-                t = resolve(i)
-                if t.uid not in seen:
-                    seen.add(t.uid)
-                    out.append(t)
-            return out
-
-        def group_has_source(core, source_lower):
-            # Whether `core` itself, or anything already folded into its
-            # matched_orgs, has this source. A name/companyid hit can land on
-            # any member of a consolidated group (e.g. a Companies House
-            # counterpart whose name happens to match), not necessarily the
-            # specific member (e.g. an OSCR org) the filter is actually
-            # asking about - so check the whole group's composition rather
-            # than just the one entity the key happened to be indexed under.
-            # (merge_coreorganisations always flattens matched_orgs onto the
-            # surviving primary, so one level of matched_orgs is enough -
-            # there's no deeper nesting to walk.)
-            if core.source.lower() == source_lower:
-                return True
-            return any(o.source.lower() == source_lower for o, _ in core.matched_orgs)
-
+        
         if self.companyid and (self.companyid in bycompanyid):
             match = bycompanyid[self.companyid]
-            matches_here.extend([(t, 'companyid - companyid') for t in resolved_targets(match)])
+            matches_here.extend([(i, 'companyid - companyid') for i in match])
 
         if self.normalisedname in byname:
             match = byname[self.normalisedname]
-            targets = resolved_targets(match)
-            if self.source == 'cqc' and any(x.cqc_reg == '1' for x in match): # need to make this work by adding cqc_reg field to core orgs so we don't lose this info
-                matches_here.extend([(t, 'name - cqc') for t in targets])
+            # each name rule only ever matches the *qualifying* candidates, not every org that
+            # happens to share the name (previously all of `match` was extended in, which
+            # over-merged unrelated same-name organisations).
+            if self.source.lower() == 'carequalitycommission': # the CQC handler emits source 'carequalitycommission' (a former comparison to 'cqc' never matched)
+                candidates = [x for x in match if x.cqc_reg == '1'] # cqc_reg is the CCEW flag 'should be registered with CQC too'
+                matches_here.extend((x, 'name - cqc') for x in candidates)
 
-            if self.crossborder=='1':
-                matches_here.extend([(t, 'name - crossborder') for t in targets])
+            if self.crossborder=='1': # crossborder is the OSCR flag 'should be registered with CCEW too'
+                candidates = [x for x in match if x.source.lower() == 'ccew']
+                matches_here.extend((x, 'name - crossborder') for x in candidates)
 
-            if self.source.lower() == 'scottishhousingregulator' and any(group_has_source(t, 'oscr') for t in targets):
-                matches_here.extend([(t, 'name - housing') for t in targets])
+            if self.source.lower() == 'scottishhousingregulator':
+                # a Scottish housing provider's counterpart is either an OSCR charity or,
+                # for registered-society providers, a Mutuals Public Register society: such
+                # providers are on the FCA mutuals register, not the charity register, so
+                # mutuals must be an eligible 'name - housing' counterpart too. mutuals is
+                # loaded before the housing registers, so it is already in the store here.
+                candidates = [x for x in match if x.source.lower() in ('oscr', 'mutuals')]
+                matches_here.extend((x, 'name - housing') for x in candidates)
 
-            if self.source.lower() == 'socialhousingengland' and any(group_has_source(t, 'ccew') for t in targets):
-                matches_here.extend([(t, 'name - housing') for t in targets])
+            if self.source.lower() == 'socialhousingengland':
+                # an English housing provider's counterpart is either a CCEW charity or,
+                # for registered-society providers, a Mutuals Public Register society
+                # (see the Scottish note above for why mutuals is included).
+                candidates = [x for x in match if x.source.lower() in ('ccew', 'mutuals')]
+                matches_here.extend((x, 'name - housing') for x in candidates)
 
-            if self.source.lower() == 'careinspectoratescot' and any(group_has_source(t, 'oscr') for t in targets):
-                matches_here.extend([(t, 'name - care') for t in targets])
+            if self.source.lower() == 'careinspectoratescot':
+                candidates = [x for x in match if x.source.lower() == 'oscr']
+                matches_here.extend((x, 'name - care') for x in candidates)
 
-            if self.source.lower() == 'carequalitycommission' and any(group_has_source(t, 'ccew') for t in targets):
-                matches_here.extend([(t, 'name - care') for t in targets])
+            if self.source.lower() == 'carequalitycommission':
+                candidates = [x for x in match if x.source.lower() == 'ccew']
+                matches_here.extend((x, 'name - care') for x in candidates)
+
+            if (self.source.lower() == 'ch'
+                    and self.id_in_source.upper().startswith('NI')):
+                # A Northern Irish company and its CCNI charity registration, joined
+                # from the Companies House side (as 'name - housing' is). CCNI records
+                # a company number for only about a fifth of its register, so for the
+                # rest a shared normalised name is the only available evidence.
+                # A shared name is weak evidence, so this rule fires only when the name
+                # picks out exactly ONE organisation on each side:
+                #   - exactly one CCNI-sourced organisation already holds the name, and
+                #   - this is the only NI-prefixed Companies House record holding it.
+                # The second test cannot be read off byname (the incoming record is not
+                # in the indexes yet, and an already-absorbed NI company is hidden
+                # inside its parent), so merge() precomputes a per-name census of the
+                # incoming Companies House batch and passes it in.
+                # A stored organisation holds the name for CCNI either in its own
+                # right, or because it absorbed a CCNI charity earlier: an 'ftc' or
+                # 'oscr' link can put a CCNI charity under a CCEW/OSCR parent, and
+                # add_to_stores() then indexes that parent under the charity's name
+                # while the parent keeps its own source. Counting only x.source would
+                # miss it and wrongly leave one visible holder. matched_orgs entries
+                # are (organisation, matchtype) tuples.
+                candidates = [
+                    x for x in match
+                    if x.source.lower() == 'ccni'
+                    or any(m.source.lower() == 'ccni'
+                           for m, _ in getattr(x, 'matched_orgs', []))
+                ]
+                incoming_ni_holders = (ni_ch_name_counts or {}).get(self.normalisedname, 1)
+                if len(candidates) == 1 and incoming_ni_holders <= 1:
+                    matches_here.extend((x, 'name - ni charity') for x in candidates)
 
 
         if self.companyid in bysourceid:
             match = bysourceid[self.companyid]
-            targets = resolved_targets(match)
-            if self.source.lower() == 'coops' and any(group_has_source(t, 'mutuals') or group_has_source(t, 'ch') for t in targets):
-                matches_here.extend([(t, 'companyid - coop mutual') for t in targets])
-            elif self.source.lower() == 'mutuals' and any(group_has_source(t, 'coops') for t in targets):
-                matches_here.extend([(t, 'companyid - coop mutual') for t in targets])
+            # A co-operative's company number identifies a Companies House company or a
+            # Mutuals Public Register society - never a charity. Both rules previously
+            # linked EVERY organisation the index returned for the number as soon as one
+            # of them qualified, which let a Scottish charity number collide with an
+            # identically formatted Scottish company number (the co-op GB-COOP-R009306
+            # linked both CITY CABS (EDINBURGH) LIMITED and the unrelated OSCR charity
+            # '2nd Inchinnan Brownie Unit', GB-SC-SC033518; in v1.2 that surfaced as a
+            # harmless blank-uid row, but it is exactly the evidence a bridge merge
+            # would act on). Only the organisations that actually hold the number on a
+            # qualifying record are matched now.
+            if self.source.lower() == 'coops':
+                candidates = [x for x in match
+                              if holds_record_from(x, ('mutuals', 'ch'),
+                                                   id_in_source=self.companyid)]
+                matches_here.extend((x, 'companyid - coop mutual') for x in candidates)
+            elif (self.source.lower() == 'mutuals'
+                    and any(holds_record_from(x, ('coops',), id_in_source=self.companyid)
+                            for x in match)):
+                candidates = [x for x in match
+                              if holds_record_from(x, ('coops', 'ch'),
+                                                   id_in_source=self.companyid)]
+                matches_here.extend((x, 'companyid - coop mutual') for x in candidates)
 
+                
+        # identifier-based rules for CQC providers (CQC API data): a provider's
+        # Companies House number / charity number identifies the spine organisation
+        # directly, which is far stronger evidence than a shared name.
+        if self.source.lower() == 'carequalitycommission':
+            if self.companyid and self.companyid in bysourceid:
+                # the Companies House organisation itself (uid GB-COH-<number>), found
+                # either directly or through an organisation that absorbed it; the uid
+                # check stops id_in_source collisions with other registers (e.g. an
+                # OSCR charity number that looks like a Scottish company number)
+                coh_uid = 'GB-COH-' + self.companyid
+                candidates = [x for x in bysourceid[self.companyid]
+                              if x.uid == coh_uid
+                              or any(m.uid == coh_uid for m, _ in getattr(x, 'matched_orgs', []))]
+                matches_here.extend((x, 'companyid - cqc') for x in candidates)
+            if self.charitynumber:
+                # the charity organisation itself (uid GB-CHC-<number>, or GB-SC-<number>
+                # for a Scottish charity number), found either directly or - as for the
+                # companyid rule above - through an organisation that absorbed it; the uid
+                # check stops id_in_source collisions with other registers
+                chc_uid = ('GB-SC-' if self.charitynumber.upper().startswith('SC')
+                           else 'GB-CHC-') + self.charitynumber
+                if chc_uid in spinelist:
+                    matches_here.append((spinelist[chc_uid], 'charityno - cqc'))
+                elif self.charitynumber in bysourceid:
+                    candidates = [x for x in bysourceid[self.charitynumber]
+                                  if any(m.uid == chc_uid for m, _ in getattr(x, 'matched_orgs', []))]
+                    matches_here.extend((x, 'charityno - cqc') for x in candidates)
 
         if self.id_in_source in bycompanyid:
             match = bycompanyid[self.id_in_source]
-            targets = resolved_targets(match)
             if self.source.lower() == 'ch':
                 # companies house counterpart to charity
-                matches_here.extend([(t, 'companyid - id_in_source') for t in targets])
-            if self.source.lower() == 'mutuals' and any(group_has_source(t, 'coops') for t in targets):
-                matches_here.extend([(t, 'companyid - coop mutual') for t in targets])
+                matches_here.extend([(i, 'companyid - id_in_source') for i in match])
+            if (self.source.lower() == 'mutuals'
+                    and any(holds_record_from(x, ('coops',), companyid=self.id_in_source)
+                            for x in match)):
+                # same narrowing as above, from the mutuals side
+                candidates = [x for x in match
+                              if holds_record_from(x, ('coops', 'ch'),
+                                                   companyid=self.id_in_source)]
+                matches_here.extend((x, 'companyid - coop mutual') for x in candidates)
             
-        # find matches in dkane _sameas csv
+        # find matches in dkane _sameas csv. Both linkage tables name organisations by
+        # uid, so a uid that a bridge merge folded into another organisation has to be
+        # resolved to its survivor, or the link would silently match nothing.
         if self.uid in ftc_dict:
             matched_uids = ftc_dict[self.uid]
             for m in matched_uids:
-                if m in spinelist:
-                    matches_here.append((spinelist[m],'ftc')) 
+                target = resolve_merged_uid(m, merged_uid_aliases)
+                if target in spinelist:
+                    matches_here.append((spinelist[target],'ftc')) 
     
         # find matches using historic oscr data
         if self.uid in oscr_linkage_lookup:
             matched_uids = oscr_linkage_lookup[self.uid]
             for m in matched_uids:
-                if m in spinelist:
-                    matches_here.append((spinelist[m],'oscr')) 
+                target = resolve_merged_uid(m, merged_uid_aliases)
+                if target in spinelist:
+                    matches_here.append((spinelist[target],'oscr')) 
 
-        if len(matches_here) > 1:
-            matched_orgs = [(i[0].uid,i[1]) for i in matches_here]
-            #distinct_matches = set([i[0] for i in matched_orgs])
-            #if len(distinct_matches) > 1:
-            #    print(f'more than one matched org: {matched_orgs} for {self.uid} {self.normalisedname} {self.source}')
-        return matches_here
+        # Index and linkage-table paths can identify the same candidate more
+        # than once. Deduplicate before applying the explicit (rule rank, uid)
+        # ordering used by the absorbing decision.
+        unique_matches = {}
+        for org, matchtype in matches_here:
+            unique_matches.setdefault((org.uid, matchtype), (org, matchtype))
+        return sorted(unique_matches.values(), key=match_candidate_sort_key)
 
 
+
+
+# A company number held by this many (or more) distinct organisations of a
+# single source is register junk (e.g. CCEW's literal '12345678', held by five
+# unrelated charities in the July 2026 extract) and must not drive
+# 'companyid - companyid' links. Genuine re-registration chains observed in the
+# data span two or, rarely, three charities, so four is the safe cut-off.
+PLACEHOLDER_COMPANYID_CLUSTER_SIZE = 4
 
 
 class MainOrgList:
@@ -708,13 +1032,14 @@ class MainOrgList:
         self.byname: dict[str, list[CoreOrganisation]] = {}
         self.bycompanyid: dict[str, list[CoreOrganisation]] = {}
         self.bysourceid: dict[str, list[CoreOrganisation]] = {}
-        # Every uid ever placed on the spine (as a primary org OR as a
-        # matched_org) -> the CoreOrganisation that currently owns it. Unlike
-        # self._store, an entry here is never removed just because its org
-        # got folded into someone else's matched_orgs - it's repointed at the
-        # new owner instead. Used for ftc/oscr sameAs lookups, which need to
-        # resolve a uid even after it's no longer a top-level _store entry.
-        self.byuid: dict[str, CoreOrganisation] = {}
+        # companyid values identified as placeholder junk (see merge()):
+        # never indexed, so no companyid rule can fire on them
+        self.suppressed_companyids: set[str] = set()
+        # organisations folded into another organisation by a bridge merge, as
+        # {merged-away uid: surviving uid}. They are no longer live CoreOrganisations,
+        # so they can never be a party to another merge (merges never chain), and the
+        # uid-keyed linkage tables are redirected through this map.
+        self.merged_uid_aliases: dict[str, str] = {}
 
 
     def __iter__(self):
@@ -756,167 +1081,226 @@ class MainOrgList:
             org = new_core_org
 
         self._store[org.uid] = org
-        self.byuid[org.uid] = org
-        #add_to_dict(self._store, org.uid, org)
         add_to_dict(self.byname, org.normalisedname, org)
-        if org.companyid and org.companyid != '0' * len(org.companyid):
+        if (org.companyid and org.companyid != '0' * len(org.companyid)
+                and org.companyid not in self.suppressed_companyids):
             add_to_dict(self.bycompanyid, org.companyid, org)
         add_to_dict(self.bysourceid, org.id_in_source, org)
 
-        # also add the keys for anything in org.matched_orgs. Index the actual
-        # matched sub-org (m), not org itself - matches() filters on things
-        # like x.source/x.cqc_reg, and those need to reflect m's own values,
-        # not whichever core currently owns it. matches() resolves the
-        # returned candidate back to its current owning core via byuid.
+        # also add the keys for anything in org.matched_orgs, EXCEPT
+        # association-only partners: a 'companyid - companyid' partner keeps
+        # its own identity (it is stored standalone by merge()), so this
+        # organisation must not become findable under the partner's keys
+        # (that is how RNIB's Scottish record was absorbed into UCLH).
         if isinstance(org, CoreOrganisation):
 
             for m,matchtype in org.matched_orgs:
-                add_to_dict(self.byname, m.normalisedname, m)
-                if m.companyid and m.companyid != '0' * len(m.companyid):
-                    add_to_dict(self.bycompanyid, m.companyid, m)
-                add_to_dict(self.bysourceid, m.id_in_source, m)
-                self.byuid[m.uid] = org
-
-        if org.uid in debug_uids:
-            print(f"add_to_stores({org.uid}, {type(org).__name__})")
-            #if isinstance(org,CoreOrganisation):
-            #    print(org.matched_orgs)
+                if matchtype == 'companyid - companyid':
+                    continue
+                add_to_dict(self.byname, m.normalisedname, org)
+                if (m.companyid and m.companyid != '0' * len(m.companyid)
+                        and m.companyid not in self.suppressed_companyids):
+                    add_to_dict(self.bycompanyid, m.companyid, org)
+                add_to_dict(self.bysourceid, m.id_in_source, org)
 
     def remove_from_stores(self, org):
-        if org.uid in debug_uids:
-            print(f"remove_from_stores({org.uid}, {type(org).__name__})")
-        def remove_from_dict(dictionary, key, org):
-            values = dictionary.get(key)
-            if not values:
-                return
-            dictionary[key] = [x for x in values if x.uid != org.uid]
-            if not dictionary[key]:
-                del dictionary[key]
-
-        remove_from_dict(self.byname, org.normalisedname, org)
-        remove_from_dict(self.bycompanyid, org.companyid, org)
-        remove_from_dict(self.bysourceid, org.id_in_source, org)
-
-        # add_to_stores() also indexes keys for anything in org.matched_orgs,
-        # keyed on the sub-org (m) itself now, not org - mirror that here so
-        # those entries don't go stale and keep matching to an org that's no
-        # longer in self._store.
+        # remove only this organisation from each index list (other organisations can share
+        # a name/companyid key); drop the key only once its list is empty.
+        def remove_from_dict(dictionary, key):
+            if key and key in dictionary:
+                dictionary[key] = [x for x in dictionary[key] if x.uid != org.uid]
+                if not dictionary[key]:
+                    del dictionary[key]
+        remove_from_dict(self.byname, org.normalisedname)
+        remove_from_dict(self.bycompanyid, org.companyid)
+        remove_from_dict(self.bysourceid, org.id_in_source)
+        # add_to_stores also indexes the org under its matched orgs' keys
+        # (association-only partners excluded there), so remove those too
         if isinstance(org, CoreOrganisation):
-            for m, matchtype in org.matched_orgs:
-                remove_from_dict(self.byname, m.normalisedname, m)
-                remove_from_dict(self.bycompanyid, m.companyid, m)
-                remove_from_dict(self.bysourceid, m.id_in_source, m)
-                # only clear if it still points at org - if org's matched_orgs
-                # were already reattached elsewhere, that new owner's
-                # add_to_stores() call will have repointed this already.
-                if self.byuid.get(m.uid) is org:
-                    del self.byuid[m.uid]
-
-#        remove_from_dict(self._store, org.uid, org)
-        self._store.pop(org.uid,None)
-        if self.byuid.get(org.uid) is org:
-            del self.byuid[org.uid]
+            for m,matchtype in org.matched_orgs:
+                if matchtype == 'companyid - companyid':
+                    continue
+                remove_from_dict(self.byname, m.normalisedname)
+                remove_from_dict(self.bycompanyid, m.companyid)
+                remove_from_dict(self.bysourceid, m.id_in_source)
+        self._store.pop(org.uid, None)
 
 
+    def bridge_merge_parties(self, absorbing):
+        """Decide whether an incoming record is a "bridge" proving that two spine
+        organisations are the same body.
 
-    def unique_core_matches(self, matched_org):
+        ``absorbing`` is the list of (stored organisation, match type) candidates for one
+        incoming record, with the association-only 'companyid - companyid' links already
+        removed by the caller. A bridge merge is allowed only when ALL of these hold:
+
+          1. the candidates resolve to exactly TWO distinct stored organisations;
+          2. those two organisations come from different registers;
+          3. neither link is association-only ('companyid - companyid'); every other
+             rule, including the name rules, is an acceptable bridge (the Clyde Valley
+             Housing Association case is a 'name - housing' bridge, and the known
+             failure cases are excluded by conditions 1 and 2 instead);
+          4. both organisations are still live CoreOrganisations - one already folded
+             into another can never be a merge party again, so merges cannot chain;
+          5. the evidence clears bridge_evidence_is_strong_enough().
+
+        Returns (survivor, loser, types_by_uid), or None if no merge should happen.
         """
-        Given a list of (CoreOrganisation, matchtype) tuples,
-        return the unique CoreOrganisations.
+        if not absorbing:
+            return None
+
+        # deterministic: candidates are keyed by uid and re-read in sorted uid order, and
+        # each one's match types keep the (rule rank, uid) order they arrived in
+        orgs_by_uid: dict[str, CoreOrganisation] = {}
+        types_by_uid: dict[str, list[str]] = {}
+        for org, matchtype in absorbing:
+            orgs_by_uid.setdefault(org.uid, org)
+            types = types_by_uid.setdefault(org.uid, [])
+            if matchtype not in types:
+                types.append(matchtype)
+
+        # 1. exactly two distinct stored organisations
+        if len(orgs_by_uid) != 2:
+            return None
+        candidates = [orgs_by_uid[uid] for uid in sorted(orgs_by_uid)]
+        org_a, org_b = candidates
+
+        # 2. different registers
+        if org_a.source.lower() == org_b.source.lower():
+            return None
+
+        # 3. association-only evidence never bridges. The caller already filters
+        # 'companyid - companyid' out of `absorbing`; this keeps the rule correct if a
+        # future caller does not.
+        for types in types_by_uid.values():
+            if any(mt == 'companyid - companyid' for mt in types):
+                return None
+
+        # 4. only two live organisations may be combined
+        for org in candidates:
+            if org.uid in self.merged_uid_aliases:
+                return None
+            if self._store.get(org.uid) is not org:
+                return None
+
+        # 5. same name, or identifier-grade evidence on both sides
+        if not bridge_evidence_is_strong_enough(org_a, types_by_uid[org_a.uid],
+                                                org_b, types_by_uid[org_b.uid]):
+            return None
+
+        # the earlier-loaded register survives (explicit sort, never an unordered min)
+        survivor, loser = sorted(candidates, key=source_load_sort_key)
+        return survivor, loser, types_by_uid
+
+
+    def apply_bridge_merge(self, survivor, loser, bridge_org, types_by_uid):
+        """Fold `loser` into `survivor`, the two organisations bridged by `bridge_org`.
+
+        The loser leaves the spine: it is removed from every index and becomes a matched
+        (absorbed) sub-organisation of the survivor with match type 'merge via bridge'.
+        The bridging record's uid is deliberately NOT written into the match type - it is
+        recoverable because the bridge's own match rows sit on the survivor.
         """
+        # drop the loser from every index FIRST, while its own matched_orgs still
+        # describe the keys it was indexed under
+        self.remove_from_stores(loser)
+        self.merged_uid_aliases[loser.uid] = survivor.uid
 
+        # re-parent the loser's matched organisations onto the survivor
+        existing_links = {(m.uid, mt) for m, mt in survivor.matched_orgs}
+        for m, mt in sorted(loser.matched_orgs, key=match_candidate_sort_key):
+            if (m.uid, mt) not in existing_links:
+                survivor.matched_orgs.append((m, mt))
+                existing_links.add((m.uid, mt))
 
-        unique = {}
-        for core, _ in matched_org:
-            unique[core.uid] = core
+        # re-parent the loser's supplementary rows
+        for extra in loser.extras:
+            if extra not in survivor.extras:
+                survivor.extras.append(extra)
 
-
-        return list(unique.values())
-
-
-    def choose_primary_core(self, cores):
-        """
-        Decide which existing CoreOrganisation should remain the
-        primary organisation after two cores become connected.
-        """
-
-
-        if len(cores) == 1:
-            return cores[0]
-
-        precedence = {
-            source: i
-            for i, source in enumerate(source_precedence_order)
-        }
-
-        return min(
-            cores,
-            key=lambda org: precedence.get(org.source.lower(), float("inf"))
-        )
-
-
-
-    def merge_coreorganisations(self, cores, bridge_uid):
-        """
-        Merge several CoreOrganisations into one (when an organisation matches two on the spine, 
-        but the two weren't already linked).
-    
-        Returns the surviving CoreOrganisation.
-        """
-    
-        primary = self.choose_primary_core(cores)
-    
-        for other in cores:
-        
-            if other.uid == primary.uid:
+        # Re-parent the association-only (blank uid) match rows the loser had already
+        # accumulated. Their orgA side must be rewritten to the survivor: the loser's uid
+        # is no longer a spine row, and release validation requires every orgA_uid to be
+        # one. A row that now points from the survivor back at itself is dropped.
+        for match_row in loser.sorted_matches:
+            rewritten = match_row.model_copy(update={
+                'uid': survivor.uid if match_row.uid else '',
+                'orgA_uid': survivor.uid,
+                'orgA_source': survivor.source,
+                'orgA_id_in_source': survivor.id_in_source,
+            })
+            if rewritten.orgA_uid == rewritten.orgB_uid:
                 continue
-            #print('other = ',other.uid, type(other))
-            #
-            # Remove from lookup dictionaries first
-            #
-            self.remove_from_stores(other)
-    
-            #
-            # Bring across all existing matched organisations
-            #
-            for m, matchtype in other.matched_orgs:
-                if (m.uid, matchtype) not in {
-                    (existing.uid, mt)
-                    for existing, mt in primary.matched_orgs
-                }:
-                    primary.add_matched_org(m, matchtype)
-            
-                #if not any(existing.uid == m.uid
-                #           for existing, _ in primary.matched_orgs):
-                #        
-                #    primary.add_matched_org(m, matchtype)
-    
-            #
-            # Downgrade the losing core into a SubSpineOrg
-            #
-            reverted = SubSpineOrg(**other.model_dump())
-    
-    
-            #
-            # Add the losing primary itself as a matched organisation
-            #
-            if not any(existing.uid == reverted.uid
-                       for existing, _ in primary.matched_orgs):
-                    
-                primary.add_matched_org(reverted, "merge via %s"%bridge_uid)
-    
-        #
-        # Re-index the surviving core.
-        #
-        self.add_to_stores(primary)
-    
-        return primary
-    
+            if rewritten not in survivor.sorted_matches:
+                survivor.sorted_matches.append(rewritten)
 
+        # the loser itself becomes a matched organisation of the survivor
+        reverted_loser = SubSpineOrg(**loser.__dict__)
+        if (reverted_loser.uid, BRIDGE_MERGE_MATCH_TYPE) not in existing_links:
+            survivor.matched_orgs.append((reverted_loser, BRIDGE_MERGE_MATCH_TYPE))
+
+        # Re-parenting can leave the survivor holding an association-only row for a link
+        # it now also absorbs (or two association-only rows for the same link). Release
+        # validation rejects a repeated unordered endpoint pair + match type, so drop any
+        # association row whose (other endpoint, match type) is now covered by a real
+        # absorption, and keep only one association row per remaining link.
+        absorbed_links = {(m.uid, mt) for m, mt in survivor.matched_orgs}
+        kept_rows = []
+        seen_association_links = set()
+        for match_row in survivor.sorted_matches:
+            if not match_row.uid:
+                link = (match_row.orgB_uid, match_row.match_type)
+                if link in absorbed_links or link in seen_association_links:
+                    continue
+                seen_association_links.add(link)
+            kept_rows.append(match_row)
+        survivor.sorted_matches = kept_rows
+
+        bridge_types = ', '.join(sorted(
+            set(types_by_uid[survivor.uid]) | set(types_by_uid[loser.uid]),
+            key=lambda mt: (MATCHTYPE_RANK.get(mt, len(MATCHTYPE_ORDER)), mt),
+        ))
+        print(f'Bridge merge: {loser.uid} -> {survivor.uid} '
+              f'via {bridge_org.uid} ({bridge_types})')
 
 
     def merge(self, orgs: list[SubSpineOrg]):
         '''merge SubSpineOrgs onto MainOrgList (self): check for matches'''
+
+        # Placeholder-companyid census for this source batch: a company number
+        # held by PLACEHOLDER_COMPANYID_CLUSTER_SIZE or more distinct
+        # organisations of one source cannot be a genuine shared corporate
+        # identity and is suppressed from the companyid index entirely.
+        companyid_holders: dict[str, set[str]] = {}
+        for org in orgs:
+            if org.companyid and org.companyid != '0' * len(org.companyid):
+                companyid_holders.setdefault(org.companyid, set()).add(org.uid)
+        newly_suppressed = {
+            cid for cid, holders in companyid_holders.items()
+            if len(holders) >= PLACEHOLDER_COMPANYID_CLUSTER_SIZE
+        }
+        if newly_suppressed:
+            self.suppressed_companyids |= newly_suppressed
+            print('Suppressed placeholder companyid value(s) for this source: '
+                  + ', '.join(sorted(newly_suppressed)))
+
+        # Census of NI-prefixed Companies House records per normalised name in this
+        # source batch. The 'name - ni charity' rule may only fire when the name
+        # identifies one organisation on each side; the incoming record's own side
+        # cannot be counted from the indexes, because it is not stored yet and any
+        # earlier NI company on the same name is hidden inside the parent it joined.
+        # The census covers ONE call of merge(), i.e. one input file, so the guard
+        # assumes every Companies House record arrives in a single file (CH_all),
+        # as spine_bash_script.sh loads them. Splitting Companies House across
+        # several files would let a second NI company on a name escape the guard.
+        ni_ch_name_holders: dict[str, set[str]] = {}
+        for org in orgs:
+            if (org.source.lower() == 'ch' and org.normalisedname
+                    and org.id_in_source.upper().startswith('NI')):
+                ni_ch_name_holders.setdefault(org.normalisedname, set()).add(org.uid)
+        ni_ch_name_counts = {
+            name: len(holders) for name, holders in ni_ch_name_holders.items()
+        }
 
         def check_removal_dates(subspine_org, matched_orgs):
             ''' 
@@ -932,7 +1316,14 @@ class MainOrgList:
             org_merging_on_remdate = parse_date(subspine_org.removeddate)
 
 
-            # if any matched_orgs have a later removal date than subspine_org, output an error message
+            # This guard only ever compares the incoming record with candidates from the
+            # SAME source, so a bridge merge cannot make it misfire: a bridge merge
+            # requires its two organisations to come from different registers, and a
+            # merged-in organisation never reappears as a candidate (it leaves the
+            # indexes altogether).
+            # These are linkage invariants, not advisory diagnostics. Letting
+            # the build continue would choose a demonstrably stale same-source
+            # primary while merely printing "ERROR:" into a long progress log.
             for m,matchtype in matched_orgs:
                 matched_coreorg_remdate = parse_date(m.removeddate)
                 if m.source == subspine_org.source:
@@ -941,53 +1332,27 @@ class MainOrgList:
                     # 2. null org_merging_on_remdate but not null matched_coreorg_remdate (meaning that the org merging on is still active while the matched org is not)
                     if matched_coreorg_remdate:
                         if not org_merging_on_remdate:
-                            print(f'ERROR: {subspine_org.normalisedname} ({subspine_org.uid}) has no removal date, but {m.normalisedname} ({m.uid}, {m.removeddate}) does in source {m.source}')
+                            raise RuntimeError(
+                                f'{subspine_org.normalisedname} '
+                                f'({subspine_org.uid}) has no removal date, '
+                                f'but {m.normalisedname} ({m.uid}, '
+                                f'{m.removeddate}) does in source {m.source}'
+                            )
                         elif org_merging_on_remdate and (org_merging_on_remdate > matched_coreorg_remdate):
-                            print(f'ERROR: {subspine_org.normalisedname} ({subspine_org.uid}) has a later removal date ({subspine_org.removeddate}) than {m.normalisedname} ({m.uid}, {m.removeddate}) in source {m.source}')
-
-
-
+                            raise RuntimeError(
+                                f'{subspine_org.normalisedname} '
+                                f'({subspine_org.uid}) has a later removal '
+                                f'date ({subspine_org.removeddate}) than '
+                                f'{m.normalisedname} ({m.uid}, '
+                                f'{m.removeddate}) in source {m.source}'
+                            )
 
         
         for this_subspine_org in tqdm(orgs, desc='Processing orgs'):
             # does this_subspine_org match anything already in the spine (MainList (self))?
-
-            debug = this_subspine_org.uid in debug_uids
-
-            matched_org = this_subspine_org.matches(self.byname, self.bycompanyid, self.bysourceid, self.byuid)
-
-            if debug:
-                print(f"\n=== Processing {this_subspine_org.uid} ===")
-                print(this_subspine_org.organisationname, this_subspine_org.normalisedname)
-                if matched_org:
-                    print("Matched:")
-                    for core, mt in matched_org:
-                        print(f"    {core.uid} via {mt}")
-                else:
-                    print("No matches found")
-
+            matched_org = this_subspine_org.matches(self.byname, self.bycompanyid, self.bysourceid, self._store,
+                                                    ni_ch_name_counts, self.merged_uid_aliases)
             if matched_org:
-                
-                unique_cores = {}
-                for core, _ in matched_org:
-                    unique_cores.setdefault(core.uid, core)
-
-                unique_cores = list(unique_cores.values())
-                if debug:
-                    print('Unique cores: ',[c.uid for c in unique_cores])
-
-                if len(unique_cores) > 1:
-
-                    merged_core = self.merge_coreorganisations(unique_cores,this_subspine_org.uid)
-                    
-                    if debug:
-                        print(f'*** more than one match; {[i.uid for i in unique_cores]}, primary chosen = {merged_core.uid}, matches = {[i.uid for (i,_) in merged_core.matched_orgs]}')
-                    matched_org = [
-                        (merged_core, matchtype)
-                        for _, matchtype in matched_org]
-                    
-                    
-
                 #print('\nmatch: ',this_subspine_org.uid,this_subspine_org.normalisedname,' \n   to: ',matched_org)
                 check_removal_dates(this_subspine_org, matched_org)
                 # check if this org should be primary rather than matched:
@@ -995,61 +1360,117 @@ class MainOrgList:
                     #print(f"primary org found ({this_subspine_org.uid})")
                     # this is the primary org in the match
                     new_coreorg = this_subspine_org.to_core_org()
-                    if debug: print('becomes new primary org')
+
                     # need to attach any matches so far to new_coreorg, instead of matched_org
                     for m,matchtype in matched_org:
-                        # go through add_matched_org (not list.extend) so the
-                        # (uid, matchtype) dedup in MatchedOrgList.append actually applies
-                        for i_org, i_matchtype in m.matched_orgs:
-                            new_coreorg.add_matched_org(i_org, i_matchtype)
-                        reverted_m = SubSpineOrg(**m.model_dump())  # need to downgrade matched coreorg to subspine, and put it as a match in new_coreorg.
+                        new_coreorg.matched_orgs.extend([i for i in m.matched_orgs if i not in new_coreorg.matched_orgs])
+                        reverted_m = SubSpineOrg(**m.__dict__)  # need to downgrade matched coreorg to subspine, and put it as a match in new_coreorg.
                         self.add_to_stores(reverted_m)
                         self.remove_from_stores(m)
-                        new_coreorg.add_matched_org(reverted_m,matchtype)
-                    self.add_to_stores(new_coreorg)
+                        new_coreorg.matched_orgs.append((reverted_m,matchtype))
+                        self.add_to_stores(new_coreorg)
                 
                 else:
-                    # add this_subspine_org to all matched this_subspine_org already in the spine:
-                    for matched_coreorg,matchtype in matched_org: # o is higher up the precedence order than this_subspine_org
-                        matched_coreorg.add_matched_org(this_subspine_org,matchtype)
+                    # merge the incoming record into ONE organisation only - the best match by
+                    # match-rule priority (MATCHTYPE_ORDER, ties broken by the order the rules
+                    # produced them). Previously the record was absorbed into EVERY matched
+                    # organisation, duplicating its details across several organisations.
+                    # 'companyid - companyid' matches keep their association-only behaviour.
+                    absorbing = [(m,mt) for m,mt in matched_org if mt != 'companyid - companyid']
+                    associations = [(m,mt) for m,mt in matched_org if mt == 'companyid - companyid']
+
+                    # "Bridge merge": when this record matches exactly two organisations
+                    # from different registers on strong enough evidence, that is proof
+                    # the two are one and the same body, so they are folded into a single
+                    # organisation instead of one absorbing the record while the other
+                    # keeps a blank-uid association row.
+                    bridge = self.bridge_merge_parties(absorbing)
+
+                    if bridge is not None:
+                        survivor, loser, types_by_uid = bridge
+                        self.apply_bridge_merge(survivor, loser, this_subspine_org,
+                                                types_by_uid)
+                        # absorb the incomer into the survivor exactly as normal, keeping
+                        # its ORIGINAL match types: both links now point at the survivor
+                        incoming_types = sorted(
+                            set(types_by_uid[survivor.uid]) | set(types_by_uid[loser.uid]),
+                            key=lambda mt: (MATCHTYPE_RANK.get(mt, len(MATCHTYPE_ORDER)), mt),
+                        )
+                        for mt in incoming_types:
+                            survivor.matched_orgs.append((this_subspine_org, mt))
+                        self.add_to_stores(survivor)
+                        # no blank-uid association row is written for this incomer
+
+                    elif absorbing:
+                        best_org, _ = min(absorbing, key=match_candidate_sort_key)
+                        for m,mt in absorbing:
+                            if m.uid == best_org.uid:
+                                # absorb into the single best-matched organisation, keeping
+                                # every matchtype that pointed at it
+                                m.matched_orgs.append((this_subspine_org,mt))
+                            else:
+                                # runner-up organisations keep a record of the link WITHOUT
+                                # absorbing the record: an association-only match row with
+                                # blank uid, mirroring the 'companyid - companyid' behaviour
+                                m.sorted_matches.append(MatchInfo(uid = '',
+                                    orgA_id_in_source = m.id_in_source,
+                                    orgA_source = m.source,
+                                    orgA_uid = m.uid,
+                                    orgB_id_in_source = this_subspine_org.id_in_source,
+                                    orgB_source = this_subspine_org.source,
+                                    orgB_uid = this_subspine_org.uid,
+                                    match_type = mt))
+                        self.add_to_stores(best_org)
+
+                    for matched_coreorg,matchtype in associations:
+                        matched_coreorg.matched_orgs.append((this_subspine_org,matchtype))
                         self.add_to_stores(matched_coreorg)
+
+                    if not absorbing:
+                        # association-only incomer: it stays a standalone
+                        # organisation in the output, so it must also stay a
+                        # standalone, matchable organisation during the build
+                        # (previously it vanished from the indexes until
+                        # write-out, so later records with its exact name
+                        # were routed to its association partner instead).
+                        self.add_to_stores(this_subspine_org)
 
             else:
                 # no matches: add this as a new org in the spine
-                if not this_subspine_org.source.lower() in {
-                    "careinspectoratescot",
-                    "carequalitycommission",
-                }:
-                    self.add_to_stores(this_subspine_org)
-                
+                self.add_to_stores(this_subspine_org)
 
 
-    def restore_from_csv(self, filename_main: str, filename_extras: str):
-        with open(filename_main) as in_main:
-            main_csv = csv.DictReader(in_main)
-            for main_row in main_csv:
-                new_org = CoreOrganisation(**main_row)
-                self._store[new_org.uid] = new_org
 
-            with open(filename_extras) as in_extras:
-                extras_csv = csv.DictReader(in_extras)
-                for extras_row in extras_csv:
-                    main_row = self._store[extras_row["uid"]]
-                    main_row.extras.append(ExtraInfo(**extras_row))
-
-
+    # NOTE: a restore_from_csv() method was removed here: it was never called, referenced a
+    # nonexistent attribute (new_org.id), and could not work in principle because the public
+    # spine CSV omits fields that CoreOrganisation requires (companyid, source, id_in_source).
 
     def sort_matches(self):
+        # A source record can be an association-only match of one parent and
+        # a true absorbed match of another. CoreOrganisation.sort_matches()
+        # sees one parent at a time, so compute the global absorbed set first:
+        # an endpoint absorbed anywhere must never be re-materialised as a
+        # standalone spine row by another parent's association.
+        absorbed_uids = {
+            matched_org.uid
+            for org in self._store.values()
+            for matched_org, matchtype in org.matched_orgs
+            if matchtype != 'companyid - companyid'
+        }
         new_store_items = []
         for org in tqdm(self._store.values(), desc='Sorting matches'):
-            debug = org.uid in debug_uids
-            if debug:
-                print(f"\n========== sort_matches loop ({org.uid}) ==========")
-                for o, mt in org.matched_orgs:
-                    print(f"    {o.uid:20} {mt}")
             for_store = org.sort_matches()
             if for_store:
-                new_store_items.extend(for_store)
+                # never re-materialise an endpoint that is absorbed anywhere,
+                # nor one that already lives in the store standalone (merge()
+                # stores association-only incomers; re-adding the parent's
+                # naked copy here would discard everything the standalone
+                # organisation has absorbed since)
+                new_store_items.extend(
+                    item for item in for_store
+                    if item.uid not in absorbed_uids
+                    and item.uid not in self._store
+                )
 
         for s in new_store_items:
             self.add_to_stores(s)
@@ -1067,9 +1488,11 @@ class MainOrgList:
         self.sort_extras()
         print('\n\nsort_extras complete.')
 
-        with open(filename_main, "w+") as out_main:
-            with open(filename_extras, "w+") as out_extras:
-                with open(filename_matches, 'w+') as out_matches:
+
+        # newline='' is required by the csv module: without it, Windows doubles every line ending
+        with open(filename_main, "w+", newline='', encoding='utf-8') as out_main:
+            with open(filename_extras, "w+", newline='', encoding='utf-8') as out_extras:
+                with open(filename_matches, 'w+', newline='', encoding='utf-8') as out_matches:
 
                     main_csv = csv.DictWriter(out_main, fieldnames=SPINE_CSV_FIELDS)
                     extras_csv = csv.DictWriter(out_extras, fieldnames=EXTRA_DETAILS_CSV_FIELDS)
@@ -1107,7 +1530,7 @@ def convert_csv_to_list_of_subspine_orgs(csv_file: str) -> list[SubSpineOrg]:
     
     extras_dict = {}
     if os.path.exists(supp_file):
-        with open(supp_file) as supp_csv:
+        with open(supp_file, newline='', encoding='utf-8-sig') as supp_csv:
             csv_reader = csv.DictReader(supp_csv)
             for row in csv_reader:
                 uid = row['uid']
@@ -1119,14 +1542,16 @@ def convert_csv_to_list_of_subspine_orgs(csv_file: str) -> list[SubSpineOrg]:
         print(f'Missing supplementary file {supp_file}')
 
     orglist = []
-    with open(csv_file) as in_csv:
+    with open(csv_file, newline='', encoding='utf-8-sig') as in_csv:
         csv_reader = csv.DictReader(in_csv)
         for row in csv_reader:
             if any(field.strip() for field in row.values()):
                 try:
                     neworg = SubSpineOrg(**row)
-                except TypeError as e:
-                    print(f'{e} : row = {row}')
+                except (ValidationError, TypeError) as e:
+                    # skip the bad row entirely so a stale neworg from a previous
+                    # iteration can never be reused
+                    print(f'Skipping invalid row in file {csv_file}: {e} : row = {row}')
                     continue
                 if neworg.uid in extras_dict:
                     neworg.extras = extras_dict[neworg.uid]
@@ -1136,7 +1561,14 @@ def convert_csv_to_list_of_subspine_orgs(csv_file: str) -> list[SubSpineOrg]:
     return orglist
 
 
-def process_csvs_to_build_spine(csv_file_list_order):
+def process_csvs_to_build_spine(csv_file_list_order, allow_missing_linkage=False,
+                                sameas_file=SAMEAS_FILE, oscr_links_file=OSCR_LINKS_FILE):
+    # load the external linkage tables up front: by default a missing file is a hard error
+    # (a build without them silently loses the 'ftc' and 'oscr' links), unless the caller
+    # explicitly opts out with allow_missing_linkage=True
+    load_linkage_tables(sameas_file=sameas_file, oscr_links_file=oscr_links_file,
+                        allow_missing_linkage=allow_missing_linkage)
+
     main_orgs = MainOrgList()
     progress = []
     for csv_file in csv_file_list_order:

@@ -1,11 +1,8 @@
 # possible to add scrape for addresses from https://www.housingregulator.gov.scot/landlord-performance/landlords/
 # 
 # 
-from .base import DataHandler,sort_encoding_issue
+from .base import DataHandler
 
-exclude_filters = {
-    "": []
-}
 
 
 class ScotHousingRegDataHandler(DataHandler):
@@ -13,14 +10,9 @@ class ScotHousingRegDataHandler(DataHandler):
     tmp_fields = ['iteration']
 
     def all_filters(self, row: dict) -> bool:
-        for fieldname, exclude_values in exclude_filters.items():
-            if row.get(fieldname) in exclude_values:
-                return False
         return True
     
 
-    def map_date(self, datestr):
-        return super().map_date(datestr)
 
     def find_names(self, row) -> list:
         return ['Social Landlord']
@@ -48,11 +40,7 @@ class ScotHousingRegDataHandler(DataHandler):
         super().sort_address_fields(new_row)
         return new_row
         
-    def find_primary_info(self, details_list):
-        return super().find_primary_info(details_list)
     
-    def combine_org_details_per_source(self, rows: list):
-        return super().combine_org_details_per_source(rows)
 
 '''
 Scottish Housing Register data fields

@@ -1,14 +1,12 @@
 
-from .base import DataHandler,sort_encoding_issue
+from .base import DataHandler
 from datetime import datetime
 
-exclude_filters = {
-    "": []
-}
 
 
 class MutualsDataHandler(DataHandler):
-    fileencoding='cp1252'#utf-8'#Latin-1'
+    fileencoding='Latin-1' # mutuals.all.csv is written as UTF-8 by preprocess.py; reading as
+    # Latin-1 matches the other handlers' pattern, which sort_encoding_issue (base.py) reverses
     tmp_fields = ['iteration']
     
     def all_filters(self,row: dict) -> bool:
@@ -63,11 +61,7 @@ class MutualsDataHandler(DataHandler):
         return new_row
     
 
-    def find_primary_info(self, details_list):
-        return super().find_primary_info(details_list)
 
-    def combine_org_details_per_source(self, rows: list):
-        return super().combine_org_details_per_source(rows)
 
 
 

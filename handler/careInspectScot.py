@@ -1,8 +1,7 @@
 
 from datetime import datetime
 
-from .base import DataHandler,sort_encoding_issue
-from .base_definitions import sub_spine_entry_creator,extra_csv_entry_creator
+from .base import DataHandler
 
 include_filters = {
     "ServiceType": ['Voluntary or Not for Profit'],
@@ -84,13 +83,9 @@ class CareInspScotDataHandler(DataHandler):
         return new_row
 
 
-    def find_primary_info(self, details_list):
-        return super().find_primary_info(details_list)
     
     
 
-    def combine_org_details_per_source(self, rows: list):
-        return super().combine_org_details_per_source(rows)
 
 
     

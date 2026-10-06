@@ -5,75 +5,20 @@ This code processes the bulk download from the companies house advanced search
 
 from datetime import datetime
 
-from .base import DataHandler,sort_encoding_issue
+from .base import DataHandler
 
-""" exclude_filters = {
-    "company_type": [
-        "Private Limited Company",
-        "Limited Partnership",
-        "Limited Liability Partnership",
-        "Public Limited Company",
-        "Private Unlimited Company",
-        "Scottish Partnership",
-        "Private Unlimited",
-        "Investment Company with Variable Capital(Umbrella)",
-        "PRIV LTD SECT. 30 (Private limited company, section 30 of the Companies Act)",
-        "Investment Company with Variable Capital (Securities)",
-        "Investment Company with Variable Capital",
-        "Overseas Entity",
-        "United Kingdom Economic Interest Grouping",
-        "Old Public Company",
-        "United Kingdom Societas",
-        "Converted/Closed",
-        "Other Company Type",
-        "Protected Cell Company",
-        "Royal Charter Company",
-        "Further Education and Sixth Form College Corps",
-        "Other company type"
-    ]
-} """
-
-exclude_filters = {}
-# removing these filters, as a filter was already applied when the API scrape was carried out.
-'''
-    "company_type": [
-        'private limited company',
-        'limited partnership',
-        'limited liability partnership',
-        'public limited company',
-        'private unlimited company',
-        'scottish partnership',
-        'private unlimited',
-        'investment company with variable capital(umbrella)',
-        'priv ltd sect. 30 (private limited company, section 30 of the companies act)',
-        'investment company with variable capital (securities)',
-        'investment company with variable capital',
-        'overseas entity',
-        'united kingdom economic interest grouping',
-        'old public company',
-        'united kingdom societas',
-        'converted/closed',
-        'converted-or-closed',
-        'other company type',
-        'protected cell company',
-        'royal charter company',
-        'further education and sixth form college corps',
-        'other company type']
-}'''
 
 
 class CH_APIScrape_DataHandler(DataHandler):
     fileencoding='UTF8'
     tmp_fields = ['SIC']
+    # overwritten per-file by all_companies_house.process_api_scrape with a
+    # date parsed from the filename; '2022' = the historical scrape's stamp
+    iteration_tag = '2022'
     
     def all_filters(self,row: dict) -> bool:
-
-        # exclude row if in exclude_filters
-        for fieldname, exclude_values in exclude_filters.items():
-            if row.get(fieldname).lower() in exclude_values:
-                return False
-            
-
+        # no company-type filter here: one was already applied
+        # when the API scrape was carried out
         return True
 
     def map_date(self, datestr):
@@ -110,7 +55,7 @@ class CH_APIScrape_DataHandler(DataHandler):
         new_row["companytype"] = ' '.join([row['company_type'],row['company_subtype']]).strip()
         new_row["removeddate"] = self.map_date(row['date_of_cessation'])
         new_row["registerdate"] = self.map_date(row['date_of_creation'])
-        new_row["iteration"] = '2022'
+        new_row["iteration"] = self.iteration_tag
         new_row['is_cic'] = bool(row['company_subtype'] == 'community-interest-company')
         new_row['SIC'] = row['sic_codes'].strip('[').strip(']').replace("'",'')
         

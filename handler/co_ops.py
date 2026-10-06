@@ -2,11 +2,7 @@
 from datetime import datetime
 
 from .base import DataHandler
-from .base_definitions import extra_csv_entry_creator,sub_spine_entry_creator
 
-exclude_filters = {
-    "": []
-}
 
 
 class CoOpsDataHandler(DataHandler):
@@ -15,9 +11,6 @@ class CoOpsDataHandler(DataHandler):
 
     def all_filters(self, row: dict) -> bool:
 
-        for fieldname, exclude_values in exclude_filters.items():
-            if row.get(fieldname) in exclude_values:
-                return False
         return True
     
     def map_date(self, datestr):
@@ -76,13 +69,9 @@ class CoOpsDataHandler(DataHandler):
     
 
    
-    def find_primary_info(self, details_list):
-        return super().find_primary_info(details_list)
     
     
 
-    def combine_org_details_per_source(self, rows: list):
-        return super().combine_org_details_per_source(rows)
         
 
 '''
