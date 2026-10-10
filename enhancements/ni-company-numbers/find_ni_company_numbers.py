@@ -49,7 +49,7 @@ KEYWORDS = ("company", "registered number", "registration number", "reg. no", "r
             "limited by guarantee", "companies house")
 DROP_NAME_TOKENS = {"LIMITED", "LTD", "THE", "CIC", "COMPANY", "CLG"}
 MATCH_TYPE = "companyid - accounts regex"
-CONFIDENCE_ORDER = {"high": 0, "medium": 1, "low": 2}
+CONFIDENCE_ORDER = {"high": 0, "review": 1, "medium": 2, "low": 3}
 
 # Modern NI form: "NI" (or OCR "Nl") + 5-6 digits; the C in "NIC101307" blocks charity numbers.
 # ponytail: 1-4 digit shorthand like "NI 4978" is deliberately skipped (too many false
@@ -350,9 +350,12 @@ def score(cands: pd.DataFrame, ch: pd.DataFrame, links: pd.DataFrame,
     def confidence(r) -> str:
         if not r.in_ch_register or r.linked_to_other_charity or r.folded_into or r.is_own_charity_number:
             return "low"
-        strong = r.name_similarity >= NAME_SIMILARITY_HIGH or r.postcode_match
         specific = r.n_distinct_numbers_in_doc == 1 or r.keyword_context
-        return "high" if strong and specific else "medium"
+        if specific and r.name_similarity >= NAME_SIMILARITY_HIGH:
+            return "high"
+        if specific and r.postcode_match:
+            return "review"  # postcode only: renames/abbreviations, but also subsidiaries/corporate trustees
+        return "medium"
 
     df["confidence"] = [confidence(r) for r in df.itertuples(index=False)]
     n_high = df[df["confidence"] == "high"].groupby("uid")["uid"].transform("size")
@@ -417,7 +420,7 @@ def main() -> None:
         "by_confidence": {c: int((scored["confidence"] == c).sum()) for c in CONFIDENCE_ORDER},
         **{f"{c}_by_implication": {k: int(v) for k, v in
                                    scored.loc[scored["confidence"] == c, "implication"].value_counts().items()}
-           for c in ("high", "medium")},
+           for c in ("high", "review", "medium")},
         "charities_with_high": int(matches["uid"].nunique()),
     }
     write_text_atomic(a.out_dir / "run_summary.json", json.dumps(summary, indent=2))

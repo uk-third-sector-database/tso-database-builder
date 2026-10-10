@@ -47,7 +47,7 @@ Tests: `pytest test_find_ni_company_numbers.py`.
 - `ni_company_number_matches.csv` - high-confidence rows in `TSCS_spine.matches.csv` schema,
   `match_type = "companyid - accounts regex"`.
 - `run_summary.json` - counts at each step, including `ch_lookups_this_run`, `ch_lookup_failures`
-  and `high_by_implication` / `medium_by_implication`.
+  and `high_by_implication` / `review_by_implication` / `medium_by_implication`.
 
 Each candidate also carries `ch_address` (registered office), `company_spine_row`, `folded_into`
 and an `implication` for the Spine. **dedup**: the company already has its own Spine row, so
@@ -58,9 +58,13 @@ register but not on the Spine at all, so linking simply adds its company number 
 
 ## Confidence
 
-- **high**: number is in the CH register, not already linked to another charity, (name similarity
-  >= 0.85 OR same postcode), and (the only number in the document OR a keyword such as
+- **high**: number is in the CH register, not already linked to another charity, name similarity
+  >= 0.85, and (the only number in the document OR a keyword such as
   "company", "registered number", "limited by guarantee" within 100 characters before it).
+- **review**: as high, but the name differs (similarity < 0.85) and the match rests on the same
+  postcode alone. For manual checking: catches renamed companies and abbreviations, but also
+  subsidiaries and corporate trustees that share the charity's address. Not written to
+  `ni_company_number_matches.csv`.
 - **medium**: in the register and not linked to another charity, but otherwise weaker.
 - **low**: not in the register, already linked to another charity or folded into another Spine
   organisation, or the "company number" is
