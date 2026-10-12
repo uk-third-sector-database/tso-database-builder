@@ -1,9 +1,13 @@
-"""Checks for the AR30 extraction, modern 4.2 and 2014 2.1 (no network, no data files). Snippets are verbatim
-from cached sample documents (file named in each test) unless marked "made up"."""
+"""Checks for the AR30 extraction (modern 4.2, 2014 2.1) and AR41 (no network, no data files). Snippets are
+verbatim from cached sample documents (file named in each test) unless marked "made up"."""
 import pandas as pd
 
-from find_fca_financials import (R3_YEAR_END_Q, classify, extract_doc, field_tokens, fields_2014, normalise_block,
-                                 parse_value, select_target, year_end_on_form)
+from find_fca_financials import (AR41_FIELDS, R3_FIELDS, R3_YEAR_END_Q, classify, extract_doc, field_tokens, fields_by_row,
+                                 normalise_block, parse_value, select_target, year_end_on_form)
+
+
+def fields_2014(block: str) -> dict[str, str]:
+    return fields_by_row(block, R3_FIELDS)
 
 TITLE = "# **Annual Return (AR30) form** \n\n"
 Q21 = "- 2.1 What date did the financial year covered by these accounts end? \n\n"
@@ -115,11 +119,10 @@ def test_first_block_only():  # 4253R: online copy, then a scanned copy with a p
     assert row["layout"] == "online" and row["number_of_members"] == "39" and row["confidence"] == "high"
 
 
-def test_ar41_excluded():  # 1097W
+def test_ar41_not_modern():  # 1097W
     doc = ("###### **Annual Return (AR41) form** \n\n###### **4.2 Based on the accounts, please provide the information "
            "requested below for the financial year covered by this return.** \n\n|**A. Members at end of year**|83|\n")
     assert classify(doc) == "ar41"
-    assert extract_doc(doc)["number_of_members"] == "" and extract_doc(doc)["confidence"] == ""
 
 
 def test_other_forms():  # 2382RS, 4SA, 89CU, 1003F
@@ -268,3 +271,113 @@ def test_modern_footer_and_garbled_block_start():  # 122IP: title page lost; 823
 
 def test_ar41_with_space():  # 422W
     assert classify("FCA e Mutuals AR 41 Working Men's Club (F) e Release 1 April 2013 ") == "ar41"
+
+
+# ---------- AR41 (working men's clubs) ----------
+A41_TITLE = "# **Annual Return (AR41) form** \n\n"
+A41_ONLINE_HEAD = HEAD + "Please do not leave any fields blank. Enter ‘0’ where applicable. \n\n"
+A41_END = "\n\n- 5.1 Please select the audit option the society has complied with: \n"
+FOUR = ("number_of_members", "turnover", "assets", "number_of_employees")
+
+
+def test_ar41_online_sequence():  # 1001W (2022): labels apart from the values; "(if any)" does not make it paper
+    doc = (A41_TITLE + Q21 + "01/01/2022 \n\n" + A41_ONLINE_HEAD + "**A. Members at end of year** \n\n192 \n\n"
+           "**B. Turnover for year** \n\n## **C. Total income and expenditure (receipts and payments added together)** "
+           "\n\n123594 254634 \n\n**D. Net surplus/(deficit) for year E. Fixed assets F. Current assets** \n\n"
+           "**G. Total assets (E+F) (equal to amount in K below) H. Current liabilities I. Loans J. Reserves "
+           "K. Total liabilities (H+I+J) (equal to amount in G above) L. Number of employees (if any)** \n\n"
+           "7446 74603 22853 97456 10388 0 87068 97456 \n\n4 " + A41_END)
+    row = extract_doc(doc)
+    assert (row["form_type"], row["layout"], row["ar41_totals_check"], row["confidence"]) == ("ar41", "online", "pass", "high")
+    assert row["year_end_on_form"] == "2022-01-01"
+    assert [row[f] for f in FOUR] == ["192", "123594", "97456", "4"]
+    assert row["share_capital_status"] == row["highest_rate_interest_paid_on_shares_status"] == "not_on_form"
+
+
+def test_ar41_online_picture_text_duplicate():  # 1097W (2018): picture text repeats the members value
+    doc = (A41_TITLE + "###### **4.2 Based on the accounts, please provide the information requested below for the "
+           "financial year covered by this return.** \n\nPlease do not leave any fields blank. Enter ‘0’ where applicable. "
+           "\n\n\n<!-- Start of picture text -->\n102<br><!-- End of picture text -->\n\n"
+           "|**A. Members at end of year**|102|\n|---|---|\n|**B. Turnover for year**|23303|\n"
+           "|**C. Total income and** **expenditure (receipts and** **payments added together)**|33934|\n"
+           "|**D. Net surplus/(deficit) for** **year**|1533|\n|**E. Fixed assets**|39659|\n|**F. Current assets**|17982|\n"
+           "|**G. Total assets (E+F) (equal to** **amount in K below)**|57641|\n|**H. Current liabilities**|552|\n"
+           "|**I. Loans**|0|\n|**J. Reserves**|57089|\n|**K. Total liabilities (H+I+J)** **(equal to amount in G above)**|57641|\n"
+           "|**L. Number of employees (if** **any)**|0|" + A41_END)
+    row = extract_doc(doc)
+    assert row["ar41_totals_check"] == "pass" and row["confidence"] == "high"
+    assert [row[f] for f in FOUR] == ["102", "23303", "57641", "0"]
+
+
+def test_ar41_online_totals_fail():  # 1008W (2019): G 703991 but K 704021, so rows are read by label, not high
+    doc = (A41_TITLE + A41_ONLINE_HEAD + "|**A. Members at end of year**|362|\n|---|---|\n|**B. Turnover for year**|174848|\n"
+           "|**C. Total income and** **expenditure (receipts and** **payments added together)**|102162|\n"
+           "|**D. Net surplus/(deficit)** **for year**|17178|\n|**E. Fixed assets**|626024|\n|**F. Current assets**|77967|\n"
+           "|**G. Total assets (E+F)** **(equal to amount in K** **below)**|703991|\n|**H. Current liabilities**|23495|\n"
+           "|**I. Loans**|30963|\n|**J. Reserves**|649563|\n"
+           "|**K. Total liabilities (H+I+J)** **(equal to amount in G** **above)**|704021|\n"
+           "|**L. Number of employees** **(if any)**|5|" + A41_END)
+    row = extract_doc(doc)
+    assert (row["layout"], row["ar41_totals_check"], row["confidence"]) == ("online", "fail", "review")
+    assert [row[f] for f in FOUR] == ["362", "174848", "703991", "5"]
+
+
+def test_ar41_value_under_label():  # 1096W (2019): online value on the line after its label
+    assert fields_by_row("**A. Members at end of year** \n\n322 \n\n**B. Turnover for year** 153697 \n\n"
+                         "## **C. Total income and expenditure (receipts and payments added together)** \n\n322,194 \n\n",
+                         AR41_FIELDS) == {"number_of_members": "322", "turnover": "153697"}
+
+
+def test_ar41_release2_filled():  # 1038W (2018): Release 2 paper form typed into (tick boxes)
+    doc = (A41_TITLE + "### **2.1 What date did the financial year covered by these accounts end?** \n\n\n"
+           "<!-- Start of picture text -->\n3  1  1  2  2  0  1  8<br><!-- End of picture text -->\n\n"
+           "|accounts are being submitted with this form; and|`☒`|\n|---|---|\n\n"
+           "### **4.2 Based on the accounts, please provide the information requested** \n\n**below for the financial year "
+           "covered by this return.** Please do not leave any fields blank. Enter ‘NIL’ where applicable. \n\n"
+           "|A|Members at end of year|325|\n|---|---|---|\n|B|Turnover for year|£175,797|\n"
+           "|C|Total income and expenditure (receipts and payments added together)|£352.735|\n"
+           "|D|Net surplus/(deficit) for year|£(1,141)|\n|E|Fixed assets|£75,153|\n|F|Current assets|£8,519|\n"
+           "|G|Total assets (E+F) (equal to amount in K below)|£83,672|\n|H|Current liabilities|£13,368|\n|I|Loans|£100|\n"
+           "|J|Reserves|£70,204|\n|K|Total liabilities (H+I+J) (equal to amount in G above)|£83,672|\n"
+           "|L|Number of employees (if any)|5|\n\n\n_FCA_ ⚫ Mutuals AR41 Working Men’s Club (F) ⚫ Release 2 ⚫ February 2019 "
+           "\n\nPage **4** of **7** \n\n## **Section 5 – Audit** \n")
+    row = extract_doc(doc)
+    assert (row["layout"], row["ar41_totals_check"], row["confidence"]) == ("filled", "", "high")
+    assert row["year_end_on_form"] == "2018-12-31"
+    assert [row[f] for f in FOUR] == ["325", "175797", "83672", "5"]
+
+
+def test_ar41_release1_scanned():  # 1004W (2018): Release 1, no employees row; OCR footer bullet "e"
+    doc = ("FCA e Mutuals AR 41 Working Men's Club (F) e Release 1 e April 2013 \n\n- 1.2 Year end date \n\n"
+           "Please enter year below \n\n\n<!-- Start of picture text -->\ni{2{o|r|s.<br><!-- End of picture text -->\n\n"
+           "- 2.1 You must enter the figures below \n\n###### Enter NIL where applicable \n\n"
+           "||Members at end ofyear|1586|\n|---|---|---|\n"
+           "|C |Total ofincome and expenditure |(receipts and payments added together |£N/A |\n"
+           "|Dp||Netsurplus/(deficit) foryear|£(27826)|\n|G|Total assets (E+F) (equal to amount in Kbelow)|£621646|\n"
+           "||Current liabilities|£ 96722|\n|K|Total liabilities (H+I+J) (equal to amountinGabove)|£621646|\n\n\nee \n\n"
+           "FCA e Mutuals AR 41 Working Men's Club (F) e Release 1 e April 2013 \n\npage 6 \n\n3 The audit ")
+    row = extract_doc(doc)
+    assert (row["form_type"], row["layout"], row["confidence"], row["year_end_on_form"]) == ("ar41", "scanned", "review", "")
+    assert (row["number_of_members"], row["assets"]) == ("1586", "621646")
+    assert row["turnover_status"] == "missing" and row["number_of_employees_status"] == "not_on_form"
+
+
+def test_ar41_row_c_is_not_turnover():  # 2587W (2020) Release 1: of rows B/C only C survives OCR; 1038W row C
+    v = fields_by_row("|C_ |Total ofincomeand expenditure |(receipts and payments added together |£ 135666 |\n|---|---|---|\n"
+                      "|D|oNetsurplus/(deficit)foryear|£(2,230)|\n|G|Total assets(E+F)(equal to amount in K below|£ 157042|\n",
+                      AR41_FIELDS)
+    assert v == {"assets": "£ 157042"}
+    assert fields_by_row("|C|Total income and expenditure (receipts and payments added together)|£352.735|\n",
+                         AR41_FIELDS) == {}
+
+
+def test_ar41_paper_without_footer_is_scanned():  # 1023W (2022): "Enter 'NIL'" and no footer survived OCR
+    doc = ("## Annual Return (AR41) form \n\n4.2 Based on the accounts, please provide the information requested below for "
+           "the financial year covered by this return. Please do not leave any fields blank. Enter ‘NIL’ where applicable. "
+           "\n\n|peewee gta|\n|---|\n|[2|netsumrenanieryer—«(E2URSS |\n| Pefmwiens«0|\n\n\n##### Section 5 — ")
+    row = extract_doc(doc)
+    assert (row["layout"], row["confidence"], row["number_of_members_status"]) == ("scanned", "review", "missing")
+
+
+def test_box_border_read_as_one():  # "1£179,522" in AR41 paper tables
+    assert parse_value("1£179,522", "GBP", False) == ("", "review")

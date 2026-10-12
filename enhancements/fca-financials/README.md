@@ -1,9 +1,10 @@
-# FCA society financials from annual returns (AR30)
+# FCA society financials from annual returns (AR30, AR41)
 
 Standalone enhancement (not part of the builder). Reads the six figures in **section 4.2** of the
 modern FCA annual return (AR30) for co-operative and community benefit societies (`GB-MPR-`
 uids), four of the same figures from **section 2.1** of the older AR30 (Release 3, July 2014),
-plus the financial year-end written on the form, from the Braw corpus API's text of each return.
+four from the working men's club return (**AR41**), plus the financial year-end written on the
+form, from the Braw corpus API's text of each return.
 Regex only: no PDFs, no language model. Every return per society is kept (a panel).
 
 ## Run
@@ -35,8 +36,8 @@ Tests: `pytest test_find_fca_financials.py`.
 
 ## Forms
 
-Each document is classified; `ar30_modern` and `ar30_2014` are extracted, the rest are counted.
-Checked in this order:
+Each document is classified; `ar30_modern`, `ar30_2014` and `ar41` are extracted, the rest are
+counted. Checked in this order:
 
 - `ar30_modern`: title "Annual Return (AR30) form" (OCR `AR3O`, `AR30O` accepted) or, when OCR
   lost the title page, the paper page footer "Mutuals Annual Return (AR3) ... Release N"; and
@@ -64,6 +65,19 @@ On the 91 paper returns cached on 12 Oct 2026 the two signs never overlapped: 14
 boxes, no OCR signs; e.g. 5106R, 7550, 7670), 73 scanned by bullets/footer and 4 (2025 returns
 from a newer OCR, e.g. 1040RS) by `fca.orq.uk` alone; none fell to the default.
 
+AR41 uses its own signs (the AR30 ones do not fit: the web form also says "(if any)"):
+
+- `online`: no paper footer "Mutuals AR41 Working Men's Club (F) ... Release N" (OCR `AR 41`,
+  `AR 44`, `Workina` accepted) and the web form's guidance "Enter '0' where applicable" (paper
+  forms say "Enter 'NIL'"). The title "Annual Return (AR41) form" is not used: Release 2/3 paper
+  forms carry it too (1023W).
+- `filled`: the paper footer, tick boxes and no OCR signs (e.g. 1038W).
+- `scanned`: everything else, including paper forms whose footer was lost to OCR.
+
+Grepping the 575 AR41 returns in the 3,000-document set gives 221 online, 9 filled and 345
+scanned (228 of them Release 1). Some online returns are followed by a paper copy (831W, 1334W);
+as for AR30, only the text up to the end of the first block counts.
+
 ## Method
 
 The block runs from the first "4.2 Based on the accounts" to the next "4.3 What Standard"
@@ -88,15 +102,52 @@ date (dd/mm/yyyy)", written in boxes as `3 1 / 1 2 / 2 0 2 1`; anything else giv
 
 Row O ("Total liabilities, share capital & reserves") is never read as share capital: a "share
 capital" preceded by a comma or followed by "&" is skipped. A label found on more than one row
-sends the field to `review`; a label not found gives `missing`.
+sends the field to `review`; a label not found gives `missing`. If a label's row holds no value,
+the next line with text is used when it contains no letters (a value printed under its label).
+
+**AR41 (working men's clubs).** Lettered rows A-L, of which four feed the output fields; no new
+columns are added. Three versions:
+
+- Release 2 (February 2019) and Release 3 (April 2024) paper forms, and the online web form: rows
+  A-L under "4.2 Based on the accounts", ending at "5.1 Please select the audit option" or
+  "Section 5". Year-end from "2.1 What date did the financial year ... end?" as for modern AR30.
+- Release 1 (April 2013) paper form: rows A-K (no employees row) under "2.1 You must enter the
+  figures below", ending at "3 The audit" / "3.1 Type of audit". Used when there is no 4.2 block.
+  Year-end from "1.2 Year end date / Please enter year below", read as for the 2014 form; it is
+  almost always OCR noise, so blank.
+- A return with neither block (e.g. 1082W 2018, 588W 2021) gives `missing` for all four fields.
+
+| Output field | AR41 row | Unit |
+|---|---|---|
+| `number_of_members` | A "Members at end of year" | count |
+| `turnover` | B "Turnover for year" | £ |
+| `assets` | G "Total assets (E+F) (equal to amount in K below)" | £ |
+| `number_of_employees` | L "Number of employees (if any)"; Release 1: `not_on_form` | count |
+| `share_capital` | not asked: `not_on_form` | |
+| `highest_rate_interest_paid_on_shares` | not asked: `not_on_form` | |
+
+Turnover caveat: the AR41 gives no guidance on what "Turnover for year" covers, so clubs may
+define it differently from AR30 societies. Row C ("Total (of) income and expenditure (receipts
+and payments added together)") is a different measure and is never read as turnover.
+
+Paper forms (all releases) are read row by row, as for the 2014 form. The online form often
+prints the labels apart from the values (e.g. 1001W: `7446 74603 22853 97456 10388 0 87068
+97456` under the D-L labels). For online returns the numbers after the "Enter '0' where
+applicable" line are therefore taken in order, after dropping picture text (which can repeat a
+value, 1097W). They are used only if there are exactly 12 and the form's own totals hold:
+G = K and E + F = G (`ar41_totals_check` = `pass`). Otherwise (`fail`) the rows are read by
+label as for paper and the return cannot be `high`. Grepping gives 147 pass and 74 fail of the
+221 online returns; fails include clubs whose own figures do not add up (1008W 2019: G 703,991,
+K 704,021) and layouts with a different count of numbers.
 
 Value rules (mirroring the PDF pipeline): £, commas and bold are removed; `N/A` -> `-9`
 (`not_applicable`); `NIL`/`NONE` -> `0` (`nil`); a lone letter `O`/`oO` -> `0` (`nil`) on the
 online form only, `review` on filled and scanned forms (no filled form in the sample used a letter
 O for zero); anything else not cleanly numeric (spaces inside a number
 such as `64, 205`, unbalanced brackets, more than 2 decimals on money, decimals on a count, a rate
-over 100 or written with £) -> `review` with the raw text kept; no value -> `missing`. A field
-the form does not ask for -> `not_on_form` (2014 form only; not counted as missing).
+over 100 or written with £, a digit before £ such as `1£179,522` where an AR41 box border was read
+as a 1) -> `review` with the raw text kept; no value -> `missing`. A field the form does not ask
+for -> `not_on_form` (2014 form and AR41; not counted as missing).
 
 ## Outputs (`output/`)
 
@@ -109,19 +160,21 @@ the form does not ask for -> `not_on_form` (2014 form only; not counted as missi
   (ISO date or blank), `year_end_matches_catalogue` (True/False, blank if no date read), then
   for each field (`number_of_members`, `turnover`, `assets`, `number_of_employees`,
   `share_capital`, `highest_rate_interest_paid_on_shares`) the value and `{field}_status`, then
-  each `{field}_raw`, then `confidence`.
+  each `{field}_raw`, then `ar41_totals_check` (`pass`/`fail` on online AR41 returns, blank
+  otherwise), then `confidence`.
 - `baseline_comparison.csv`: one row per (return, field) the PDF pipeline parsed: our value and
   status, the baseline value and whether they agree to 2 decimal places. Matched on society
   number and year end; baseline restricted to modern, releasable returns.
 - `run_summary.json`: counts by `selected_as`, of `matches_baseline` rows, then by form type;
-  layout, confidence, year-end match and field status for modern AR30 (top level) and for the
-  2014 form (under `ar30_2014`); plus agree / disagree / ours-missing per field against the
-  baseline (modern returns only).
+  layout, confidence, year-end match and field status for modern AR30 (top level), for the
+  2014 form (under `ar30_2014`) and for AR41 (under `ar41`, with `online_totals_check` pass/fail
+  counts); plus agree / disagree / ours-missing per field against the baseline (modern returns
+  only).
 
 ## Confidence
 
-- **high**: modern AR30 or 2014 form, online or filled, every field `parsed`, `nil`,
-  `not_applicable` or `not_on_form`.
+- **high**: modern AR30, 2014 form or AR41, online or filled, every field `parsed`, `nil`,
+  `not_applicable` or `not_on_form`; for online AR41 also `ar41_totals_check` = `pass`.
 - **review**: every other extracted return (all scanned returns, and online or filled returns with
   any field missing or in review).
 - blank: forms not extracted.
@@ -142,5 +195,7 @@ including clean typed ones such as 7115.
 - Some modern AR30s stay `other`: the 4.2 heading is missing from the text (1229RS, 4406, 4428,
   4681R, 8272R) or doubled by OCR (7404 "4.2 4.2 Based Based"), or the title is cut off and
   no footer survives (4079).
-- 2014 form: OCR often drops rows A-E (members, turnover) entirely, and a 2.1 value written on the
-  next picture-text line from its label is not picked up (`missing`).
+- 2014 form: OCR often drops rows A-E (members, turnover) entirely.
+- AR41: Release 1 returns are all scanned and OCR often drops rows A and B. Online returns that
+  fail the totals check and put two rows on one line (1046W 2018: `**A. Members at end of year**
+  300 **B. Turnover for year** 110416`) give `review` for those rows.
