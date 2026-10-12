@@ -64,7 +64,9 @@ register but not on the Spine at all, so linking simply adds its company number 
 - **review**: as high, but the name differs (similarity < 0.85) and the match rests on the same
   postcode alone. For manual checking: catches renamed companies and abbreviations, but also
   subsidiaries and corporate trustees that share the charity's address. Not written to
-  `ni_company_number_matches.csv`.
+  `ni_company_number_matches.csv`. Also review, not high: a name match where the company name
+  adds TRADING, ENTERPRISES or SERVICES that the charity name lacks (likely a trading subsidiary,
+  e.g. "X (TRADING) LIMITED").
 - **medium**: in the register and not linked to another charity, but otherwise weaker.
 - **low**: not in the register, already linked to another charity or folded into another Spine
   organisation, or the "company number" is

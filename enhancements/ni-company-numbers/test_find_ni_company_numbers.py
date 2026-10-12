@@ -1,5 +1,7 @@
 """Checks for the regex extraction and name normalisation (no network, no data files)."""
-from find_ni_company_numbers import extract_company_numbers, normalise_name, same_as_charity_number
+import pandas as pd
+
+from find_ni_company_numbers import extract_company_numbers, normalise_name, same_as_charity_number, score
 
 
 def numbers(text: str) -> list[str]:
@@ -55,3 +57,17 @@ def test_name_normaliser():
 def test_own_charity_number():
     assert same_as_charity_number("NI110229", "110229") is True
     assert same_as_charity_number("NI049781", "101307") is False
+
+
+def test_subsidiary_name():
+    rows = [("GB-NIC-100005", "Robert Gordon's College", "NI600005", "ROBERT GORDON'S COLLEGE (TRADING) LIMITED"),
+            ("GB-NIC-100006", "Glasgow Trading Trust", "NI600006", "GLASGOW TRADING TRUST LIMITED")]
+    cands = pd.DataFrame([{"uid": u, "charity_number": u[len("GB-NIC-"):], "charity_name": name,
+                           "charity_postcode": "BT1 1AA", "company_number": n, "keyword_context": True,
+                           "n_distinct_numbers_in_doc": 1} for u, name, n, _ in rows])
+    ch = pd.DataFrame([{"ch_company_name": co, "company_number": n, "ch_postcode": "BT1 1AA"} for _, _, n, co in rows])
+    links = pd.DataFrame(columns=["orgB_id_in_source", "orgA_uid"])
+    scored = score(cands, ch, links, set(), {}).set_index("company_number")
+    assert scored.loc["NI600005", "name_similarity"] >= 0.85
+    assert scored.loc["NI600005", "subsidiary_name"] and scored.loc["NI600005", "confidence"] == "review"
+    assert not scored.loc["NI600006", "subsidiary_name"] and scored.loc["NI600006", "confidence"] == "high"

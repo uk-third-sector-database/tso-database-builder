@@ -95,3 +95,18 @@ def test_tiers():
     assert tier["SC010002"] == "low"
     assert tier["SC010003"] != "high"
     assert tier["SC123456"] == "high"
+
+
+def test_subsidiary_name():
+    rows = [("GB-SC-SC000005", "Robert Gordon's College", "SC100005", "ROBERT GORDON'S COLLEGE (TRADING) LIMITED"),
+            ("GB-SC-SC000006", "Glasgow Trading Trust", "SC100006", "GLASGOW TRADING TRUST LIMITED")]
+    cands = pd.DataFrame([{"uid": u, "charity_number": u[len("GB-SC-"):], "charity_name": name,
+                           "charity_postcode": "EH1 1AA", "company_number": n, "number_context": "company"}
+                          for u, name, n, _ in rows])
+    ch = pd.DataFrame([{"ch_company_name": co, "company_number": n, "ch_postcode": "EH1 1AA",
+                        "ch_company_type": "private-limited-guarant-nsc"} for _, _, n, co in rows])
+    links = pd.DataFrame(columns=["orgB_id_in_source", "orgA_uid"])
+    scored = score(cands, ch, links, set(), {}, set()).set_index("company_number")
+    assert scored.loc["SC100005", "name_similarity"] >= 0.85
+    assert scored.loc["SC100005", "subsidiary_name"] and scored.loc["SC100005", "confidence"] == "review"
+    assert not scored.loc["SC100006", "subsidiary_name"] and scored.loc["SC100006", "confidence"] == "high"

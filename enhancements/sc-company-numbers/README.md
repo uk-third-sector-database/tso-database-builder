@@ -102,7 +102,9 @@ Spine at all, so linking simply adds its company number to the charity.
   only number in the document is not enough.
 - **review**: as high, but the name differs (similarity < 0.85) and the match rests on the same
   postcode alone. For manual checking (renamed companies and abbreviations, but also subsidiaries
-  and corporate trustees at the charity's address). Not written to the matches file.
+  and corporate trustees at the charity's address). Not written to the matches file. Also
+  review, not high: a name match where the company name adds TRADING, ENTERPRISES or SERVICES
+  that the charity name lacks (likely a trading subsidiary, e.g. "X (TRADING) LIMITED").
 - **medium**: in the register and not ruled out, but otherwise weaker (an `SC0` number without
   company context, a lower name similarity without a postcode match, or the
   Companies House record is a partnership - `scottish-partnership` / `limited-partnership` - not a

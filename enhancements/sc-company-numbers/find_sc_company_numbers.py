@@ -56,6 +56,7 @@ CHARITY_KEYWORDS = ("charity", "charitable", "oscr", "scottish charity", "scio",
                     "charity no", "registered charity")
 NON_COMPANY_TYPES = {"scottish-partnership", "limited-partnership"}  # CH types capped at medium
 DROP_NAME_TOKENS = {"LIMITED", "LTD", "THE", "CIC", "COMPANY", "CLG"}
+SUBSIDIARY_WORDS = {"TRADING", "ENTERPRISES", "SERVICES"}  # in company name only: likely a subsidiary
 MATCH_TYPE = "companyid - accounts regex"
 CONFIDENCE_ORDER = {"high": 0, "review": 1, "medium": 2, "low": 3}
 CONTEXT_ORDER = {"company": 0, "charity": 1, "none": 2}  # per-number aggregate: first present wins
@@ -133,6 +134,12 @@ def normalise_name(name: str) -> str:
     """Uppercase, & -> AND, drop punctuation and legal-form/filler tokens, collapse spaces."""
     s = re.sub(r"[^A-Z0-9 ]", " ", str(name).upper().replace("&", " AND "))
     return " ".join(t for t in s.split() if t not in DROP_NAME_TOKENS)
+
+
+def subsidiary_name(charity_name: str, company_name: str) -> bool:
+    """True when the company name has a subsidiary word (e.g. "(TRADING)") that the charity name lacks."""
+    company_words = SUBSIDIARY_WORDS & set(normalise_name(company_name).split())
+    return bool(company_words - set(normalise_name(charity_name).split()))
 
 
 def normalise_postcode(pc) -> str:
@@ -309,6 +316,8 @@ def score(cands: pd.DataFrame, ch: pd.DataFrame, links: pd.DataFrame,
     df["name_similarity"] = [round(difflib.SequenceMatcher(None, normalise_name(a), normalise_name(b)).ratio(), 3)
                              if reg else 0.0 for a, b, reg in zip(df["charity_name"], df["ch_company_name"].fillna(""),
                                                                    df["in_ch_register"])]
+    df["subsidiary_name"] = [bool(reg) and subsidiary_name(a, b) for a, b, reg in
+                             zip(df["charity_name"], df["ch_company_name"].fillna(""), df["in_ch_register"])]
     df["postcode_match"] = [bool(normalise_postcode(a)) and normalise_postcode(a) == normalise_postcode(b)
                             for a, b in zip(df["charity_postcode"], df["ch_postcode"].fillna(""))]
     df["linked_to_other_charity"] = [",".join(sorted(already_linked.get(n, set()) - {u}))
@@ -333,7 +342,7 @@ def score(cands: pd.DataFrame, ch: pd.DataFrame, links: pd.DataFrame,
         # a lone SC0 number in Scottish accounts is usually the charity number, so it needs company context
         specific = r.number_context == "company" or not r.sc0_prefix
         if specific and r.name_similarity >= NAME_SIMILARITY_HIGH:
-            return "high"
+            return "review" if r.subsidiary_name else "high"  # e.g. "X (TRADING) LIMITED" for charity X
         if specific and r.postcode_match:
             return "review"  # postcode only: renames/abbreviations, but also subsidiaries/corporate trustees
         return "medium"
