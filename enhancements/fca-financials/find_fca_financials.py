@@ -4,7 +4,8 @@ Standalone enhancement. FETCH stage: builds the GB-MPR catalogue of the Braw cor
 return per society, i.e. a panel) and caches each return's markdown text under work/docs/.
 EXTRACT stage: regex-only reading of modern AR30 section 4.2 (six figures), the four of those
 figures on the older AR30 (Release 3, July 2014) section 2.1, four on the working men's club return
-(AR41), and the year-end date from the cached text, plus an optional comparison with the PDF
+(AR41), six rows of the credit union annual return (CY), and the year-end date from the cached
+text (also from the credit union accounts form), plus an optional comparison with the PDF
 pipeline's v4 baseline.
 
 Usage: python find_fca_financials.py [--limit 50 | --target 3000] [--no-fetch] [--min-year 2018] [--work-dir ...]
@@ -127,11 +128,14 @@ FIELDS = {
     "highest_rate_interest_paid_on_shares": (r"highest\s*rate\s*of\s*interest(?:\s*paid)?", "percent"),
 }
 ANY_LABEL = re.compile("|".join(p for p, _ in FIELDS.values()), re.I)
-MODERN_TITLE = re.compile(r"Annual Return \(AR3\w{0,3}\) forms?", re.I)  # OCR: "AR3SOQ" (4398)
+MODERN_TITLE = re.compile(r"Annual Return \(AR3\w{0,3}\) for", re.I)  # OCR: "AR3SOQ" (4398), "(AR30O) for" (4079)
 NOISE = re.compile(r"Doc\s*ID:\s*(?:[0-9a-f]\s?){30,40}"  # filed-copy hash, OCR may split it
                    r"|Demo\s*Version\s*-?\s*Select\s*\.?\s*Pdf\s*SDK", re.I)  # PDF-tool watermark
-BLOCK_START = re.compile(r"4\W{1,3}2\W*Based\W*on\W*the\W*a?ccounts", re.I)  # OCR: "4,2", "Basedon", "@Ccounts"
+BLOCK_START = re.compile(r"4\W{1,3}2\W*(?:Based\W*)+(?:on\W*)+(?:the\W*)+a?ccounts",
+                         re.I)  # OCR: "4,2", "Basedon", "@Ccounts"; 7404 doubles every word ("Based Based on on")
 BLOCK_END = re.compile(r"4\.3\s+What\s+Standard", re.I)
+SECTION4 = re.compile(r"Section\W*4\W*Financial", re.I)  # block start when OCR lost the 4.2 heading (4681R)
+EMPTY_CELL = "¤"  # stands in for an empty last table cell ("|Number of employees (if any)||"), 829RS
 MAX_BLOCK = 3000  # characters; used when "4.3 What Standard" is missing or OCR-garbled
 FOOTER = re.compile(r"(?:FCA.{0,6}?)?Mutua\S*\s+Annua\S*\s+Return\s*\(AR3\w*\).{0,30}?Release\s*\d+"
                     r".{0,6}?[A-Za-z]+\s+\d{4}", re.I)
@@ -146,6 +150,26 @@ YEAR_END_Q = re.compile(r"\d\.\d\s*What\s+date\s+did\s+the\s+financial\s+year\s+
 TOKEN = re.compile(r"£?\s*\(?\d+(?:[.,]\s?\d+)*\)?%?|\S+")  # "64, 205" stays one token, "12741 0" is two
 OK_STATUSES = {"parsed", "nil", "not_applicable", "not_on_form"}
 AR41 = re.compile(r"AR\s?41")  # 422W writes "AR 41"
+AR5 = re.compile(r"A\.\s?R\.\s?5|FORM\W{0,3}AR\W?[5S]\b"  # OCR: "FORM AR.S", "FORMARS" (104BEN)
+                 r"|SPECIALLY\s+AUTHORISED\s+SOCIETY")  # printed header, when the form number is lost (157SA)
+CU_HEAD = 3000  # characters: a credit union names itself on its cover page; building and friendly
+# societies mention credit unions only deeper in their accounts (108B, 218F)
+CU_YEAR_END_Q = re.compile(r"On\s*what\s*date\s*did\s*the\s*financial\s*year\s*in\s*these\s*accounts\s*end\?", re.I)
+
+# Credit union annual return (CY): "label | value | row code" rows, e.g. "||Total assets||4,225,676|C16|";
+# scans glue the code to the value ("2,200,000B5") or misread it ("Att" for A11).
+CY_TITLE = re.compile(r"Annual\s*return\s*\(CY\)\s*for\s*credit", re.I)  # not the "(CY) - Auditor's statement"
+CY_ONLINE = re.compile(r"\*\*Return\s*Details:\*\*.{0,1000}?" + CY_TITLE.pattern, re.I | re.S)  # web-form text; OCR loses the bold
+CY_YEAR_END_Q = re.compile(r"Return\s*End\s*Date:?", re.I)
+CY_FIELDS = {  # field -> (row code, label at the start of its cell, used when OCR lost the code)
+    "number_of_members": ("A2", r"Number\s*of\s*members\s*at\s*the\s*financial\s*year\W*end"),
+    "turnover": ("J13", r"Total\s*income"),
+    "assets": ("C16", r"Total\s*assets"),
+    "number_of_employees": ("A11", r"Total\s*number\s*of\s*staff"),
+    "share_capital": ("G1", r"Members\W*share\s*balances\s*\(total\)"),
+    "highest_rate_interest_paid_on_shares": ("L5", r"Rate\s*of\s*dividend"),
+}
+NUM = r"\(?-?\d[\d,]*(?:\.\d+)?\)?"
 
 # Older AR30 (Release 3, July 2014): lettered rows A-T under "2.1 You must enter the figures below",
 # ending at "2.2 Names of subsidiaries". Four rows feed the output fields; employees and the share
@@ -179,22 +203,25 @@ PICTURE = re.compile(r"<!--\s*Start of picture text\s*-->.*?<!--\s*End of pictur
 
 def classify(text: str) -> str:
     """Modern AR30 is checked first: 2619RS (2020) holds a modern return and a 2014 copy."""
-    if (MODERN_TITLE.search(text) or FOOTER.search(text)) and BLOCK_START.search(text) and not AR41.search(text):
-        return "ar30_modern"  # FOOTER: paper returns whose title page OCR lost (e.g. 122IP)
+    if ((MODERN_TITLE.search(text) or FOOTER.search(text)) and not AR41.search(text)
+            and (BLOCK_START.search(text) or SECTION4.search(text) or BLOCK_END.search(text))):
+        return "ar30_modern"  # FOOTER: title page lost (122IP); SECTION4 / BLOCK_END: 4.2 heading lost (4681R, 8272R)
     if re.search(r"4\W{0,6}2\W*Has\s*your\s*society", text, re.I) or R3_FOOTER.search(text):
         return "ar30_2014"  # footer: 1159R, 4161, 1821RS, 7192, 7512 have a garbled "4.2 Has"
     if AR41.search(text):
         return "ar41"
-    if re.search(r"A\.\s?R\.\s?5", text):
+    if AR5.search(text):
         return "ar5"
-    if re.search(r"credit\s+union", text, re.I):
+    if CY_TITLE.search(text):
+        return "cu_cy_return"
+    if re.search(r"credit\s+union", text[:CU_HEAD], re.I):
         return "credit_union"
     return "other"
 
 
-def find_block(text: str, end_pattern: re.Pattern = BLOCK_END) -> tuple[str, int]:
+def find_block(text: str, end_pattern: re.Pattern = BLOCK_END, start: re.Pattern = BLOCK_START) -> tuple[str, int]:
     """Raw text of the FIRST section 4.2 block and its end position in the document."""
-    m = BLOCK_START.search(text)
+    m = start.search(text)
     if not m:
         return "", 0
     end = end_pattern.search(text, m.end())
@@ -276,8 +303,34 @@ def ar41_sequence(block: str) -> dict[str, str] | None:
     return {"number_of_members": nums[0], "turnover": nums[1], "assets": nums[6], "number_of_employees": nums[11]}
 
 
+def cy_value(rows: list[str], code: str, label: str = "") -> str:
+    """Raw number on a credit union CY row: the first one written just before its row code
+    ("1,402|A2", "5,981,493.01C16"); failing that, the number just after the label at the start
+    of a cell (code misread by OCR: "|Total number of staff||2|Att|")."""
+    pats = [rf"({NUM})\W*{code}(?!\d)"] + [rf"(?:^|\|)[^A-Za-z|]*(?i:{label})\W*({NUM})"] * bool(label)
+    for pat in pats:
+        m = next((m for r in rows if (m := re.search(pat, r))), None)
+        if m:
+            return m[1]
+    return ""
+
+
+def cu_totals_check(rows: list[str]) -> str:
+    """pass when the CY return's own sums hold: C16 - D12 = E1 (total assets less total liabilities
+    = net assets) and J13 - K18 = L1 (total income less total expenditure = profit before tax),
+    each checked only where all three figures read; fail if one does not; blank if neither reads."""
+    held = []
+    for codes in (("C16", "D12", "E1"), ("J13", "K18", "L1")):
+        v = [parse_value(cy_value(rows, c), "GBP", False) for c in codes]
+        if all(st in {"parsed", "nil"} for _, st in v):
+            a, b, c = (Decimal(x) for x, _ in v)
+            held.append(a - b == c)
+    return "" if not held else "pass" if all(held) else "fail"
+
+
 def normalise_block(block: str) -> str:
-    s = re.sub(r"<[^>]*>|[*|#_\"]", " ", block)  # <br>, comments, bold, table pipes, headings
+    s = re.sub(r"\|[ \t]*\|[ \t]*$", f"| {EMPTY_CELL} |", block, flags=re.M)  # row ends in an empty cell
+    s = re.sub(r"<[^>]*>|[*|#_\"]", " ", s)  # <br>, comments, bold, table pipes, headings
     s = NOISE.sub(" ", PAGE.sub(" ", FOOTER.sub(" ", s)))
     s = re.sub(r"(?:paid\s*)?on\s*shares", " ", IF_ANY.sub(" ", s), flags=re.I)
     return " ".join(s.split())
@@ -289,7 +342,9 @@ def field_tokens(block: str) -> dict[str, str]:
     Tokens between a label and the next found label belong to it. A label with no token waits
     (stacked labels, 6365R): the next non-empty run fills waiting labels in order. Fewer tokens
     than waiting labels go to the nearest labels; surplus tokens are kept on the last label so
-    the value goes to review instead of silently losing digits.
+    the value goes to review instead of silently losing digits. A label whose table row ends in an
+    empty cell (EMPTY_CELL) and nothing else before the next label is blank on the form: it does
+    not wait, so it never borrows the next row's value (829RS).
     """
     hits, pos = [], 0
     for field, (pattern, _) in FIELDS.items():
@@ -302,7 +357,10 @@ def field_tokens(block: str) -> dict[str, str]:
     for i, (field, m) in enumerate(hits):
         nxt = hits[i + 1][1] if i + 1 < len(hits) else ANY_LABEL.search(block, m.end())  # 1284RS repeats a label
         stop = nxt.start() if nxt else len(block)
-        toks = [t.strip() for t in TOKEN.findall(block, m.end(), stop) if any(c.isalnum() for c in t)]
+        toks = [t.strip() for t in TOKEN.findall(block, m.end(), stop) if any(c.isalnum() for c in t) or t == EMPTY_CELL]
+        if toks and set(toks) == {EMPTY_CELL}:
+            continue
+        toks = [t for t in toks if t != EMPTY_CELL]
         pending.append(field)
         if not toks:
             continue
@@ -364,7 +422,8 @@ def parse_value(raw: str, unit: str, typed: bool) -> tuple[str, str]:
 
 def year_end_on_form(text: str, question: re.Pattern = YEAR_END_Q) -> str:
     """ISO date answered to "2.1 What date did the financial year ... end?" (or, with
-    R3_YEAR_END_Q, the 2014 form's "1.2 Year end date (dd/mm/yyyy)"), or blank.
+    R3_YEAR_END_Q, the 2014 form's "1.2 Year end date (dd/mm/yyyy)"; credit unions: CY_YEAR_END_Q,
+    CU_YEAR_END_Q), or blank.
 
     Online forms give dd/mm/yyyy (sometimes in a table cell); filled PDFs give eight digit boxes
     ("3 1 1 2 2 0 2 1"; the 2014 form "3 1 / 1 2 / 2 0 2 1"), on the next line or the same line.
@@ -389,14 +448,18 @@ def year_end_on_form(text: str, question: re.Pattern = YEAR_END_Q) -> str:
 
 def extract_doc(text: str) -> dict:
     """Form type, layout, year-end and the six figures (modern section 4.2; the four on the 2014
-    form's section 2.1; AR41 rows A, B, G, L) for one document. ar41_totals_check is pass/fail
-    on online AR41 (see ar41_sequence), blank otherwise."""
+    form's section 2.1; AR41 rows A, B, G, L; credit union CY rows, see CY_FIELDS) for one
+    document. ar41_totals_check is pass/fail on online AR41 (see ar41_sequence), blank otherwise;
+    cu_totals_check likewise for the CY return (see cu_totals_check)."""
     row: dict = {"form_type": classify(text), "layout": "", "year_end_on_form": ""}
     for f in FIELDS:
         row.update({f: "", f"{f}_status": "", f"{f}_raw": ""})
-    row.update({"ar41_totals_check": "", "confidence": ""})
+    row.update({"ar41_totals_check": "", "cu_totals_check": "", "confidence": ""})
     if row["form_type"] == "ar30_modern":
         block, block_end = find_block(text)
+        if not block_end:  # 4.2 heading lost to OCR: from "Section 4 - Financial information", else no block
+            block, block_end = find_block(text, start=SECTION4)
+            block_end = block_end or len(text)  # so layout_of still sees the paper footers
         row["year_end_on_form"] = year_end_on_form(text)
         row["layout"] = layout_of(text, block, block_end)
         fields, raws = FIELDS, field_tokens(normalise_block(block))
@@ -419,6 +482,18 @@ def extract_doc(text: str) -> dict:
         if row["layout"] == "online":
             row["ar41_totals_check"] = "pass" if seq else "fail"
         raws = seq or fields_by_row(block, fields)
+    elif row["form_type"] == "cu_cy_return":
+        m = CY_ONLINE.search(text) or CY_TITLE.search(text)  # the web-form copy if any: 116CU has a scan first
+        assert m  # classify found the title
+        row["layout"] = "online" if m.re is CY_ONLINE else "scanned"
+        row["year_end_on_form"] = year_end_on_form(text, CY_YEAR_END_Q)  # header sits before the title on scans
+        rows = re.split(r"\n|<br>", text[m.start():])
+        row["cu_totals_check"] = cu_totals_check(rows)
+        fields, raws = CY_FIELDS, {f: cy_value(rows, *CY_FIELDS[f]) for f in CY_FIELDS}
+    elif row["form_type"] == "credit_union":  # accounts form: a cover page and the accounts, no figures asked
+        row["year_end_on_form"] = year_end_on_form(text, CU_YEAR_END_Q)
+        row.update({f"{f}_status": "not_on_form" for f in FIELDS})
+        return row
     else:
         return row
     for f, (_, unit) in FIELDS.items():
@@ -427,7 +502,8 @@ def extract_doc(text: str) -> dict:
             continue
         row[f"{f}_raw"] = raws.get(f, "")
         row[f], row[f"{f}_status"] = parse_value(row[f"{f}_raw"], unit, row["layout"] != "scanned")
-    ok = all(row[f"{f}_status"] in OK_STATUSES for f in FIELDS) and row["ar41_totals_check"] != "fail"
+    ok = (all(row[f"{f}_status"] in OK_STATUSES for f in FIELDS) and row["ar41_totals_check"] != "fail"
+          and (row["form_type"] != "cu_cy_return" or row["cu_totals_check"] == "pass"))
     row["confidence"] = "high" if row["layout"] in {"online", "filled"} and ok else "review"
     return row
 
@@ -447,11 +523,11 @@ def extract_docs(docs: pd.DataFrame, work_dir: Path) -> pd.DataFrame:
                      "year_end_on_form": e["year_end_on_form"], "year_end_matches_catalogue": matches,
                      **{k: e[k] for f in FIELDS for k in (f, f"{f}_status")},
                      **{f"{f}_raw": e[f"{f}_raw"] for f in FIELDS}, "ar41_totals_check": e["ar41_totals_check"],
-                     "confidence": e["confidence"]})
+                     "cu_totals_check": e["cu_totals_check"], "confidence": e["confidence"]})
     cols = (["uid", "society_number", "doc_id", "catalogue_year_end", "form_type", "layout",
              "year_end_on_form", "year_end_matches_catalogue"]
             + [k for f in FIELDS for k in (f, f"{f}_status")] + [f"{f}_raw" for f in FIELDS]
-            + ["ar41_totals_check", "confidence"])
+            + ["ar41_totals_check", "cu_totals_check", "confidence"])
     return pd.DataFrame(rows, columns=cols)
 
 
@@ -516,8 +592,9 @@ def form_summary(d: pd.DataFrame) -> dict:
 def run_summary(out: pd.DataFrame) -> dict:
     """Counts for all documents; layout, confidence, year-end and field status for modern AR30
     at the top level, for the 2014 form under "ar30_2014" and for AR41 under "ar41" (with the
-    online totals check)."""
+    online totals check) and for the credit union CY return under "cu_cy_return"."""
     ar41 = out[out["form_type"] == "ar41"]
+    cy = out[out["form_type"] == "cu_cy_return"]
     return {
         "documents_extracted": len(out),
         "by_selected_as": out["selected_as"].value_counts().to_dict(),
@@ -527,6 +604,8 @@ def run_summary(out: pd.DataFrame) -> dict:
         "ar30_2014": form_summary(out[out["form_type"] == "ar30_2014"]),
         "ar41": {**form_summary(ar41), "online_totals_check": ar41.loc[ar41["layout"] == "online",
                                                                         "ar41_totals_check"].value_counts().to_dict()},
+        "cu_cy_return": {**form_summary(cy), "totals_check": cy["cu_totals_check"].replace("", "blank")
+                         .value_counts().to_dict()},
     }
 
 

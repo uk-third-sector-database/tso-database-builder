@@ -1,9 +1,9 @@
-"""Checks for the AR30 extraction (modern 4.2, 2014 2.1) and AR41 (no network, no data files). Snippets are
-verbatim from cached sample documents (file named in each test) unless marked "made up"."""
+"""Checks for the AR30 extraction (modern 4.2, 2014 2.1), AR41 and credit unions (no network, no data files).
+Snippets are verbatim from cached sample documents (file named in each test) unless marked "made up"."""
 import pandas as pd
 
-from find_fca_financials import (AR41_FIELDS, R3_FIELDS, R3_YEAR_END_Q, classify, extract_doc, field_tokens, fields_by_row,
-                                 normalise_block, parse_value, select_target, year_end_on_form)
+from find_fca_financials import (AR41_FIELDS, FIELDS, R3_FIELDS, R3_YEAR_END_Q, classify, extract_doc, field_tokens,
+                                 fields_by_row, normalise_block, parse_value, select_target, year_end_on_form)
 
 
 def fields_2014(block: str) -> dict[str, str]:
@@ -381,3 +381,74 @@ def test_ar41_paper_without_footer_is_scanned():  # 1023W (2022): "Enter 'NIL'" 
 
 def test_box_border_read_as_one():  # "1£179,522" in AR41 paper tables
     assert parse_value("1£179,522", "GBP", False) == ("", "review")
+
+
+# ---------- classification fixes, empty cells, credit unions ----------
+def test_ar5_scan_variants():  # 104BEN "FORM AR.S" / "FORMARS"; 157SA lost the form number
+    assert classify("### FORM AR.S \n\nFRIENDLY SOCIETIES ACT 1974 ") == "ar5"
+    assert classify("### - FORMARS \n\n- FRIENDLY SOCIETIES ACT 1974 ") == "ar5"
+    assert classify("ANNUAL RETURN for \n\na SPECIALLY AUTHORISED SOCIETY, a BENEVOLENT SOCIETY, ") == "ar5"
+    assert classify("Our society is an ARSENAL supporters' club FORMATION ") == "other"  # made up
+
+
+def test_modern_doubled_words_and_ar30o_for():  # 7404: OCR doubles every word; 4079: "(AR30O) for"
+    doc = ("|FINANCIAL F, A CONDUCT AUTHORITY Annual Return (AR30) form Section 1- Aboutthis form|\n\n"
+           "##### 4.2 4.2 Based Based on on the the accounts, accounts, please please provide provide \n\n"
+           "|Number of members|232|\n|---|---|\n|Turnover|£31,389|\n\n" + END)
+    row = extract_doc(doc)
+    assert row["form_type"] == "ar30_modern" and (row["number_of_members"], row["turnover"]) == ("232", "31389")
+    assert classify("MUTUALFINANCIALSOCIETIESCONDUCTREGISTRATIONAUTHORITY || Annual Return (AR30O) for 25 APR 2019 \n\n"
+                    "4.2 Based on the accounts, please provide the information requested below") == "ar30_modern"
+
+
+def test_modern_heading_lost():  # 4681R: from "Section 4 - Financial information"; 8272R: no block at all
+    row = extract_doc(TITLE + "## **Section 4 - Financial information** \n\n|Number of members|3|\n|---|---|\n"
+                      "|1 Turnover|**59449**|\n")
+    assert (row["form_type"], row["turnover"], row["number_of_members_status"]) == ("ar30_modern", "59449", "review")  # "3 1"
+    row = extract_doc("#### Annual Return (AR30) form \n\nFCA @ Mutuals Annual! Return (AR3) @ Release 5 @ February 2023 "
+                      "Page 2 of 12 \n\n380 \n\nHighest rate of interest paid on shares (if any) Oo " + END)
+    assert (row["form_type"], row["layout"], row["confidence"]) == ("ar30_modern", "scanned", "review")
+
+
+def test_credit_union_only_on_cover_page():  # 108B: a director advises a credit union, deep in the accounts
+    assert classify("x" * 3000 + " McKellens Outsourcing LLP CopperPot Credit Union (Advisor)|") == "other"
+
+
+def test_empty_cell_borrows_nothing():  # 829RS: employees blank; the old reading gave employees 48,800
+    v = values("|Number of employees (if any)||\n|Sharecapital|48,800|\n\n\n4.2 Based on the accounts, please provide "
+               "the information requested below for the financial year covered by this return. \n\n")
+    assert "number_of_employees" not in v and v["share_capital"].startswith("48,800")
+    assert values("|Number of members||\n|---|---|\n|Turnover|**718,726**|\n") == {"turnover": "718,726"}  # 130IP
+
+
+CY_HEAD = "**Annual return (CY) for credit unions** \n\n"
+
+
+def test_cu_cy_online():  # 148CU (2021), rows trimmed
+    doc = ("# **Return Details:** \n\n|**Firm Name:**|Newtownbutler Credit Union Limited|\n|---|---|\n"
+           "|**Return End Date:**|30/09/2021|\n\n\n" + CY_HEAD + "||Number of members at the financial year end||1,402|A2|\n"
+           "||Total number of staff||1|A11|\n||Total assets||4,225,676|C16|\n||Total liabilities||393,702|D12|\n\n"
+           "Net assets 3,831,974 E1 \n\n|Members' share balances (total)|3,045,274|G1|\n||Total income||254,020|J13|\n"
+           "||Total expenditure|129,851|K18|\n|**P/L - other:**|Profit/loss before taxation|124,169|L1|\n"
+           "||Rate of dividend|1|L5|\n")
+    row = extract_doc(doc)
+    assert (row["form_type"], row["layout"], row["cu_totals_check"], row["confidence"]) == ("cu_cy_return", "online", "pass", "high")
+    assert row["year_end_on_form"] == "2021-09-30"
+    assert [row[f] for f in FIELDS] == ["1402", "254020", "4225676", "1", "3045274", "1"]
+
+
+def test_cu_cy_scan_glued_and_misread_codes():  # 10CUS (2024): "5,981,493.01C16", staff code read as "A‘1"
+    doc = ("## Return Details: \n\nReturn End Date: 30/09/2024 Return Due Date: \n\n### Annual return (CY) for credit unions \n\n"
+           "||Number of members at the|||\n||financial year end||3,756 A2 i|\n||Total number of staff||4 A‘1|\n"
+           "|Totalassets|5,981,493.01C16|\n|Total liabilities||452,277.3|D12|\n|Net assets||5,529,215.71|E1|\n")
+    row = extract_doc(doc)
+    assert (row["layout"], row["cu_totals_check"], row["confidence"]) == ("scanned", "pass", "review")
+    assert (row["number_of_members"], row["number_of_employees"], row["assets"]) == ("3756", "4", "5981493.01")
+    assert row["turnover_status"] == "missing" and row["year_end_on_form"] == "2024-09-30"
+
+
+def test_credit_union_accounts_year_end():  # 101CU (2024) cover page
+    row = extract_doc("# **Credit Union Accounts form** \n\nUse this form to upload and submit your annual accounts. \n\n"
+                      "1. On what date did the financial year in these accounts end? \n\n30/09/2024 \n")
+    assert (row["form_type"], row["year_end_on_form"], row["confidence"]) == ("credit_union", "2024-09-30", "")
+    assert all(row[f"{f}_status"] == "not_on_form" for f in FIELDS)
