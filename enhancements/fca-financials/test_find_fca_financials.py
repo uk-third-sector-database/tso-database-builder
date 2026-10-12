@@ -1,6 +1,9 @@
 """Checks for the AR30 section 4.2 extraction (no network, no data files). Snippets are verbatim
 from cached sample documents (file named in each test) unless marked "made up"."""
-from find_fca_financials import classify, extract_doc, field_tokens, normalise_block, parse_value, year_end_on_form
+import pandas as pd
+
+from find_fca_financials import (classify, extract_doc, field_tokens, normalise_block, parse_value,
+                                 select_target, year_end_on_form)
 
 TITLE = "# **Annual Return (AR30) form** \n\n"
 Q21 = "- 2.1 What date did the financial year covered by these accounts end? \n\n"
@@ -65,17 +68,30 @@ def test_stacked_labels():  # 6365R
                  "share_capital": "402", "highest_rate_interest_paid_on_shares": "0"}
 
 
-def test_paper_footer_inside_block():  # 7670
+def test_filled_form_footer_inside_block():  # 7670: tick box, footer splits the table
     doc = (TITLE + "**2.1 What date did the financial year covered by these accounts end?** 3 0 0 4 2 0 2 1 \n\n"
+           "All directors are aged 16 or over `☒` \n\n"
            "### **4.2 Based on the accounts, please provide the information requested below for the financial year "
            "covered by this return.** \n\n|Number of members|4|\n|---|---|\n|Turnover|16,395|\n\n\nPage **3** of **15** "
            "\n\n_FCA_  Mutuals Annual Return (AR3)  Release 4  February 2019 \n\n|Assets|127,698|\n|---|---|\n"
            "|Number of employees (if any)|1|\n|Share capital|4|\n|Highest rate of interest paid on shares (if any)|0|\n"
            + END)
     row = extract_doc(doc)
-    assert row["layout"] == "paper" and row["confidence"] == "review"
+    assert row["layout"] == "filled" and row["confidence"] == "high"
     assert row["year_end_on_form"] == "2021-04-30"
     assert row["turnover"] == "16395" and row["assets"] == "127698" and row["number_of_employees"] == "1"
+
+
+def test_scanned_form():  # 7251R: OCR bullets ("- e this form") and footer ("FCA @ Mutuals")
+    doc = ("## Annual Return (AR30) form \n\n- e this form; \n\n###### 4.2 Based on the accounts, please provide the "
+           "information requested below for the financial year covered by this return. \n\n"
+           "|Number of members |219 |\n|---|---|\n|Numberofemployees(ifany)|Ce|\n"
+           "| Highestrateof interestpaidonshares(ifany)|oo|\n\n\n"
+           "FCA @ Mutuals Annual Return (AR3) @ Release 4 @ February 2019 Page 3 of 12 \n\n"
+           "4.3 What Standard Industrial Classification code best describes the society’s main business? ")
+    row = extract_doc(doc)
+    assert row["layout"] == "scanned" and row["confidence"] == "review"
+    assert row["number_of_members"] == "219" and row["highest_rate_interest_paid_on_shares_status"] == "review"
 
 
 def test_ocr_joined_labels():  # 7251R
@@ -143,3 +159,39 @@ def test_scanned_block_and_split_value():  # 5420R: the labels before employees 
                "|---|\n|Highestrateof interestpaidonshares(ifany)Pe|\n")
     assert v == {"highest_rate_interest_paid_on_shares": "Pe"}
     assert values("Assets £64, 205) ") == {"assets": "£64, 205)"}  # made up: same value under a label
+
+
+def test_select_target():  # made up: cached rows first, then baseline matches, then a seeded random fill
+    cat = pd.DataFrame({"doc_id": list("abcdef"), "matches_baseline": [False, True, False, True, False, False]})
+    sel = select_target(cat, [False, False, True, True, False, False], 4)
+    assert list(sel["doc_id"][:3]) == ["c", "d", "b"]
+    assert list(sel["selected_as"]) == ["cached", "cached", "baseline", "random"]
+    assert sel["doc_id"].iloc[3] in {"a", "e", "f"}
+
+
+def test_label_repeated_after_values():  # 1284RS
+    doc = (TITLE + HEAD + "<!-- Start of picture text -->\nNumber of members 13<br>Turnover 23516<br>Assets 622771<br>"
+           "Number of Employees 0<br>Share Capital 67<br>Highest rate of interest 0<br><!-- End of picture text -->\n"
+           "**Highest rate of interest paid on shares** " + END)
+    row = extract_doc(doc)
+    assert row["highest_rate_interest_paid_on_shares_raw"] == "0" and row["confidence"] == "high"
+    assert all(row[f"{f}_status"] == "parsed" for f in ("number_of_members", "turnover", "assets", "number_of_employees",
+                                                         "share_capital", "highest_rate_interest_paid_on_shares"))
+
+
+def test_garbled_title():  # 4398
+    assert classify("# Annual Return (AR3SOQ) form \n\n" + HEAD) == "ar30_modern"
+
+
+def test_doc_id_and_watermark_stripped():  # 2785RS hash; 1086W watermark
+    v = values("Share Capital 0 Demo Version Select.Pdf SDK Highest rate of interest paid on shares (if any) "
+               "4.5% Doc ID: 04 b8ac85d0fad350d515f2c5bb5c8eb3c32ec40f")
+    assert parse_value(v["share_capital"], "GBP", False) == ("0", "parsed")
+    assert parse_value(v["highest_rate_interest_paid_on_shares"], "percent", False) == ("4.5", "parsed")
+
+
+def test_word_and_letter_zero():
+    assert parse_value("Zero", "count", True) == ("0", "nil")
+    assert parse_value("zero", "percent", True) == ("0", "nil")
+    assert parse_value("O%", "percent", True) == ("0", "nil")
+    assert parse_value("Zero", "count", False) == ("", "review")  # scanned

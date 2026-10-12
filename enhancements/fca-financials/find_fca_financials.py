@@ -5,7 +5,7 @@ return per society, i.e. a panel) and caches each return's markdown text under w
 EXTRACT stage: regex-only reading of modern AR30 section 4.2 (six figures) and the year-end date
 from the cached text, plus an optional comparison with the PDF pipeline's v4 baseline.
 
-Usage: python find_fca_financials.py [--limit 50] [--no-fetch] [--min-year 2018] [--work-dir ...]
+Usage: python find_fca_financials.py [--limit 50 | --target 3000] [--no-fetch] [--min-year 2018] [--work-dir ...]
 """
 from __future__ import annotations
 
@@ -124,7 +124,10 @@ FIELDS = {
     "share_capital": (r"share\s*capital", "GBP"),
     "highest_rate_interest_paid_on_shares": (r"highest\s*rate\s*of\s*interest(?:\s*paid)?", "percent"),
 }
-MODERN_TITLE = re.compile(r"Annual Return \(AR3[0O]{1,2}\) forms?", re.I)
+ANY_LABEL = re.compile("|".join(p for p, _ in FIELDS.values()), re.I)
+MODERN_TITLE = re.compile(r"Annual Return \(AR3\w{0,3}\) forms?", re.I)  # OCR: "AR3SOQ" (4398)
+NOISE = re.compile(r"Doc\s*ID:\s*(?:[0-9a-f]\s?){30,40}"  # filed-copy hash, OCR may split it
+                   r"|Demo\s*Version\s*-?\s*Select\s*\.?\s*Pdf\s*SDK", re.I)  # PDF-tool watermark
 BLOCK_START = re.compile(r"4\.2\s+Based\s+on\s+the\s+accounts", re.I)
 BLOCK_END = re.compile(r"4\.3\s+What\s+Standard", re.I)
 MAX_BLOCK = 3000  # characters; used when "4.3 What Standard" is missing or OCR-garbled
@@ -132,6 +135,10 @@ FOOTER = re.compile(r"(?:FCA.{0,6}?)?Mutua\S*\s+Annua\S*\s+Return\s*\(AR3\w*\).{
                     r".{0,6}?[A-Za-z]+\s+\d{4}", re.I)
 PAGE = re.compile(r"Page\s*\d+(?:\s*of\s*\d+)?", re.I)
 IF_ANY = re.compile(r"\(\s*if\s*any\s*\)", re.I)
+TICK_BOX = re.compile("[☒☐]")  # tick boxes of the fillable PDF form; OCR never emits them
+OCR_MARK = re.compile(r"^-\s+e\s+(?:this|a\s?set)\b"  # page-1 bullets read as "e"
+                      r"|FCA\W{0,3}[@®©e]\W{0,3}Mutuals"  # footer bullet read as @, ®, ©, e
+                      r"|\.orq\.uk", re.M)  # "fca.org.uk" read as "fca.orq.uk"
 YEAR_END_Q = re.compile(r"\d\.\d\s*What\s+date\s+did\s+the\s+financial\s+year\s+covered\s+by\s+these\s+"
                         r"accounts\s+end\?", re.I)
 TOKEN = re.compile(r"£?\s*\(?\d+(?:[.,]\s?\d+)*\)?%?|\S+")  # "64, 205" stays one token, "12741 0" is two
@@ -163,14 +170,18 @@ def find_block(text: str) -> tuple[str, int]:
 
 
 def layout_of(text: str, block: str, block_end: int) -> str:
-    """paper (PDF form, filled or scanned) vs online (web form). The footer is only looked for
-    up to the end of the first block: 4253R has an online copy followed by a scanned one."""
-    return "paper" if IF_ANY.search(block) or FOOTER.search(text[:block_end]) else "online"
+    """online (web form), filled (PDF form typed into: tick boxes, no OCR marks) or scanned (paper
+    form read by OCR; also any paper form with neither marker). Only text up to the end of the
+    first block is looked at: 4253R has an online copy followed by a scanned one."""
+    head = text[:block_end]
+    if not (IF_ANY.search(block) or FOOTER.search(head)):
+        return "online"
+    return "filled" if TICK_BOX.search(head) and not OCR_MARK.search(head) else "scanned"
 
 
 def normalise_block(block: str) -> str:
     s = re.sub(r"<[^>]*>|[*|#_\"]", " ", block)  # <br>, comments, bold, table pipes, headings
-    s = PAGE.sub(" ", FOOTER.sub(" ", s))
+    s = NOISE.sub(" ", PAGE.sub(" ", FOOTER.sub(" ", s)))
     s = re.sub(r"(?:paid\s*)?on\s*shares", " ", IF_ANY.sub(" ", s), flags=re.I)
     return " ".join(s.split())
 
@@ -192,7 +203,8 @@ def field_tokens(block: str) -> dict[str, str]:
     out: dict[str, str] = {}
     pending: list[str] = []
     for i, (field, m) in enumerate(hits):
-        stop = hits[i + 1][1].start() if i + 1 < len(hits) else len(block)
+        nxt = hits[i + 1][1] if i + 1 < len(hits) else ANY_LABEL.search(block, m.end())  # 1284RS repeats a label
+        stop = nxt.start() if nxt else len(block)
         toks = [t.strip() for t in TOKEN.findall(block, m.end(), stop) if any(c.isalnum() for c in t)]
         pending.append(field)
         if not toks:
@@ -208,8 +220,9 @@ def format_decimal(value: Decimal) -> str:
     return str(value.quantize(Decimal(1))) if value == value.to_integral() else format(value.normalize(), "f")
 
 
-def parse_value(raw: str, unit: str, online: bool) -> tuple[str, str]:
-    """(normalised value, status) for one raw token. Mirrors ar30_financials._parse_value."""
+def parse_value(raw: str, unit: str, typed: bool) -> tuple[str, str]:
+    """(normalised value, status) for one raw token. Mirrors ar30_financials._parse_value.
+    typed = online or filled layout (not OCR), where a letter or word zero can be trusted."""
     s = raw.replace("**", "").strip()
     if not s:
         return "", "missing"
@@ -217,8 +230,8 @@ def parse_value(raw: str, unit: str, online: bool) -> tuple[str, str]:
         return "-9", "not_applicable"  # missing-data code, not a measurement
     if re.fullmatch(r"N\s*[Il1|]\s*L|NONE", s, re.I):
         return "0", "nil"
-    if re.fullmatch(r"[Oo]{1,2}", s):  # letter O for zero; trusted only when typed into the web form
-        return ("0", "nil") if online else ("", "review")
+    if re.fullmatch(r"o{1,2}%?|zero", s, re.I):  # letter O or "Zero"; trusted only when typed, not OCR
+        return ("0", "nil") if typed else ("", "review")
     if unit == "percent" and "£" in s:
         return "", "review"
     bare = s.replace("£", "").replace("%", "").strip()
@@ -287,9 +300,9 @@ def extract_doc(text: str) -> dict:
     raws = field_tokens(normalise_block(block))
     for f, (_, unit) in FIELDS.items():
         row[f"{f}_raw"] = raws.get(f, "")
-        row[f], row[f"{f}_status"] = parse_value(row[f"{f}_raw"], unit, row["layout"] == "online")
+        row[f], row[f"{f}_status"] = parse_value(row[f"{f}_raw"], unit, row["layout"] != "scanned")
     ok = all(row[f"{f}_status"] in OK_STATUSES for f in FIELDS)
-    row["confidence"] = "high" if row["layout"] == "online" and ok else "review"
+    row["confidence"] = "high" if row["layout"] in {"online", "filled"} and ok else "review"
     return row
 
 
@@ -314,14 +327,38 @@ def extract_docs(docs: pd.DataFrame, work_dir: Path) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=cols)
 
 
-def compare_baseline(ours: pd.DataFrame, baseline_dir: Path) -> pd.DataFrame:
-    """Long table of our values against the PDF pipeline's parsed values, matched on
-    (society number, year end). Only fields the baseline parsed are compared."""
+def baseline_documents(baseline_dir: Path) -> pd.DataFrame:
+    """The PDF pipeline's modern, releasable returns, one per (society number, year end)."""
     parse = pd.read_csv(baseline_dir / "parser-v4-parse.csv", dtype=str, keep_default_na=False,
                         usecols=["fca_registration_number", "fca_document_id", "document_date",
                                  "form_version", "release_status"])
     parse = parse[(parse["form_version"] == "modern") & (parse["release_status"] == "releasable")]
-    parse = parse.drop_duplicates(["fca_registration_number", "document_date"], keep="first")
+    return parse.drop_duplicates(["fca_registration_number", "document_date"], keep="first")
+
+
+def baseline_keys(baseline_dir: Path) -> set[tuple[str, str]]:
+    """(society number, year end) of each baseline return; empty if the folder is absent."""
+    if not baseline_dir.exists():
+        return set()
+    b = baseline_documents(baseline_dir)
+    return set(zip(b["fca_registration_number"], b["document_date"]))
+
+
+def select_target(catalogue: pd.DataFrame, cached: list[bool], n: int) -> pd.DataFrame:
+    """First n of: every cached row, then rows matching a baseline return (needs a
+    `matches_baseline` column), then a seeded random fill. Adds `selected_as`."""
+    is_cached = pd.Series(cached, index=catalogue.index)
+    base = catalogue["matches_baseline"]
+    return pd.concat([catalogue[is_cached].assign(selected_as="cached"),
+                      catalogue[~is_cached & base].assign(selected_as="baseline"),
+                      catalogue[~is_cached & ~base].sample(frac=1, random_state=SAMPLE_SEED)
+                      .assign(selected_as="random")]).head(n)
+
+
+def compare_baseline(ours: pd.DataFrame, baseline_dir: Path) -> pd.DataFrame:
+    """Long table of our values against the PDF pipeline's parsed values, matched on
+    (society number, year end). Only fields the baseline parsed are compared."""
+    parse = baseline_documents(baseline_dir)
     vals = pd.read_csv(baseline_dir / "parser-v4-values.csv", dtype=str, keep_default_na=False,
                        usecols=["fca_document_id", "field_code", "normalized_value", "value_status"])
     vals = vals[(vals["value_status"] == "parsed") & vals["field_code"].isin(list(FIELDS))]
@@ -342,6 +379,8 @@ def run_summary(out: pd.DataFrame) -> dict:
     modern = out[out["form_type"] == "ar30_modern"]
     return {
         "documents_extracted": len(out),
+        "by_selected_as": out["selected_as"].value_counts().to_dict(),
+        "matches_baseline": int(out["matches_baseline"].sum()),
         "by_form_type": out["form_type"].value_counts().to_dict(),
         "by_layout": modern["layout"].value_counts().to_dict(),
         "by_confidence": modern["confidence"].value_counts().to_dict(),
@@ -361,16 +400,28 @@ def main() -> None:
     ap.add_argument("--no-fetch", action="store_true",
                     help="extract from cached documents only (needs a cached catalogue; uncached rows skipped)")
     ap.add_argument("--min-year", type=int, default=MIN_YEAR, help="first catalogue year (default 2018)")
-    ap.add_argument("--limit", type=int, default=None,
-                    help="process a reproducible random sample of N catalogue rows (spans years)")
+    size = ap.add_mutually_exclusive_group()
+    size.add_argument("--limit", type=int, default=None,
+                      help="process a reproducible random sample of N catalogue rows (spans years)")
+    size.add_argument("--target", type=int, default=None,
+                      help="process N rows in total: all cached rows, then baseline matches, then random")
     a = ap.parse_args()
     a.work_dir.mkdir(parents=True, exist_ok=True)
     key = "" if a.no_fetch else json.loads(a.api_keys.read_text())["prod"]  # never printed or logged
 
-    docs = load_catalogue(key, a.work_dir, a.min_year)
-    n_catalogue = len(docs)
-    if a.limit:
-        docs = docs.sample(n=min(a.limit, n_catalogue), random_state=SAMPLE_SEED).sort_values("doc_id")
+    catalogue = load_catalogue(key, a.work_dir, a.min_year)
+    n_catalogue = len(catalogue)
+    keys = baseline_keys(a.baseline_dir)
+    pairs = list(zip(catalogue["charity_number"], catalogue["year_end_date"]))
+    catalogue["matches_baseline"] = [k in keys for k in pairs]
+    if a.target:
+        docs = select_target(catalogue, [doc_path(a.work_dir, *k).exists() for k in pairs], a.target)
+        print(f"selected by: {docs['selected_as'].value_counts().to_dict()}", flush=True)
+    elif a.limit:
+        docs = catalogue.sample(n=min(a.limit, n_catalogue), random_state=SAMPLE_SEED).assign(selected_as="random")
+    else:
+        docs = catalogue.assign(selected_as="all")
+    docs = docs.sort_values("doc_id")
     print(f"catalogue documents: {n_catalogue:,} ({docs['charity_number'].nunique():,} societies in "
           f"selection); processing {len(docs):,}", flush=True)
 
@@ -379,6 +430,9 @@ def main() -> None:
         print(f"fetched this run: {fetched:,}; failures: {n_failed:,}", flush=True)
 
     out = extract_docs(docs, a.work_dir)
+    sel = docs.set_index("doc_id")
+    out.insert(3, "selected_as", out["doc_id"].map(sel["selected_as"]))
+    out.insert(4, "matches_baseline", out["doc_id"].map(sel["matches_baseline"]).astype(bool))
     print(f"extracted {len(out):,}/{len(docs):,} selected documents (rest not cached)", flush=True)
     a.out_dir.mkdir(parents=True, exist_ok=True)
     write_csv_atomic(out, a.out_dir / "fca_ar30_financials.csv")
