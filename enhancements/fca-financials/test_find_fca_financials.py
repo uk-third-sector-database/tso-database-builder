@@ -1,9 +1,9 @@
-"""Checks for the AR30 section 4.2 extraction (no network, no data files). Snippets are verbatim
+"""Checks for the AR30 extraction, modern 4.2 and 2014 2.1 (no network, no data files). Snippets are verbatim
 from cached sample documents (file named in each test) unless marked "made up"."""
 import pandas as pd
 
-from find_fca_financials import (classify, extract_doc, field_tokens, normalise_block, parse_value,
-                                 select_target, year_end_on_form)
+from find_fca_financials import (R3_YEAR_END_Q, classify, extract_doc, field_tokens, fields_2014, normalise_block,
+                                 parse_value, select_target, year_end_on_form)
 
 TITLE = "# **Annual Return (AR30) form** \n\n"
 Q21 = "- 2.1 What date did the financial year covered by these accounts end? \n\n"
@@ -195,3 +195,76 @@ def test_word_and_letter_zero():
     assert parse_value("zero", "percent", True) == ("0", "nil")
     assert parse_value("O%", "percent", True) == ("0", "nil")
     assert parse_value("Zero", "count", False) == ("", "review")  # scanned
+
+
+# ---------- older AR30 (Release 3, July 2014) ----------
+R3_FOOT = "_FCA_  Mutuals AR 30 – registered societies (F)  Release 3  July 2014 \n\n"  # 7115
+
+
+def test_2014_form_7115():  # 7115 (2021): clean table; blank J, NIL share capital
+    doc = (R3_FOOT + "###### **1.2 Year end date (dd/mm/yyyy)** \n\nSee Note 1.2 \n\n|3 1 / 1 2 / 2 0 2 1|\n|---|\n\n\n"
+           + R3_FOOT + "###### **2.1 You must enter the figures below** \n\n"
+           "See notes for help on items E-T. Enter NIL where applicable \n\n"
+           "|A|Members at beginning of year|113|\n|---|---|---|\n|B|Members ceased during year|2|\n"
+           "|C|Members admitted during year|1|\n|D|Members at end of year|112|\n|E|Turnover for year|667.04|\n"
+           "|F|Total of income and expenditure (receipts and payments added together)|1239.98|\n"
+           "|G|Net surplus/(deficit) for year|94.10|\n|H|Fixed assets||\n|I|Current assets|94.10|\n"
+           "|J|Total assets (equal to amount in row O,below)||\n|K|Current liabilities||\n|L|Share capital|nil|\n"
+           "|M|Long-term liabilities||\n|N|Reserves|nil|\n"
+           "|O|Total liabilities, share capital & reserves (K+L+M+N) (equal to amount in J above)||\n\n\n"
+           + R3_FOOT + "- **2.2 Names of subsidiaries as defined in sections 100 and 101 of the Co-operative and "
+           "Community Benefit Societies Act 2014** \n")
+    row = extract_doc(doc)
+    assert row["form_type"] == "ar30_2014" and row["layout"] == "scanned" and row["confidence"] == "review"
+    assert row["year_end_on_form"] == "2021-12-31"
+    assert (row["number_of_members"], row["number_of_members_status"]) == ("112", "parsed")
+    assert (row["turnover"], row["turnover_status"]) == ("667.04", "parsed")
+    assert (row["assets"], row["assets_status"]) == ("", "missing")
+    assert (row["share_capital"], row["share_capital_status"]) == ("0", "nil")
+    assert row["number_of_employees"] == "" and row["number_of_employees_status"] == "not_on_form"
+    assert row["highest_rate_interest_paid_on_shares_status"] == "not_on_form"
+
+
+def test_2014_row_o_not_share_capital():  # 1228RS: L row lost to OCR, only row O mentions share capital
+    v = fields_2014("|J|Total assets (equal toamount in row O, below)|55,382,257|\n||Current liabilities|6,809,224|\n"
+                    "||Long-term liabilities|20,388,781|\n"
+                    "||Total liabilities, share capital & reserves(K+L+M+N) (equal to amount in J above|55,382,257 i :|\n")
+    assert v == {"assets": "55,382,257"}
+
+
+def test_2014_picture_text():  # 4161: rows split at <br>; value inside the J label's bracket
+    v = fields_2014("Members at beginning of year 1072<br>D- Members at end of year 1163<br>J Total assets (equal to "
+                    "amount in 17139<br>row O, below)<br>Current liabilities 11077<br>Share capital 1163<br>"
+                    "Total liabilities, share capital &<br>reserves (K+L+M+N) (equal to 17139<br>amount in J above)<br>")
+    assert v == {"number_of_members": "1163", "assets": "17139", "share_capital": "1163"}
+
+
+def test_2014_repeated_label_and_two_rows():  # 405IP repeats the label in one row; made up: two rows -> review
+    assert fields_2014("|[>|[Members atendofyear | Members atend ofyear|6|\n") == {"number_of_members": "6"}
+    v = fields_2014("|E|Turnover for year|10|\n|E|Turnover for year|12|\n")
+    assert parse_value(v["turnover"], "GBP", True) == ("", "review")
+
+
+def test_2014_year_end():
+    assert year_end_on_form("###### **1.2 Year end date (dd/mm/yyyy)** \n\nSee Note 1.2 \n\n|3 1 / 0|3 /| 2 0 1 8|\n",
+                            R3_YEAR_END_Q) == "2018-03-31"  # 7381
+    assert year_end_on_form("1.2 Year end date (dd/mm/yyyy)** See Note 1.2 \n\n\n<!-- Start of picture text -->\n"
+                            "3 0 6 2 0 1 8<br>/ 0 /<br><!-- End of picture text -->", R3_YEAR_END_Q) == ""  # 2757RS
+    assert year_end_on_form("1.2 Year end date (dd/mmlyyyy) \n\nSee Note 1.2 \n\n#### | i|2]o|1|e | \n",
+                            R3_YEAR_END_Q) == ""  # 1410RS
+
+
+def test_2014_garbled_classification():
+    assert classify("- 4,2 Has your society produced accounts to the minimum standard required? ") == "ar30_2014"  # 1159R
+    assert classify("_FCA_ l Mutuals AR 30 – registered societies (F) l Release 3 l July 2014 ") == "ar30_2014"  # 7192
+
+
+def test_modern_footer_and_garbled_block_start():  # 122IP: title page lost; 8232: "4,2 Based"
+    assert classify("2 FCA @ Mutuals Annual Return (AR3) @ Release 4 @ February 2019 \n\n"
+                    "4.2 Based on the accounts, please provide the information") == "ar30_modern"
+    assert classify("## Annual Return (AR3O) form \n\n4,2 Based on the accounts, please provide the information "
+                    "requested below") == "ar30_modern"
+
+
+def test_ar41_with_space():  # 422W
+    assert classify("FCA e Mutuals AR 41 Working Men's Club (F) e Release 1 April 2013 ") == "ar41"

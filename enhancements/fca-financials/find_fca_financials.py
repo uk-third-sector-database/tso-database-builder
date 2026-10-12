@@ -2,8 +2,9 @@
 
 Standalone enhancement. FETCH stage: builds the GB-MPR catalogue of the Braw corpus API (every
 return per society, i.e. a panel) and caches each return's markdown text under work/docs/.
-EXTRACT stage: regex-only reading of modern AR30 section 4.2 (six figures) and the year-end date
-from the cached text, plus an optional comparison with the PDF pipeline's v4 baseline.
+EXTRACT stage: regex-only reading of modern AR30 section 4.2 (six figures), the four of those
+figures on the older AR30 (Release 3, July 2014) section 2.1, and the year-end date from the cached
+text, plus an optional comparison with the PDF pipeline's v4 baseline.
 
 Usage: python find_fca_financials.py [--limit 50 | --target 3000] [--no-fetch] [--min-year 2018] [--work-dir ...]
 """
@@ -128,7 +129,7 @@ ANY_LABEL = re.compile("|".join(p for p, _ in FIELDS.values()), re.I)
 MODERN_TITLE = re.compile(r"Annual Return \(AR3\w{0,3}\) forms?", re.I)  # OCR: "AR3SOQ" (4398)
 NOISE = re.compile(r"Doc\s*ID:\s*(?:[0-9a-f]\s?){30,40}"  # filed-copy hash, OCR may split it
                    r"|Demo\s*Version\s*-?\s*Select\s*\.?\s*Pdf\s*SDK", re.I)  # PDF-tool watermark
-BLOCK_START = re.compile(r"4\.2\s+Based\s+on\s+the\s+accounts", re.I)
+BLOCK_START = re.compile(r"4\W{1,3}2\W*Based\W*on\W*the\W*a?ccounts", re.I)  # OCR: "4,2", "Basedon", "@Ccounts"
 BLOCK_END = re.compile(r"4\.3\s+What\s+Standard", re.I)
 MAX_BLOCK = 3000  # characters; used when "4.3 What Standard" is missing or OCR-garbled
 FOOTER = re.compile(r"(?:FCA.{0,6}?)?Mutua\S*\s+Annua\S*\s+Return\s*\(AR3\w*\).{0,30}?Release\s*\d+"
@@ -142,15 +143,32 @@ OCR_MARK = re.compile(r"^-\s+e\s+(?:this|a\s?set)\b"  # page-1 bullets read as "
 YEAR_END_Q = re.compile(r"\d\.\d\s*What\s+date\s+did\s+the\s+financial\s+year\s+covered\s+by\s+these\s+"
                         r"accounts\s+end\?", re.I)
 TOKEN = re.compile(r"£?\s*\(?\d+(?:[.,]\s?\d+)*\)?%?|\S+")  # "64, 205" stays one token, "12741 0" is two
-OK_STATUSES = {"parsed", "nil", "not_applicable"}
+OK_STATUSES = {"parsed", "nil", "not_applicable", "not_on_form"}
+AR41 = re.compile(r"AR\s?41")  # 422W writes "AR 41"
+
+# Older AR30 (Release 3, July 2014): lettered rows A-T under "2.1 You must enter the figures below",
+# ending at "2.2 Names of subsidiaries". Four rows feed the output fields; employees and the share
+# interest rate are not asked on this form (status not_on_form).
+R3_FOOTER = re.compile(r"Release\s*3.{0,10}July\s*20\d\d", re.I)  # page footer; OCR: "July 2074"
+R3_START = re.compile(r"must\s*enter\s*the\s*figures", re.I)  # OCR: "Yo Se|umustenterthe figures"
+R3_START_FALLBACK = re.compile(r"2\s+Statistics", re.I)  # 4161: the 2.1 heading is lost in picture text
+R3_END = re.compile(r"2\W{0,3}2\W*Names", re.I)
+R3_FIELDS = {  # field -> label of its row
+    "number_of_members": r"members\s*at\s*end\s*of\s*year",  # D
+    "turnover": r"tu(?:rn|m)\s*over(?:\s*for\s*(?:the\s*)?year)?",  # E; OCR "Tumover"
+    "assets": r"total\s*assets(?:\s*\([^|\d)]*\)?)?",  # J, with "(equal to amount in row O, below)"
+    "share_capital": r"(?<!,)(?<!,\s)share\s*capital(?!\s*&)",  # L, not O "liabilities, share capital &"
+}
+R3_YEAR_END_Q = re.compile(r"Year\s*end\s*date\s*\([^)\n]{0,15}\)\W*(?:See\s*Note\s*1\W{1,7}2)?", re.I)
 
 
 def classify(text: str) -> str:
-    if MODERN_TITLE.search(text) and BLOCK_START.search(text) and "AR41" not in text:
-        return "ar30_modern"
-    if re.search(r"4\.2\s+Has\s+your\s+society\s+produced\s+accounts", text, re.I):
-        return "ar30_2014"
-    if "AR41" in text:
+    """Modern AR30 is checked first: 2619RS (2020) holds a modern return and a 2014 copy."""
+    if (MODERN_TITLE.search(text) or FOOTER.search(text)) and BLOCK_START.search(text) and not AR41.search(text):
+        return "ar30_modern"  # FOOTER: paper returns whose title page OCR lost (e.g. 122IP)
+    if re.search(r"4\W{0,6}2\W*Has\s*your\s*society", text, re.I) or R3_FOOTER.search(text):
+        return "ar30_2014"  # footer: 1159R, 4161, 1821RS, 7192, 7512 have a garbled "4.2 Has"
+    if AR41.search(text):
         return "ar41"
     if re.search(r"A\.\s?R\.\s?5", text):
         return "ar5"
@@ -174,9 +192,42 @@ def layout_of(text: str, block: str, block_end: int) -> str:
     form read by OCR; also any paper form with neither marker). Only text up to the end of the
     first block is looked at: 4253R has an online copy followed by a scanned one."""
     head = text[:block_end]
-    if not (IF_ANY.search(block) or FOOTER.search(head)):
+    if not (IF_ANY.search(block) or FOOTER.search(head) or R3_FOOTER.search(head)):
         return "online"
     return "filled" if TICK_BOX.search(head) and not OCR_MARK.search(head) else "scanned"
+
+
+def find_block_2014(text: str) -> tuple[str, int]:
+    """Raw text of section 2.1 of the 2014 form and its end position. With no block the end is the
+    end of the document, so layout_of still sees the paper footers."""
+    m = R3_START.search(text) or R3_START_FALLBACK.search(text)
+    if not m:
+        return "", len(text)
+    end = R3_END.search(text, m.end())
+    stop = min(end.start() if end else len(text), m.end() + MAX_BLOCK)
+    return text[m.end():stop], stop
+
+
+def fields_2014(block: str) -> dict[str, str]:
+    """Raw value text for each R3_FIELDS row found in a 2014 section 2.1 block.
+
+    Rows are table lines or picture-text lines (split at <br>); no two rows shared a line in the
+    sample. The value is the rest of the row after the label (its last match: OCR sometimes repeats
+    a label, 405IP). A label on more than one row gives every value joined with " / ", which
+    parse_value sends to review.
+    """
+    rows = re.split(r"\n|<br>", block)
+    out: dict[str, str] = {}
+    for field, pattern in R3_FIELDS.items():
+        vals = []
+        for r in rows:
+            ms = list(re.finditer(pattern, r, re.I))
+            if ms:
+                rest = normalise_block(r[ms[-1].end():])
+                vals.append(" ".join(t.strip() for t in TOKEN.findall(rest) if any(c.isalnum() for c in t)))
+        if vals:
+            out[field] = " / ".join(vals)
+    return out
 
 
 def normalise_block(block: str) -> str:
@@ -263,18 +314,20 @@ def parse_value(raw: str, unit: str, typed: bool) -> tuple[str, str]:
     return format_decimal(n), "parsed"
 
 
-def year_end_on_form(text: str) -> str:
-    """ISO date answered to "2.1 What date did the financial year ... end?", or blank.
+def year_end_on_form(text: str, question: re.Pattern = YEAR_END_Q) -> str:
+    """ISO date answered to "2.1 What date did the financial year ... end?" (or, with
+    R3_YEAR_END_Q, the 2014 form's "1.2 Year end date (dd/mm/yyyy)"), or blank.
 
     Online forms give dd/mm/yyyy (sometimes in a table cell); filled PDFs give eight digit boxes
-    ("3 1 1 2 2 0 2 1"), on the next line or the same line. Scanned forms are usually garbage.
+    ("3 1 1 2 2 0 2 1"; the 2014 form "3 1 / 1 2 / 2 0 2 1"), on the next line or the same line.
+    Scanned forms are usually garbage.
     """
-    m = YEAR_END_Q.search(text)
+    m = question.search(text)
     if not m:
         return ""
     after = re.sub(r"<[^>]*>|[*|#]", " ", text[m.end():m.end() + 150]).strip()
     d = re.match(r"(\d{1,2})/(\d{1,2})/(\d{4})\b", after)
-    b = re.match(r"(\d)\s*(\d)\s*(\d)\s*(\d)\s*(\d)\s*(\d)\s*(\d)\s*(\d)\b", after)
+    b = re.match(r"(\d)\s*(\d)\s*/?\s*(\d)\s*(\d)\s*/?\s*(\d)\s*(\d)\s*(\d)\s*(\d)\b", after)
     try:
         if d:
             return datetime.date(int(d[3]), int(d[2]), int(d[1])).isoformat()
@@ -287,18 +340,27 @@ def year_end_on_form(text: str) -> str:
 
 
 def extract_doc(text: str) -> dict:
-    """Form type, layout, year-end and the six section 4.2 figures for one document."""
+    """Form type, layout, year-end and the six figures (modern section 4.2, or the four on the
+    2014 form's section 2.1) for one document."""
     row: dict = {"form_type": classify(text), "layout": "", "year_end_on_form": ""}
     for f in FIELDS:
         row.update({f: "", f"{f}_status": "", f"{f}_raw": ""})
     row["confidence"] = ""
-    if row["form_type"] != "ar30_modern":
+    if row["form_type"] == "ar30_modern":
+        block, block_end = find_block(text)
+        row["year_end_on_form"] = year_end_on_form(text)
+        raws = field_tokens(normalise_block(block))
+    elif row["form_type"] == "ar30_2014":
+        block, block_end = find_block_2014(text)
+        row["year_end_on_form"] = year_end_on_form(text, R3_YEAR_END_Q)
+        raws = fields_2014(block)
+    else:
         return row
-    block, block_end = find_block(text)
     row["layout"] = layout_of(text, block, block_end)
-    row["year_end_on_form"] = year_end_on_form(text)
-    raws = field_tokens(normalise_block(block))
     for f, (_, unit) in FIELDS.items():
+        if row["form_type"] == "ar30_2014" and f not in R3_FIELDS:
+            row[f"{f}_status"] = "not_on_form"
+            continue
         row[f"{f}_raw"] = raws.get(f, "")
         row[f], row[f"{f}_status"] = parse_value(row[f"{f}_raw"], unit, row["layout"] != "scanned")
     ok = all(row[f"{f}_status"] in OK_STATUSES for f in FIELDS)
@@ -375,23 +437,31 @@ def compare_baseline(ours: pd.DataFrame, baseline_dir: Path) -> pd.DataFrame:
         ["society_number", "year_end", "field", "ours", "ours_status", "baseline", "agree"]]
 
 
+def form_summary(d: pd.DataFrame) -> dict:
+    return {
+        "by_layout": d["layout"].value_counts().to_dict(),
+        "by_confidence": d["confidence"].value_counts().to_dict(),
+        "year_end_matches_catalogue": d["year_end_matches_catalogue"].replace("", "blank")
+        .value_counts().to_dict(),
+        "field_status": {f: d[f"{f}_status"].value_counts().to_dict() for f in FIELDS},
+    }
+
+
 def run_summary(out: pd.DataFrame) -> dict:
-    modern = out[out["form_type"] == "ar30_modern"]
+    """Counts for all documents; layout, confidence, year-end and field status for modern AR30
+    at the top level and for the 2014 form under "ar30_2014"."""
     return {
         "documents_extracted": len(out),
         "by_selected_as": out["selected_as"].value_counts().to_dict(),
         "matches_baseline": int(out["matches_baseline"].sum()),
         "by_form_type": out["form_type"].value_counts().to_dict(),
-        "by_layout": modern["layout"].value_counts().to_dict(),
-        "by_confidence": modern["confidence"].value_counts().to_dict(),
-        "year_end_matches_catalogue": modern["year_end_matches_catalogue"].replace("", "blank")
-        .value_counts().to_dict(),
-        "field_status": {f: modern[f"{f}_status"].value_counts().to_dict() for f in FIELDS},
+        **form_summary(out[out["form_type"] == "ar30_modern"]),
+        "ar30_2014": form_summary(out[out["form_type"] == "ar30_2014"]),
     }
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Fetch FCA mutual society annual returns and extract AR30 section 4.2.")
+    ap = argparse.ArgumentParser(description="Fetch FCA mutual society annual returns and extract AR30 financial figures.")
     ap.add_argument("--api-keys", type=Path, default=API_KEYS)
     ap.add_argument("--work-dir", type=Path, default=WORK_DIR)
     ap.add_argument("--out-dir", type=Path, default=OUT_DIR)

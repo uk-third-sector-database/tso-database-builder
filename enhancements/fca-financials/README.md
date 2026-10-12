@@ -2,8 +2,9 @@
 
 Standalone enhancement (not part of the builder). Reads the six figures in **section 4.2** of the
 modern FCA annual return (AR30) for co-operative and community benefit societies (`GB-MPR-`
-uids), plus the financial year-end written on the form, from the Braw corpus API's text of each
-return. Regex only: no PDFs, no language model. Every return per society is kept (a panel).
+uids), four of the same figures from **section 2.1** of the older AR30 (Release 3, July 2014),
+plus the financial year-end written on the form, from the Braw corpus API's text of each return.
+Regex only: no PDFs, no language model. Every return per society is kept (a panel).
 
 ## Run
 
@@ -34,17 +35,24 @@ Tests: `pytest test_find_fca_financials.py`.
 
 ## Forms
 
-Each document is classified; only `ar30_modern` is extracted, the rest are counted.
+Each document is classified; `ar30_modern` and `ar30_2014` are extracted, the rest are counted.
+Checked in this order:
 
-- `ar30_modern`: title "Annual Return (AR30) form" (OCR `AR3O`, `AR30O` accepted) and
-  "4.2 Based on the accounts", and no mention of AR41.
-- `ar30_2014`: the older AR30 ("4.2 Has your society produced accounts", figures under
-  "2 Statistics"). `ar41`, `ar5` (A.R.5 / A. R. 5A), `credit_union`, `other`.
+- `ar30_modern`: title "Annual Return (AR30) form" (OCR `AR3O`, `AR30O` accepted) or, when OCR
+  lost the title page, the paper page footer "Mutuals Annual Return (AR3) ... Release N"; and
+  "4.2 Based on the accounts" (OCR `4,2`, `4:2`, `Basedon`, `@Ccounts` accepted); and no mention
+  of AR41 (`AR41` or `AR 41`).
+- `ar30_2014`: the older AR30, Release 3, July 2014 ("4.2 Has your society ...", OCR `4,2`
+  accepted, or the page footer "AR 30 – registered societies (F) Release 3 July 2014"; the footer
+  catches returns whose "4.2" is garbled, e.g. 4161, 7192).
+- `ar41` (`AR41` or `AR 41`), `ar5` (A.R.5 / A. R. 5A), `credit_union`, `other`.
 
-Layout of a modern return, judged on the text up to the end of the first 4.2 block:
+Layout, judged on the text up to the end of the first block (4.2 on the modern form, 2.1 on the
+2014 form):
 
 - `online`: the web form (no "(if any)" labels and no paper page footer
-  "Mutuals Annual Return (AR3) ... Release N").
+  "Mutuals Annual Return (AR3) ... Release N" or "Release 3 July 2014"). The 2014 form is paper
+  only, so it is never `online`.
 - `filled`: the PDF form typed into on a computer. Its tick boxes come through as `☒`/`☐`, and
   none of the OCR signs below appear.
 - `scanned`: a paper form read by OCR (text recognition from an image). Signs: page-1 bullets read
@@ -63,12 +71,32 @@ The block runs from the first "4.2 Based on the accounts" to the next "4.3 What 
 removed, then each label is found in form order and its value is the text up to the next label.
 Labels printed one under another with the values after them (e.g. 6365R) are filled in order.
 
+**2014 form.** The block runs from "2.1 You must enter the figures below" (or "2 Statistics" if
+that is lost) to "2.2 Names of subsidiaries" (capped at 3,000 characters). Its lettered rows A-T
+are split into lines (table rows, or picture-text lines at `<br>`); for each field below the row
+is found by its label and the value is the rest of that row. The year-end comes from "1.2 Year end
+date (dd/mm/yyyy)", written in boxes as `3 1 / 1 2 / 2 0 2 1`; anything else gives a blank.
+
+| Output field | 2014 form row | Unit |
+|---|---|---|
+| `number_of_members` | D "Members at end of year" | count |
+| `turnover` | E "Turnover for year" | £ |
+| `assets` | J "Total assets (equal to amount in row O, below)" | £ |
+| `share_capital` | L "Share capital" | £ |
+| `number_of_employees` | not asked: blank, status `not_on_form` | |
+| `highest_rate_interest_paid_on_shares` | not asked: blank, status `not_on_form` | |
+
+Row O ("Total liabilities, share capital & reserves") is never read as share capital: a "share
+capital" preceded by a comma or followed by "&" is skipped. A label found on more than one row
+sends the field to `review`; a label not found gives `missing`.
+
 Value rules (mirroring the PDF pipeline): £, commas and bold are removed; `N/A` -> `-9`
 (`not_applicable`); `NIL`/`NONE` -> `0` (`nil`); a lone letter `O`/`oO` -> `0` (`nil`) on the
 online form only, `review` on filled and scanned forms (no filled form in the sample used a letter
 O for zero); anything else not cleanly numeric (spaces inside a number
 such as `64, 205`, unbalanced brackets, more than 2 decimals on money, decimals on a count, a rate
-over 100 or written with £) -> `review` with the raw text kept; no value -> `missing`.
+over 100 or written with £) -> `review` with the raw text kept; no value -> `missing`. A field
+the form does not ask for -> `not_on_form` (2014 form only; not counted as missing).
 
 ## Outputs (`output/`)
 
@@ -85,16 +113,21 @@ over 100 or written with £) -> `review` with the raw text kept; no value -> `mi
 - `baseline_comparison.csv`: one row per (return, field) the PDF pipeline parsed: our value and
   status, the baseline value and whether they agree to 2 decimal places. Matched on society
   number and year end; baseline restricted to modern, releasable returns.
-- `run_summary.json`: counts by `selected_as`, of `matches_baseline` rows, then by form type,
-  layout, confidence, year-end match and field status, plus agree / disagree / ours-missing per
-  field against the baseline.
+- `run_summary.json`: counts by `selected_as`, of `matches_baseline` rows, then by form type;
+  layout, confidence, year-end match and field status for modern AR30 (top level) and for the
+  2014 form (under `ar30_2014`); plus agree / disagree / ours-missing per field against the
+  baseline (modern returns only).
 
 ## Confidence
 
-- **high**: modern AR30, online or filled form, all six fields `parsed`, `nil` or `not_applicable`.
-- **review**: every other modern AR30 (all scanned returns, and online or filled returns with any
-  field missing or in review).
+- **high**: modern AR30 or 2014 form, online or filled, every field `parsed`, `nil`,
+  `not_applicable` or `not_on_form`.
+- **review**: every other extracted return (all scanned returns, and online or filled returns with
+  any field missing or in review).
 - blank: forms not extracted.
+
+No 2014 return in the 12 Oct 2026 sample shows tick boxes, so all fall to `scanned` and `review`,
+including clean typed ones such as 7115.
 
 ## Known limits
 
@@ -106,3 +139,8 @@ over 100 or written with £) -> `review` with the raw text kept; no value -> `mi
   form showing tick boxes and none of the OCR signs would wrongly get `filled`. None seen so far.
 - Filled forms that write a dash for nil (1032RS 2021: `-`) give `missing` and go to `review`.
 - Only the first 4.2 block is read; documents holding a second copy (4253R) use the first.
+- Some modern AR30s stay `other`: the 4.2 heading is missing from the text (1229RS, 4406, 4428,
+  4681R, 8272R) or doubled by OCR (7404 "4.2 4.2 Based Based"), or the title is cut off and
+  no footer survives (4079).
+- 2014 form: OCR often drops rows A-E (members, turnover) entirely, and a 2.1 value written on the
+  next picture-text line from its label is not picked up (`missing`).
