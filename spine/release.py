@@ -134,6 +134,7 @@ MATCH_TYPES = frozenset({
     "name - cqc",
     "name - crossborder",
     "companyid - coop mutual",
+    "society number - companies house",
     "companyid - id_in_source",
     "name - housing",
     "name - care",

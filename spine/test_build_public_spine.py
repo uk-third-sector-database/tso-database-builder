@@ -2986,3 +2986,354 @@ def test_holds_record_from_ignores_association_only_partners():
 
     charity.matched_orgs[:] = [(company, 'companyid - companyid')]
     assert not holds_record_from(charity, ('mutuals', 'ch'), id_in_source='09990001')
+
+
+# ---------------------------------------------------------------------------
+# 'society number - companies house': a Companies House society record joined to its
+# Mutuals Public Register society by number.
+# ---------------------------------------------------------------------------
+
+def _fca_society(number, name='Riverside Allotment Society Limited', **overrides):
+    return sub_spine_entry_creator({
+        "uid" : f"GB-MPR-{number}",
+        "organisationname" : name,
+        "normalisedname" : name.upper(),
+        "source" : "mutuals",
+        "source_register" : "Mutuals Public Register",
+        "id_in_source" : number,
+        **overrides,})
+
+
+def _ch_society(number, name='Riverside Allotments Ltd', **overrides):
+    # deliberately not the society's name: the rule links on the number alone
+    return sub_spine_entry_creator({
+        "uid" : f"GB-COH-{number}",
+        "organisationname" : name,
+        "normalisedname" : name.upper(),
+        "source" : "CH",
+        "source_register" : "Companies House",
+        "id_in_source" : number,
+        **overrides,})
+
+
+@pytest.mark.parametrize("ch_number,fca_number", [
+    ("IP27793R", "27793R"),
+    ("IP032442", "32442R"),
+    ("RS009808", "9808"),
+])
+def test_ch_society_number_joins_its_fca_society(ch_number, fca_number):
+    # FCA (mutuals) loads before Companies House, so the Companies House record is
+    # absorbed into the FCA organisation, which stays the spine row.
+    files = [
+        write_input_data_to_tmp_file([_fca_society(fca_number)],[],SUB_SPINE_CSV_FIELDS),
+        write_input_data_to_tmp_file([_ch_society(ch_number)],[],SUB_SPINE_CSV_FIELDS),
+    ]
+    main_orgs = build_spine_for_test(files)
+
+    assert sorted(main_orgs._store) == [f'GB-MPR-{fca_number}']
+    assert [(m.uid, mt) for m, mt in main_orgs._store[f'GB-MPR-{fca_number}'].matched_orgs] == [
+        (f'GB-COH-{ch_number}', 'society number - companies house')]
+    assert main_orgs.merged_uid_aliases == {}
+
+    main_csv, _ = write_spine_and_read(main_orgs)
+    assert [r['uid'] for r in _rows(main_csv)] == [f'GB-MPR-{fca_number}']
+
+
+@pytest.mark.parametrize("ch_number,fca_number", [
+    ("RS009808", "9808R"),  # RS numbers carry no R on the FCA side
+    ("IP27793R", "27793"),  # IP numbers always do
+    ("IP000000", "0R"),     # the FCA's test society is never linked
+])
+def test_ch_society_number_needs_the_exact_fca_form(ch_number, fca_number):
+    files = [
+        write_input_data_to_tmp_file([_fca_society(fca_number)],[],SUB_SPINE_CSV_FIELDS),
+        write_input_data_to_tmp_file([_ch_society(ch_number)],[],SUB_SPINE_CSV_FIELDS),
+    ]
+    main_orgs = build_spine_for_test(files)
+
+    assert sorted(main_orgs._store) == sorted([f'GB-MPR-{fca_number}', f'GB-COH-{ch_number}'])
+    assert all(org.matched_orgs == [] for org in main_orgs._store.values())
+
+
+@pytest.mark.parametrize("ch_number", ["SP001234", "NP001234", "SP001234R", "NP001234R"])
+def test_other_society_prefixes_are_not_linked_by_number(ch_number):
+    # Scottish (SP) and Northern Irish (NP) society numbers are left alone, even when an
+    # FCA society carries the same digits with or without the R.
+    assert fca_number_from_ch_number(ch_number) is None
+    files = [
+        write_input_data_to_tmp_file([_fca_society("1234R"),
+                                      _fca_society("1234", name="Other Society Limited")],
+                                     [],SUB_SPINE_CSV_FIELDS),
+        write_input_data_to_tmp_file([_ch_society(ch_number)],[],SUB_SPINE_CSV_FIELDS),
+    ]
+    main_orgs = build_spine_for_test(files)
+
+    assert f'GB-COH-{ch_number}' in main_orgs._store
+    assert all(org.matched_orgs == [] for org in main_orgs._store.values())
+
+
+def test_ch_society_number_defers_to_an_ftc_link_to_a_mutual(tmp_path):
+    # RS009788 is FCA 9788R (an older society), which the same-as table records. The
+    # number form would point at 9788, an unrelated society, so the rule must stay silent.
+    files = [
+        write_input_data_to_tmp_file([_fca_society("9788R"),
+                                      _fca_society("9788", name="Newfield Energy Society Limited")],
+                                     [],SUB_SPINE_CSV_FIELDS),
+        write_input_data_to_tmp_file([_ch_society("RS009788")],[],SUB_SPINE_CSV_FIELDS),
+    ]
+    sameas = write_csv(str(tmp_path / 'sameas.csv'),
+                       [{"org_id_a" : "GB-COH-RS009788",
+                         "org_id_b" : "GB-MPR-9788R",
+                         "source" : "manual"}],
+                       ["org_id_a", "org_id_b", "source"])
+    oscr_links = write_csv(str(tmp_path / 'oscr-links.csv'), [],
+                           ["org_id_a", "org_id_b", "source"])
+
+    main_orgs = process_csvs_to_build_spine(files, sameas_file=sameas,
+                                            oscr_links_file=oscr_links)
+
+    assert sorted(main_orgs._store) == ['GB-MPR-9788', 'GB-MPR-9788R']
+    assert [(m.uid, mt) for m, mt in main_orgs._store['GB-MPR-9788R'].matched_orgs] == [
+        ('GB-COH-RS009788', 'ftc')]
+    assert main_orgs._store['GB-MPR-9788'].matched_orgs == []
+    _, match_csv = write_spine_and_read(main_orgs)
+    assert not [r for r in _rows(match_csv)
+                if r['match_type'] == 'society number - companies house'
+                or 'GB-MPR-9788' in (r['orgA_uid'], r['orgB_uid'])]
+
+
+def test_link_to_an_absorbed_ch_society_lands_on_its_fca_organisation(tmp_path):
+    # Once the Companies House record is absorbed into its FCA society it is no longer a
+    # spine row, so a later same-as row naming its uid must be followed to the
+    # organisation that holds it instead of matching nothing.
+    she_row = sub_spine_entry_creator({
+        "uid" : "GB-SHPE-4410",
+        "organisationname" : "Riverside Homes",
+        "normalisedname" : "RIVERSIDE HOMES",
+        "source" : "socialhousingengland",
+        "source_register" : "Social Housing England",
+        "id_in_source" : "4410",})
+    files = [
+        write_input_data_to_tmp_file([_fca_society("27793R")],[],SUB_SPINE_CSV_FIELDS),
+        write_input_data_to_tmp_file([_ch_society("IP27793R")],[],SUB_SPINE_CSV_FIELDS),
+        write_input_data_to_tmp_file([she_row],[],SUB_SPINE_CSV_FIELDS),
+    ]
+    sameas = write_csv(str(tmp_path / 'sameas.csv'),
+                       [{"org_id_a" : "GB-SHPE-4410",
+                         "org_id_b" : "GB-COH-IP27793R",
+                         "source" : "manual"}],
+                       ["org_id_a", "org_id_b", "source"])
+    oscr_links = write_csv(str(tmp_path / 'oscr-links.csv'), [],
+                           ["org_id_a", "org_id_b", "source"])
+
+    main_orgs = process_csvs_to_build_spine(files, sameas_file=sameas,
+                                            oscr_links_file=oscr_links)
+
+    assert sorted(main_orgs._store) == ['GB-MPR-27793R']
+    assert main_orgs.merged_uid_aliases == {}
+    assert sorted((m.uid, mt) for m, mt in main_orgs._store['GB-MPR-27793R'].matched_orgs) == [
+        ('GB-COH-IP27793R', 'society number - companies house'),
+        ('GB-SHPE-4410', 'ftc'),
+    ]
+    assert main_orgs.absorbed_uid_holders == {'GB-COH-IP27793R': 'GB-MPR-27793R'}
+
+
+def test_link_to_a_record_absorbed_by_an_ordinary_rule_is_not_redirected(tmp_path):
+    # The redirect is limited to society-number absorptions. A same-as row naming a
+    # company that a charity absorbed by 'companyid - id_in_source' still matches nothing.
+    ccew_row = sub_spine_entry_creator({
+        "uid" : "GB-CHC-1170001",
+        "organisationname" : "Hillside Trust",
+        "normalisedname" : "HILLSIDE TRUST",
+        "companyid" : "07700001",
+        "source" : "ccew",
+        "source_register" : "Charity Commission for England and Wales",
+        "id_in_source" : "1170001",})
+    ch_row = sub_spine_entry_creator({
+        "uid" : "GB-COH-07700001",
+        "organisationname" : "Hillside Trust",
+        "normalisedname" : "HILLSIDE TRUST",
+        "source" : "CH",
+        "source_register" : "Companies House",
+        "id_in_source" : "07700001",})
+    she_row = sub_spine_entry_creator({
+        "uid" : "GB-SHPE-4420",
+        "organisationname" : "Valley Homes",
+        "normalisedname" : "VALLEY HOMES",
+        "source" : "socialhousingengland",
+        "source_register" : "Social Housing England",
+        "id_in_source" : "4420",})
+    files = [
+        write_input_data_to_tmp_file([ccew_row],[],SUB_SPINE_CSV_FIELDS),
+        write_input_data_to_tmp_file([ch_row],[],SUB_SPINE_CSV_FIELDS),
+        write_input_data_to_tmp_file([she_row],[],SUB_SPINE_CSV_FIELDS),
+    ]
+    sameas = write_csv(str(tmp_path / 'sameas.csv'),
+                       [{"org_id_a" : "GB-SHPE-4420",
+                         "org_id_b" : "GB-COH-07700001",
+                         "source" : "manual"}],
+                       ["org_id_a", "org_id_b", "source"])
+    oscr_links = write_csv(str(tmp_path / 'oscr-links.csv'), [],
+                           ["org_id_a", "org_id_b", "source"])
+
+    main_orgs = process_csvs_to_build_spine(files, sameas_file=sameas,
+                                            oscr_links_file=oscr_links)
+
+    assert main_orgs.absorbed_uid_holders == {}
+    assert sorted(main_orgs._store) == ['GB-CHC-1170001', 'GB-SHPE-4420']
+    assert [(m.uid, mt) for m, mt in main_orgs._store['GB-CHC-1170001'].matched_orgs] == [
+        ('GB-COH-07700001', 'companyid - id_in_source')]
+
+
+def _main_registerdate(main_orgs, uid):
+    main_csv, _ = write_spine_and_read(main_orgs)
+    return {r['uid']: r['registerdate'] for r in _rows(main_csv)}[uid]
+
+
+def test_placeholder_ch_society_date_never_beats_a_real_date():
+    files = [
+        write_input_data_to_tmp_file([_fca_society("27793R", registerdate="24/07/1963")],
+                                     [],SUB_SPINE_CSV_FIELDS),
+        write_input_data_to_tmp_file([_ch_society("IP27793R", registerdate="01/01/1900")],
+                                     [],SUB_SPINE_CSV_FIELDS),
+    ]
+    main_orgs = build_spine_for_test(files)
+    assert _main_registerdate(main_orgs, 'GB-MPR-27793R') == '24/07/1963'
+
+
+def test_placeholder_ch_society_date_kept_when_no_other_date():
+    files = [
+        write_input_data_to_tmp_file([_fca_society("27793R")],[],SUB_SPINE_CSV_FIELDS),
+        write_input_data_to_tmp_file([_ch_society("IP27793R", registerdate="01/01/1981")],
+                                     [],SUB_SPINE_CSV_FIELDS),
+    ]
+    main_orgs = build_spine_for_test(files)
+    assert _main_registerdate(main_orgs, 'GB-MPR-27793R') == '01/01/1981'
+
+
+def test_ordinary_company_dated_1981_is_not_a_placeholder():
+    ccew_row = sub_spine_entry_creator({
+        "uid" : "GB-CHC-1170002",
+        "organisationname" : "Brookside Trust",
+        "normalisedname" : "BROOKSIDE TRUST",
+        "companyid" : "01500002",
+        "registerdate" : "05/05/1990",
+        "source" : "ccew",
+        "source_register" : "Charity Commission for England and Wales",
+        "id_in_source" : "1170002",})
+    ch_row = sub_spine_entry_creator({
+        "uid" : "GB-COH-01500002",
+        "organisationname" : "Brookside Trust",
+        "normalisedname" : "BROOKSIDE TRUST",
+        "registerdate" : "01/01/1981",
+        "source" : "CH",
+        "source_register" : "Companies House",
+        "id_in_source" : "01500002",})
+    files = [
+        write_input_data_to_tmp_file([ccew_row],[],SUB_SPINE_CSV_FIELDS),
+        write_input_data_to_tmp_file([ch_row],[],SUB_SPINE_CSV_FIELDS),
+    ]
+    main_orgs = build_spine_for_test(files)
+    assert _main_registerdate(main_orgs, 'GB-CHC-1170002') == '01/01/1981'
+
+
+def test_ch_society_registered_after_the_fca_society_was_removed_is_not_linked():
+    # IP02805R (registered 1994) reuses the number of FCA 2805R (removed 1985)
+    files = [
+        write_input_data_to_tmp_file([_fca_society("2805R", removeddate="01/06/1985")],
+                                     [],SUB_SPINE_CSV_FIELDS),
+        write_input_data_to_tmp_file([_ch_society("IP02805R", registerdate="01/03/1994")],
+                                     [],SUB_SPINE_CSV_FIELDS),
+    ]
+    main_orgs = build_spine_for_test(files)
+    assert sorted(main_orgs._store) == ['GB-COH-IP02805R', 'GB-MPR-2805R']
+    assert all(org.matched_orgs == [] for org in main_orgs._store.values())
+
+
+def test_placeholder_dated_ch_society_still_links_to_a_removed_fca_society():
+    # 01/01/1981 is a dummy date, so it is no evidence against an FCA society removed
+    # in 1975
+    files = [
+        write_input_data_to_tmp_file([_fca_society("2805R", removeddate="01/06/1975")],
+                                     [],SUB_SPINE_CSV_FIELDS),
+        write_input_data_to_tmp_file([_ch_society("IP02805R", registerdate="01/01/1981")],
+                                     [],SUB_SPINE_CSV_FIELDS),
+    ]
+    main_orgs = build_spine_for_test(files)
+    assert sorted(main_orgs._store) == ['GB-MPR-2805R']
+    assert [(m.uid, mt) for m, mt in main_orgs._store['GB-MPR-2805R'].matched_orgs] == [
+        ('GB-COH-IP02805R', 'society number - companies house')]
+
+
+def test_name_housing_ignores_a_name_borrowed_from_an_absorbed_company():
+    # Torus62 shape: FCA 7826 'GGHTHP' holds Companies House RS007826 'TORUS62 LIMITED'.
+    # The housing record 'Torus62' must match only the charity and FCA 7973, which carry
+    # the name on their own register records, so the two are bridge-merged.
+    ccew_row = sub_spine_entry_creator({
+        "uid" : "GB-CHC-1158510",
+        "organisationname" : "Torus62",
+        "normalisedname" : "TORUS62",
+        "source" : "ccew",
+        "source_register" : "Charity Commission for England and Wales",
+        "id_in_source" : "1158510",})
+    she_row = sub_spine_entry_creator({
+        "uid" : "GB-SHPE-4430",
+        "organisationname" : "Torus62",
+        "normalisedname" : "TORUS62",
+        "source" : "socialhousingengland",
+        "source_register" : "Social Housing England",
+        "id_in_source" : "4430",})
+    files = [
+        write_input_data_to_tmp_file([ccew_row],[],SUB_SPINE_CSV_FIELDS),
+        write_input_data_to_tmp_file([_fca_society("7973", name="Torus62"),
+                                      _fca_society("7826", name="GGHTHP Limited")],
+                                     [],SUB_SPINE_CSV_FIELDS),
+        write_input_data_to_tmp_file([_ch_society("RS007826", name="Torus62 Limited",
+                                                  normalisedname="TORUS62")],
+                                     [],SUB_SPINE_CSV_FIELDS),
+        write_input_data_to_tmp_file([she_row],[],SUB_SPINE_CSV_FIELDS),
+    ]
+    main_orgs = build_spine_for_test(files)
+
+    assert [(m.uid, mt) for m, mt in main_orgs._store['GB-MPR-7826'].matched_orgs] == [
+        ('GB-COH-RS007826', 'society number - companies house')]
+    assert main_orgs.merged_uid_aliases == {'GB-MPR-7973': 'GB-CHC-1158510'}
+    assert sorted(main_orgs._store) == ['GB-CHC-1158510', 'GB-MPR-7826']
+    assert ('GB-SHPE-4430', 'name - housing') in [
+        (m.uid, mt) for m, mt in main_orgs._store['GB-CHC-1158510'].matched_orgs]
+
+
+def test_name_housing_counts_a_name_from_a_company_joined_by_ftc(tmp_path):
+    # Only society-number joins are excluded. A Companies House record that the same-as
+    # table placed in the society carries good evidence of a rename (Clyde Valley,
+    # Dunedin Canmore, Coin Street), so its name still lets the housing record match.
+    she_row = sub_spine_entry_creator({
+        "uid" : "GB-SHPE-4440",
+        "organisationname" : "Coin Street Homes",
+        "normalisedname" : "COIN STREET HOMES",
+        "source" : "socialhousingengland",
+        "source_register" : "Social Housing England",
+        "id_in_source" : "4440",})
+    files = [
+        write_input_data_to_tmp_file([_fca_society("25567R", name="Old Street Housing Society")],
+                                     [],SUB_SPINE_CSV_FIELDS),
+        write_input_data_to_tmp_file([_ch_society("SP001823RS", name="Coin Street Homes")],
+                                     [],SUB_SPINE_CSV_FIELDS),
+        write_input_data_to_tmp_file([she_row],[],SUB_SPINE_CSV_FIELDS),
+    ]
+    sameas = write_csv(str(tmp_path / 'sameas.csv'),
+                       [{"org_id_a" : "GB-COH-SP001823RS",
+                         "org_id_b" : "GB-MPR-25567R",
+                         "source" : "manual"}],
+                       ["org_id_a", "org_id_b", "source"])
+    oscr_links = write_csv(str(tmp_path / 'oscr-links.csv'), [],
+                           ["org_id_a", "org_id_b", "source"])
+
+    main_orgs = process_csvs_to_build_spine(files, sameas_file=sameas,
+                                            oscr_links_file=oscr_links)
+
+    assert sorted(main_orgs._store) == ['GB-MPR-25567R']
+    assert sorted((m.uid, mt) for m, mt in main_orgs._store['GB-MPR-25567R'].matched_orgs) == [
+        ('GB-COH-SP001823RS', 'ftc'),
+        ('GB-SHPE-4440', 'name - housing'),
+    ]

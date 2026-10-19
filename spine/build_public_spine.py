@@ -315,9 +315,13 @@ def compress_extras_per_uid(values):
 # incoming record matched both of them (see MainOrgList.bridge_merge_parties). It is
 # listed last only so that every match type has a rank and match_info_sort_key stays a
 # total order; because it is not a candidate rule, its rank never competes with one.
+# 'society number - companies house' joins a Companies House society record to its
+# Mutuals Public Register society by number (see fca_number_from_ch_number); it sits with
+# the co-op number rule, the other register-declared society-number link.
 BRIDGE_MERGE_MATCH_TYPE = 'merge via bridge'
+SOCIETY_NUMBER_MATCH_TYPE = 'society number - companies house'
 
-MATCHTYPE_ORDER = ['ftc', 'oscr', 'companyid - cqc', 'charityno - cqc', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', 'companyid - id_in_source' , 'name - housing', 'name - care', 'name - ni charity', 'companyid - companyid', BRIDGE_MERGE_MATCH_TYPE]
+MATCHTYPE_ORDER = ['ftc', 'oscr', 'companyid - cqc', 'charityno - cqc', 'name - cqc', 'name - crossborder', 'companyid - coop mutual', SOCIETY_NUMBER_MATCH_TYPE, 'companyid - id_in_source' , 'name - housing', 'name - care', 'name - ni charity', 'companyid - companyid', BRIDGE_MERGE_MATCH_TYPE]
 MATCHTYPE_RANK = {
     matchtype: rank for rank, matchtype in enumerate(MATCHTYPE_ORDER)
 }
@@ -356,9 +360,57 @@ def is_ordinary_ch_company(org):
             and not org.id_in_source.upper().startswith(SOCIETY_CH_PREFIXES))
 
 
-def holds_record_from(org, sources, id_in_source=None, companyid=None):
-    """True when `org` itself - or a record it has absorbed - comes from one of
-    `sources` AND carries the given identifier.
+# Dummy incorporation dates that Companies House gives its registered-society mirror
+# records: 27% of them carry 01/01/1981 (against 1 of 427,625 ordinary companies), and
+# their FCA twins are almost all registered earlier. They are not evidence of when the
+# society was registered, so they never beat a real date (see has_placeholder_register_date).
+CH_SOCIETY_PLACEHOLDER_REGISTER_DATES = frozenset({'01/01/1900', '01/01/1981'})
+
+
+def has_placeholder_register_date(org):
+    """True when `org` is a Companies House society-number record carrying one of the
+    dummy register dates. An ordinary company with the same date is left alone."""
+    return (org.source.lower() == 'ch'
+            and org.id_in_source.upper().startswith(SOCIETY_CH_PREFIXES)
+            and org.registerdate in CH_SOCIETY_PLACEHOLDER_REGISTER_DATES)
+
+
+def parse_spine_date(date_str):
+    """A dd/mm/yyyy spine date as a datetime, or None when blank or unreadable."""
+    try:
+        return datetime.strptime(date_str, '%d/%m/%Y') if date_str else None
+    except ValueError:
+        return None
+
+
+# The Companies House number forms from which a Mutuals Public Register (FCA) society
+# number can be read directly, for the 'society number - companies house' rule:
+#   IPnnnnnR -> nnnnnR   (IP27793R -> 27793R, IP09904R -> 9904R)
+#   IPnnnnnn -> nnnnnnR  (IP032442 -> 32442R)
+#   RSnnnnnn -> nnnnnn   (RS009808 -> 9808; these societies carry no R on the FCA side)
+# Other society prefixes (SP, NP, SR, NR, NO) and other IP/RS shapes are not used: the
+# owner decided to link on the number alone, so only forms that map one-to-one qualify.
+CH_SOCIETY_NUMBER_PATTERN = re.compile(r'IP(\d+)R|IP(\d{6})|RS(\d+)')
+
+
+def fca_number_from_ch_number(ch_number):
+    """The FCA society number a Companies House society number stands for, or None.
+
+    Number 0 is excluded: IP000000 (-> '0R') is an FCA test society, not a real one.
+    """
+    found = CH_SOCIETY_NUMBER_PATTERN.fullmatch(ch_number or '')
+    if not found:
+        return None
+    ip_with_r, ip_six_digits, rs = found.groups()
+    number = int(ip_with_r or ip_six_digits or rs)
+    if number == 0:
+        return None
+    return str(number) if rs is not None else f'{number}R'
+
+
+def find_record_from(org, sources, id_in_source=None, companyid=None):
+    """The first of `org` itself and the records it has absorbed that comes from one of
+    `sources` AND carries the given identifier, or None.
 
     Identifier formats are not unique across registers: a Scottish charity number and a
     Scottish company number are both SCnnnnnn, so an index keyed on the raw value can
@@ -379,32 +431,60 @@ def holds_record_from(org, sources, id_in_source=None, companyid=None):
         return True
 
     if qualifies(org):
-        return True
+        return org
     # Association-only 'companyid - companyid' partners keep their own identity and do
     # not identify the organisation that lists them, exactly as in add_to_stores() /
     # remove_from_stores(). This cannot change any output today - a partner of that rule
     # must carry a companyid, and Companies House and Mutuals records leave companyid
     # blank (they hold their number in id_in_source) - but the rule should not depend on
     # that coincidence.
-    return any(qualifies(m) for m, matchtype in getattr(org, 'matched_orgs', [])
-               if matchtype != 'companyid - companyid')
+    return next((m for m, matchtype in getattr(org, 'matched_orgs', [])
+                 if matchtype != 'companyid - companyid' and qualifies(m)), None)
 
 
-def resolve_merged_uid(uid, aliases):
-    """Follow bridge-merge aliases to the organisation that now holds `uid`.
+def holds_record_from(org, sources, id_in_source=None, companyid=None):
+    """True when `org` itself - or a record it has absorbed - comes from one of
+    `sources` AND carries the given identifier; see find_record_from()."""
+    return find_record_from(org, sources, id_in_source=id_in_source,
+                            companyid=companyid) is not None
 
-    A bridge merge removes the losing organisation's uid from the spine, but the two
-    uid-keyed linkage tables (Find that Charity same-as and the historic OSCR linkage)
-    still name it. This maps such a uid onto the organisation that absorbed it, following
-    a chain if the survivor was itself later merged away. Unknown uids come back
-    unchanged, and the `seen` guard makes a malformed cycle terminate.
+
+def carries_name_beyond_society_number_links(org, normalisedname):
+    """True when `org` holds `normalisedname` on its own record or on a record absorbed by
+    any rule other than 'society number - companies house' (association-only partners
+    never count, as in add_to_stores())."""
+    return (org.normalisedname == normalisedname
+            or any(m.normalisedname == normalisedname
+                   for m, matchtype in getattr(org, 'matched_orgs', [])
+                   if matchtype not in ('companyid - companyid', SOCIETY_NUMBER_MATCH_TYPE)))
+
+
+def resolve_merged_uid(uid, aliases, holders=None):
+    """Follow bridge-merge aliases, and society-number absorptions, to the organisation
+    that now holds `uid`.
+
+    A bridge merge removes the losing organisation's uid from the spine, and the
+    'society number - companies house' rule absorbs a Companies House society record into
+    its FCA society before it can become a spine row, but the two uid-keyed linkage tables
+    (Find that Charity same-as and the historic OSCR linkage) still name such uids. This
+    maps a uid onto the organisation that holds it: `aliases` is {merged-away uid:
+    survivor uid} and `holders` is {absorbed record uid: holding organisation uid}
+    (MainOrgList.absorbed_uid_holders, deliberately limited to society-number
+    absorptions - see there). A chain is followed if the holder was itself later merged
+    away. Unknown uids come back unchanged, and the `seen` guard makes a malformed cycle
+    terminate.
     """
-    if not aliases:
-        return uid
+    aliases = aliases or {}
+    holders = holders or {}
     seen = set()
-    while uid in aliases and uid not in seen:
+    while uid not in seen:
         seen.add(uid)
-        uid = aliases[uid]
+        if uid in aliases:
+            uid = aliases[uid]
+        elif uid in holders:
+            uid = holders[uid]
+        else:
+            break
     return uid
 
 
@@ -420,6 +500,7 @@ IDENTIFIER_GRADE_MATCH_TYPES = frozenset({
     'oscr',
     'companyid - id_in_source',
     'companyid - coop mutual',
+    SOCIETY_NUMBER_MATCH_TYPE,
     'companyid - cqc',
     'charityno - cqc',
 })
@@ -436,6 +517,8 @@ REGISTER_DECLARED_IDENTIFIER_MATCH_TYPES = frozenset({
     'oscr',
     'companyid - id_in_source',
     'companyid - coop mutual',
+    # Companies House mirrors the FCA register's own society number
+    SOCIETY_NUMBER_MATCH_TYPE,
 })
 
 # Words dropped when comparing two organisation names for the bridge-merge policy only.
@@ -696,17 +779,26 @@ class CoreOrganisation(BaseModel): # orgs for public spine
 
 
         def find_dates(orgs, reg_dates, rem_dates):
-            """ Collect all valid register & removal dates. """
+            """ Collect all valid register & removal dates. Companies House society
+            placeholder register dates go to placeholder_registerdates instead. """
             for o in orgs:
                 if type(o) == tuple:
                     o = o[0]
                 reg_date = parse_date(o.registerdate)
                 rem_date = parse_date(o.removeddate)
-                if reg_date: reg_dates.add(reg_date)
+                if reg_date:
+                    # extras carry no id_in_source, so they are recognised by the uid
+                    # of the society record they came from
+                    if (o.uid in placeholder_uids
+                            and o.registerdate in CH_SOCIETY_PLACEHOLDER_REGISTER_DATES):
+                        placeholder_registerdates.add(reg_date)
+                    else:
+                        reg_dates.add(reg_date)
                 if rem_date: rem_dates.add(rem_date)
 
         # Track dates
         registerdates, removeddates = set(), set()
+        placeholder_registerdates = set()
         all_orgs_removed = bool(self.removeddate)
 
         # Association-only company-number links are not consolidations and
@@ -744,15 +836,30 @@ class CoreOrganisation(BaseModel): # orgs for public spine
                     continue
                 all_orgs_removed = False
 
+        # Companies House society records whose register date is a dummy one
+        # (CH_SOCIETY_PLACEHOLDER_REGISTER_DATES): it may never beat a real date
+        placeholder_uids = {m.uid for m, _ in consolidated_matches
+                            if has_placeholder_register_date(m)}
+        if has_placeholder_register_date(self):
+            placeholder_uids.add(self.uid)
+
         # Collect dates from matched orgs and extras
         find_dates(consolidated_matches, registerdates, removeddates)
         find_dates(self.extras, registerdates, removeddates)
 
-        # Update register date
-        earliest_register = fix_dates_set(registerdates, 0)
+        # Update register date: the earliest real date across the organisation's records
+        # (its own included); only when there is none does the earliest placeholder count,
+        # exactly as before
         orgregdate = parse_date(self.registerdate)
+        if orgregdate:
+            if self.uid in placeholder_uids:
+                placeholder_registerdates.add(orgregdate)
+            else:
+                registerdates.add(orgregdate)
+        earliest_register = (fix_dates_set(registerdates, 0)
+                             or fix_dates_set(placeholder_registerdates, 0))
 
-        if earliest_register and ((not orgregdate) or (earliest_register < orgregdate)):
+        if earliest_register and ((not orgregdate) or (earliest_register != orgregdate)):
             # there's a registration date that's not in the spine org, or is earlier than that of the spine org: replace and store alternative in extras
             if orgregdate:
                 self.extras = add_or_update_date(self.extras, self.uid, self.source, 'registerdate', self.registerdate, self.source_register)
@@ -844,7 +951,8 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
 
 #    @profile
     def matches(self, byname:dict, bycompanyid:dict, bysourceid:dict, spinelist:dict,
-                ni_ch_name_counts:dict|None=None, merged_uid_aliases:dict|None=None):
+                ni_ch_name_counts:dict|None=None, merged_uid_aliases:dict|None=None,
+                absorbed_uid_holders:dict|None=None):
 
         matches_here = []
         
@@ -871,14 +979,27 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
                 # providers are on the FCA mutuals register, not the charity register, so
                 # mutuals must be an eligible 'name - housing' counterpart too. mutuals is
                 # loaded before the housing registers, so it is already in the store here.
-                candidates = [x for x in match if x.source.lower() in ('oscr', 'mutuals')]
+                candidates = [x for x in match if x.source.lower() in ('oscr', 'mutuals')
+                              and carries_name_beyond_society_number_links(
+                                  x, self.normalisedname)]
                 matches_here.extend((x, 'name - housing') for x in candidates)
 
             if self.source.lower() == 'socialhousingengland':
                 # an English housing provider's counterpart is either a CCEW charity or,
                 # for registered-society providers, a Mutuals Public Register society
                 # (see the Scottish note above for why mutuals is included).
-                candidates = [x for x in match if x.source.lower() in ('ccew', 'mutuals')]
+                # For both housing registers, a name carried only by a record joined by the
+                # 'society number - companies house' rule does not count. Real case: FCA
+                # 7826 'GGHTHP Limited' holds Companies House RS007826 'TORUS62 LIMITED'
+                # (7826 transferred to Torus62 Limited, FCA 7973, in 2019); on that name the
+                # housing record 'Torus62' became a third candidate and cancelled the bridge
+                # merge of charity 1158510 with FCA 7973. Names from records joined by other
+                # rules still count: they are good evidence of a rename or a Ltd/Limited
+                # variant (Clyde Valley, Dunedin Canmore, Coin Street). Whether borrowed
+                # names should count in general is deferred to the next main release.
+                candidates = [x for x in match if x.source.lower() in ('ccew', 'mutuals')
+                              and carries_name_beyond_society_number_links(
+                                  x, self.normalisedname)]
                 matches_here.extend((x, 'name - housing') for x in candidates)
 
             if self.source.lower() == 'careinspectoratescot':
@@ -946,7 +1067,34 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
                                                    id_in_source=self.companyid)]
                 matches_here.extend((x, 'companyid - coop mutual') for x in candidates)
 
-                
+        # A Companies House society record and its Mutuals Public Register society, joined
+        # on the society number (IP27793R -> FCA 27793R, RS009808 -> FCA 9808). Without this
+        # the pair linked only when the Find that Charity table listed it. bysourceid also
+        # holds absorbed records, so a society already folded into a charity is reached
+        # through that charity; holds_record_from() keeps only organisations that hold the
+        # Mutuals record itself (a bare '9808' can also be another register's number).
+        # The rule only fills gaps: it stays silent when the record's own same-as links
+        # already name a Mutuals society. Older societies' RS numbers often map to nnnnR on
+        # the FCA side (RS009788 is FCA 9788R), which the same-as table knows and the number
+        # form cannot, so the number could otherwise pick an unrelated society 9788.
+        # Numbers are also reused: a Companies House record registered (on a real date,
+        # not a placeholder) after the FCA society was removed is a different society
+        # (IP02805R, registered 1994, is not FCA 2805R, removed 1985).
+        if (self.source.lower() == 'ch'
+                and not any(u.startswith('GB-MPR-') for u in ftc_dict.get(self.uid, ()))):
+            fca_number = fca_number_from_ch_number(self.id_in_source)
+            if fca_number:
+                ch_registered = (None if has_placeholder_register_date(self)
+                                 else parse_spine_date(self.registerdate))
+                for x in bysourceid.get(fca_number, []):
+                    society = find_record_from(x, ('mutuals',), id_in_source=fca_number)
+                    if society is None:
+                        continue
+                    society_removed = parse_spine_date(society.removeddate)
+                    if ch_registered and society_removed and ch_registered > society_removed:
+                        continue
+                    matches_here.append((x, SOCIETY_NUMBER_MATCH_TYPE))
+
         # identifier-based rules for CQC providers (CQC API data): a provider's
         # Companies House number / charity number identifies the spine organisation
         # directly, which is far stronger evidence than a shared name.
@@ -990,20 +1138,21 @@ class SubSpineOrg(BaseModel):  # sub spine format (per source)
                 matches_here.extend((x, 'companyid - coop mutual') for x in candidates)
             
         # find matches in dkane _sameas csv. Both linkage tables name organisations by
-        # uid, so a uid that a bridge merge folded into another organisation has to be
-        # resolved to its survivor, or the link would silently match nothing.
+        # uid, so a uid that a bridge merge folded into another organisation, or that the
+        # society-number rule absorbed into one, has to be resolved to the organisation
+        # that now holds it, or the link would silently match nothing.
         if self.uid in ftc_dict:
             matched_uids = ftc_dict[self.uid]
             for m in matched_uids:
-                target = resolve_merged_uid(m, merged_uid_aliases)
+                target = resolve_merged_uid(m, merged_uid_aliases, absorbed_uid_holders)
                 if target in spinelist:
-                    matches_here.append((spinelist[target],'ftc')) 
-    
+                    matches_here.append((spinelist[target],'ftc'))
+
         # find matches using historic oscr data
         if self.uid in oscr_linkage_lookup:
             matched_uids = oscr_linkage_lookup[self.uid]
             for m in matched_uids:
-                target = resolve_merged_uid(m, merged_uid_aliases)
+                target = resolve_merged_uid(m, merged_uid_aliases, absorbed_uid_holders)
                 if target in spinelist:
                     matches_here.append((spinelist[target],'oscr')) 
 
@@ -1040,6 +1189,15 @@ class MainOrgList:
         # so they can never be a party to another merge (merges never chain), and the
         # uid-keyed linkage tables are redirected through this map.
         self.merged_uid_aliases: dict[str, str] = {}
+        # Companies House society records absorbed by the 'society number - companies
+        # house' rule, as {absorbed uid: holding organisation uid}, kept in step with the
+        # indexes by add_to_stores() / remove_from_stores(). It lets the uid-keyed linkage
+        # tables still reach such a record (see resolve_merged_uid). It is limited to that
+        # rule on purpose: redirecting links to EVERY absorbed record caused 172 unrelated
+        # consolidations (some from errors in the same-as data) and split 5 organisations,
+        # because the redirected link added candidates that the 'charityno - cqc' rule
+        # cannot see and that stop a bridge merge (which needs exactly two).
+        self.absorbed_uid_holders: dict[str, str] = {}
 
 
     def __iter__(self):
@@ -1102,6 +1260,8 @@ class MainOrgList:
                         and m.companyid not in self.suppressed_companyids):
                     add_to_dict(self.bycompanyid, m.companyid, org)
                 add_to_dict(self.bysourceid, m.id_in_source, org)
+                if matchtype == SOCIETY_NUMBER_MATCH_TYPE and m.uid != org.uid:
+                    self.absorbed_uid_holders[m.uid] = org.uid
 
     def remove_from_stores(self, org):
         # remove only this organisation from each index list (other organisations can share
@@ -1123,6 +1283,8 @@ class MainOrgList:
                 remove_from_dict(self.byname, m.normalisedname)
                 remove_from_dict(self.bycompanyid, m.companyid)
                 remove_from_dict(self.bysourceid, m.id_in_source)
+                if self.absorbed_uid_holders.get(m.uid) == org.uid:
+                    del self.absorbed_uid_holders[m.uid]
         self._store.pop(org.uid, None)
 
 
@@ -1351,7 +1513,8 @@ class MainOrgList:
         for this_subspine_org in tqdm(orgs, desc='Processing orgs'):
             # does this_subspine_org match anything already in the spine (MainList (self))?
             matched_org = this_subspine_org.matches(self.byname, self.bycompanyid, self.bysourceid, self._store,
-                                                    ni_ch_name_counts, self.merged_uid_aliases)
+                                                    ni_ch_name_counts, self.merged_uid_aliases,
+                                                    self.absorbed_uid_holders)
             if matched_org:
                 #print('\nmatch: ',this_subspine_org.uid,this_subspine_org.normalisedname,' \n   to: ',matched_org)
                 check_removal_dates(this_subspine_org, matched_org)
