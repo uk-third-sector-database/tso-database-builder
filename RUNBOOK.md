@@ -521,6 +521,89 @@ automatically):
      act on. Only organisations that actually hold the number on a qualifying
      Companies House or Mutuals record are matched now.
 
+   **Match rules changed in v1.3.2.** One addition and three adjustments
+   that go with it; the rest of the rule set is unchanged. Defect note:
+   `enhancements/mpr-coh-merge-issue-2026-10-19.md`; QA record:
+   `docs/spine-docs/qa-rebuild-2026-10/spine-v1.3.2-society-numbers-2026-10-19.md`
+   in the cso-spine project.
+
+   - **`society number - companies house`** links a Companies House
+     registered-society record to the Mutuals Public Register (FCA) society
+     with the same society number. Until v1.3.2 no rule compared society
+     numbers — both handlers keep the number in `id_in_source` and leave
+     `companyid` blank — so the pair was linked only when the Find that
+     Charity same-as table happened to list it, and in v1.3.1 several hundred
+     societies were held as two spine organisations. Three Companies House
+     number forms qualify (`fca_number_from_ch_number()`):
+
+     | Companies House form | FCA number | Example |
+     |---|---|---|
+     | `IP` + digits + `R` | digits, leading zeros dropped, + `R` | `IP27793R` → `27793R`; `IP09904R` → `9904R` |
+     | `IP` + six digits | digits, leading zeros dropped, + `R` | `IP032442` → `32442R` |
+     | `RS` + digits | digits, leading zeros dropped, no `R` | `RS009808` → `9808` |
+
+     Number 0 is excluded (`IP000000` is an FCA test society). Other society
+     prefixes (`SP`, `NP`, `SR`, `NR`, `NO`) and other shapes are not used,
+     because only these three forms map one-to-one. The link rests on the
+     number alone (owner decision): names are not compared, since most
+     name differences between the two records are typos or renames of the
+     same society. The FCA society survives (Mutuals loads before Companies
+     House) and the Companies House record's name and address go to the
+     supplementary file. A society already folded into a charity is reached
+     through that charity, but only an organisation that holds the Mutuals
+     record itself is matched (a bare `9808` can be another register's
+     number). The rule only fills gaps, and stays silent in two cases:
+
+     1. **The record's own same-as links already name a `GB-MPR` uid.**
+        Older `RS` numbers often correspond to `nnnnR` on the FCA side
+        (`RS009788` is FCA `9788R`), which the same-as table knows and the
+        number form cannot; without this guard the number could pick an
+        unrelated society `9788`.
+     2. **A real Companies House register date is later than the FCA
+        society's removal date.** Society numbers are reused: `IP02805R`,
+        registered 1994, is not FCA `2805R`, removed 1985. Placeholder dates
+        (below) do not count as real here.
+
+     The type is treated as register-declared identifier evidence for the
+     bridge-merge policy, like `companyid - coop mutual`, and sits beside it
+     in `MATCHTYPE_ORDER`.
+
+   - **Linkage-table redirect, limited to this rule.** A Companies House
+     society record absorbed by the new rule never becomes a spine row, so a
+     Find that Charity or OSCR linkage row that names it is now resolved to
+     the organisation holding it (`MainOrgList.absorbed_uid_holders`, beside
+     the bridge-merge alias map). The redirect deliberately covers records
+     absorbed by this rule only. A candidate build that redirected links to
+     *every* absorbed record produced 172 unrelated consolidations (some from
+     errors in the same-as data) and split 5 organisations, because the
+     redirected links added candidates that `charityno - cqc` cannot see and
+     that stop a bridge merge (which needs exactly two). The broad redirect
+     is deferred to the next main release.
+
+   - **`name - housing` ignores names borrowed through the new rule.** For
+     both housing registers, a name carried only by a record joined by
+     `society number - companies house` does not make an organisation a
+     candidate. Case: FCA 7826 GGHTHP Limited holds Companies House
+     `RS007826` TORUS62 LIMITED (7826 transferred to Torus62 Limited, FCA
+     7973, in 2019); on that borrowed name the housing record Torus62 became
+     a third candidate and cancelled the bridge merge of charity 1158510 with
+     FCA 7973. Names from records joined by any other rule still count: they
+     are good evidence of a rename or a Ltd/Limited variant, and a candidate
+     build that ignored all borrowed names split Clyde Valley, Dunedin Canmore
+     and Coin Street. Whether borrowed names should count in general is
+     deferred to the next main release.
+
+   - **Placeholder register dates never beat a real date.** Companies House
+     gives its registered-society records dummy incorporation dates —
+     `01/01/1981` on 27% of them (against 1 of 427,625 ordinary companies)
+     and `01/01/1900` — and their FCA twins are almost all registered
+     earlier. When the earliest register date across an organisation's
+     records is taken, these two dates on a Companies House society-number
+     record are used only if no real date exists
+     (`CH_SOCIETY_PLACEHOLDER_REGISTER_DATES`). Ordinary companies carrying
+     the same dates are unaffected. In v1.3.2 this corrected 1,493 register
+     dates; FCA society rows dated `01/01/1900` fell from 1,298 to 0.
+
    **Keep the two match-type lists in step.** `MATCHTYPE_ORDER` in
    `spine/build_public_spine.py` (which sets rule precedence) and
    `MATCH_TYPES` in `spine/release.py` (the values release validation will
@@ -559,6 +642,8 @@ automatically):
    from the prior release gave 1,112,618 supplementary rows (of v1.0's
    872,084 prior rows, 463,220 were already present in the fresh build and
    1,516 belong to organisations no longer represented in the release).
+   v1.3.2 (19 October 2026): 704,444 built plus 410,121 seeded gave
+   1,114,565.
 10. `python3 cli.py suppress-echo-matches ../public_spine_data/TSCS_spine.matches.csv <prior_release>/TSCS_spine.matches.csv`
     Removes bootstrap-echo `companyid - id_in_source` rows from the fresh
     matches file. Because `bootstrap-base-files` back-fills CCEW/CCNI
@@ -579,7 +664,8 @@ automatically):
     the same 40,467 rows from its 177,045-row pre-echo file, keeping
     136,578. (Earlier notes quoting 40,427 / 131,699 or 40,428 / 135,682
     describe superseded artifacts.) The v1.3 rebuild of 17 September removed
-    41,122 rows from its 180,984-row pre-echo file, keeping 139,862.
+    41,122 rows from its 180,984-row pre-echo file, keeping 139,862; the
+    v1.3.2 rebuild of 19 October removed 41,122 of 181,843, keeping 140,721.
 
 ## 5. Validating a build before release
 
@@ -626,11 +712,14 @@ Additional checks:
   against the most recent release (v1.0, March 2026: 770,923 spine rows;
   872,084 supplementary; 125,624 matches; 668,280 SIC rows. v1.1,
   July 2026: 783,606 spine rows, of which 386,122 active; 1,108,256
-  supplementary; 135,794 matches; 474,843 SIC rows. v1.2, July 2026
-  (current): 782,995 spine rows, of which 385,515 active; 1,108,831
+  supplementary; 135,794 matches; 474,843 SIC rows. v1.2, July 2026:
+  782,995 spine rows, of which 385,515 active; 1,108,831
   supplementary; 136,578 matches; 474,843 SIC rows; full tables in the
-  guidance. v1.3, September 2026 — spine rows / active / supplementary /
-  matches / SIC rows: 781,176 / 384,096 / 1,112,618 / 139,862 /
+  guidance. Spine rows / active / supplementary / matches / SIC rows for
+  v1.3, September 2026: 781,176 / 384,096 / 1,112,618 / 139,862 /
+  474,842; v1.3.1, September 2026: 781,176 / 382,586 / 1,112,294 /
+  139,862 / 474,842; v1.3.2, October 2026 (current once published, under
+  the same download filename): 780,314 / 381,727 / 1,114,565 / 140,721 /
   474,842). Large unexplained swings in any cell mean stop and
   investigate.
 - uid conventions: every spine uid starts GB-CHC/GB-COH/GB-SC/GB-MPR/
@@ -691,6 +780,11 @@ so the comparison is reproducible from published artefacts alone. It writes
    (`ni-charity-company-absorptions.csv`, `ni-charities-multi-company.csv`,
    `ni-charities-revived.csv`).
 
+Known fault (found in v1.3.2): the "New match types introduced by this
+release" table lists types that already existed and omits the genuinely new
+one. Read the `match_type` totals table (prior 0 → new n) instead until it
+is fixed.
+
 Keep the report and its CSVs with the release record. The adjudication is
 the evidence that every count movement was intended rather than merely
 tolerated.
@@ -743,6 +837,19 @@ The equivalent v1.3 table — four logical row counts and SHA-256 hashes:
 | `TSCS_spine.matches.csv` | 139,862 | `f4720b41c5aebbd6e407adec310b460fbf9a8d95001341f60547178c693b192f` |
 | `TSCS_spine.supplementary.csv` | 1,112,618 | `3ecc1e4e16f7fb0549be69b231097cd2217de11895ac30ea518562931233c757` |
 | `TSCS_spine.SIC_codes.csv` | 474,842 | `7088679d373200a14858bddc9f7bd6fe0a1cd71fc8317d455f37c896f409e025` |
+
+The v1.3.2 table (build `code/rebuild-v1.3.2c-2026-10-19/`, from
+`release-validation.txt`; the SIC file is byte-identical to v1.3):
+
+| File | Logical rows | SHA-256 |
+|---|---:|---|
+| `TSCS_spine.spine.csv` | 780,314 | `8f9046277a1796a027b62d4b577342aef267a9fa2c5c277f03b71d05a5bd15f6` |
+| `TSCS_spine.matches.csv` | 140,721 | `e0bd37a7179db8f48e155e22f5020eb329f871981f64303b923051b1b22aef72` |
+| `TSCS_spine.supplementary.csv` | 1,114,565 | `98241d503a6a49bb84a300a2e79aea125a0bc31a18ed2bf554b5a13465e33dab` |
+| `TSCS_spine.SIC_codes.csv` | 474,842 | `7088679d373200a14858bddc9f7bd6fe0a1cd71fc8317d455f37c896f409e025` |
+
+v1.3.2 was built under `PYTHONHASHSEED=0` and again under `1`; the four
+release CSVs were byte-identical.
 
 After promoting the four CSVs into `../public_spine_data/`, re-hash them
 and compare against this table (or the signed hashes of whichever release
